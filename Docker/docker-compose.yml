@@ -1,0 +1,33 @@
+version: '3.8'
+
+networks:
+  tardis-network:
+    driver: bridge
+
+services:
+  # 1. PostgreSQL (관계형 DB - 유저, 잔고, 체결 내역)
+  postgres:
+    image: postgres:15-alpine
+    container_name: tardis-postgres
+    environment:
+      POSTGRES_USER: tardis_user
+      POSTGRES_PASSWORD: tardis_password
+      POSTGRES_DB: tardis_db
+    ports:
+      - "5432:5432"
+    networks:
+      - tardis-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # 2. Redis (인메모리 캐시 - 실시간 호가)
+  redis:
+    image: redis:7-alpine
+    container_name: tardis-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - tardis-network
+
+volumes:
+  postgres-data:
