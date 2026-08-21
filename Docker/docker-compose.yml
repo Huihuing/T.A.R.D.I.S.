@@ -1,33 +1,24 @@
 version: '3.8'
 
-networks:
-  tardis-network:
-    driver: bridge
-
 services:
-  # 1. PostgreSQL (관계형 DB - 유저, 잔고, 체결 내역)
-  postgres:
-    image: postgres:15-alpine
-    container_name: tardis-postgres
+  # 1. MySQL 데이터베이스
+  mysql:
+    image: mysql:8.0
+    container_name: tardis_mysql
     environment:
-      POSTGRES_USER: tardis_user
-      POSTGRES_PASSWORD: tardis_password
-      POSTGRES_DB: tardis_db
+      MYSQL_ROOT_PASSWORD: 1234 # 스프링 부트 application.yaml의 비밀번호와 일치시키세요!
+      MYSQL_DATABASE: tardis_db
     ports:
-      - "5432:5432"
-    networks:
-      - tardis-network
+      - "3306:3306"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
 
-  # 2. Redis (인메모리 캐시 - 실시간 호가)
+  # 2. Redis (추후 웹소켓이나 캐싱에 사용할 수 있도록 살려둡니다)
   redis:
     image: redis:7-alpine
-    container_name: tardis-redis
+    container_name: tardis_redis
     ports:
       - "6379:6379"
-    networks:
-      - tardis-network
 
 volumes:
-  postgres-data:
+  mysql_data:
