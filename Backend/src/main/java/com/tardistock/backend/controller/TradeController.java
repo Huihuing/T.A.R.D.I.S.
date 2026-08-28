@@ -1,125 +1,158 @@
 package com.tardistock.backend.controller;
 
+import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Portfolio;
 import com.tardistock.backend.entity.TradeHistory;
 import com.tardistock.backend.entity.Wallet;
+import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PortfolioRepository;
 import com.tardistock.backend.repository.TradeHistoryRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/trade")
-@CrossOrigin(origins = { "http://localhost:5173", "http://localhost:5174" })
+@CrossOrigin(origins = "http://localhost:5173")
 public class TradeController {
 
-    private final TradeHistoryRepository historyRepository;
-    private final PortfolioRepository portfolioRepository;
+    private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
+    private final PortfolioRepository portfolioRepository; // 👈 포트폴리오 창고 추가!
+    private final TradeHistoryRepository tradeHistoryRepository; // 👈 영수증 창고 추가!
 
-    public TradeController(TradeHistoryRepository historyRepository,
-            PortfolioRepository portfolioRepository,
-            WalletRepository walletRepository) {
-        this.historyRepository = historyRepository;
-        this.portfolioRepository = portfolioRepository;
+    public TradeController(MemberRepository memberRepository, WalletRepository walletRepository, 
+                           PortfolioRepository portfolioRepository, TradeHistoryRepository tradeHistoryRepository) {
+        this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
+        this.portfolioRepository = portfolioRepository;
+        this.tradeHistoryRepository = tradeHistoryRepository;
     }
 
-    private Wallet getMyWallet() {
-        return walletRepository.findById(1L).orElseGet(() -> {
-            Wallet newWallet = new Wallet(1L, 10000.00);
-            return walletRepository.save(newWallet);
-        });
-    }
-
+    // 📜 1. 잔고 조회
     @GetMapping("/balance")
-    public double getBalance() {
-        return getMyWallet().getBalance();
+    public double getBalance(@RequestParam(required = false, defaultValue = "") String username) {
+        if (username.isEmpty()) return 0.0;
+        Optional<Member> member = memberRepository.findByUsername(username);
+        if (member.isPresent()) {
+            Optional<Wallet> wallet = walletRepository.findByMember(member.get());
+            if (wallet.isPresent()) return wallet.get().getBalance();
+        }
+        return 0.0;
     }
 
+    // 📜 2. 거래 내역(영수증) 조회
     @GetMapping("/history")
-    public List<TradeHistory> getTradeHistory() {
-        return historyRepository.findAll(
-                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id"));
+    public List<TradeHistory> getHistory(@RequestParam(required = false, defaultValue = "") String username) {
+        Optional<Member> member = memberRepository.findByUsername(username);
+        return member.map(tradeHistoryRepository::findByMember).orElseGet(List::of);
     }
 
-    // ==========================================
-    // 📜 새로 추가된 부분: 내 보유 주식(포트폴리오) 가져오기
-    // ==========================================
+    // 📜 3. 포트폴리오(내 주식) 조회
     @GetMapping("/portfolio")
-    public List<Portfolio> getPortfolio() {
-        return portfolioRepository.findAll();
+    public List<Portfolio> getPortfolio(@RequestParam(required = false, defaultValue = "") String username) {
+        Optional<Member> member = memberRepository.findByUsername(username);
+        return member.map(portfolioRepository::findByMember).orElseGet(List::of);
     }
-    // ==========================================
 
+    // 🚀 4. 진짜 매수 (BUY) 로직
     @PostMapping("/buy")
-    public TradeResponse buyStock(@RequestBody TradeRequest request) {
-        Wallet myWallet = getMyWallet();
-        double totalCost = request.amount() * request.price();
-
-        if (myWallet.getBalance() < totalCost) {
-            return new TradeResponse("FAIL", "잔고가 부족합니다!", myWallet.getBalance());
+    public Map<String, String> buyStock(@RequestBody Map<String, Object> payload, @RequestParam String username) {
+        Map<String, String> response = new HashMap<>();
+        Optional<Member> memberOpt = memberRepository.findByUsername(username);
+        
+        if (memberOpt.isEmpty()) {
+            response.put("status", "FAIL"); response.put("message", "로그인이 필요합니다.");
+            return response;
         }
 
-        myWallet.setBalance(myWallet.getBalance() - totalCost);
-        walletRepository.save(myWallet);
+        Member member = memberOpt.get();
+        Wallet wallet = walletRepository.findByMember(member).orElse(null);
+        
+        String symbol = (String) payload.get("symbol");
+        int amount = (int) payload.get("amount");
+        double price = Double.parseDouble(payload.get("price").toString());
+        double totalCost = price * amount;
 
-        Optional<Portfolio> optionalPortfolio = portfolioRepository.findBySymbol(request.symbol());
-
-        if (optionalPortfolio.isPresent()) {
-            Portfolio portfolio = optionalPortfolio.get();
-            double newTotalCost = (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
-            int newTotalAmount = portfolio.getAmount() + request.amount();
-
-            portfolio.setAveragePrice(newTotalCost / newTotalAmount);
-            portfolio.setAmount(newTotalAmount);
-            portfolioRepository.save(portfolio);
-        } else {
-            Portfolio newPortfolio = new Portfolio(request.symbol(), request.amount(), request.price());
-            portfolioRepository.save(newPortfolio);
+        // 🛑 돈이 부족한지 체크
+        if (wallet == null || wallet.getBalance() < totalCost) {
+            response.put("status", "FAIL"); response.put("message", "잔액이 부족합니다!");
+            return response;
         }
 
-        TradeHistory history = new TradeHistory("BUY", request.symbol(), request.amount(), request.price());
-        historyRepository.save(history);
+        // 🟢 1. 지갑에서 돈 빼기
+        wallet.setBalance(wallet.getBalance() - totalCost);
+        walletRepository.save(wallet);
 
-        return new TradeResponse("SUCCESS", request.symbol() + " 매수 체결 완료!", myWallet.getBalance());
+        // 🟢 2. 포트폴리오에 주식 넣기 (기존에 있으면 합치기, 없으면 새로 생성)
+        Portfolio portfolio = portfolioRepository.findByMemberAndSymbol(member, symbol)
+                .orElse(new Portfolio(member, symbol, 0, 0.0));
+        
+        double newTotalValue = (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
+        int newAmount = portfolio.getAmount() + amount;
+        portfolio.setAmount(newAmount);
+        portfolio.setAveragePrice(newTotalValue / newAmount); // 평단가 계산
+        portfolioRepository.save(portfolio);
+
+        // 🟢 3. 영수증(History) 기록하기
+        TradeHistory history = new TradeHistory(member, "BUY", symbol, amount, price, LocalDateTime.now());
+        tradeHistoryRepository.save(history);
+
+        response.put("status", "SUCCESS"); response.put("message", symbol + " " + amount + "주 매수 완료!");
+        return response;
     }
 
+// 🚀 5. 진짜 매도 (SELL) 로직
     @PostMapping("/sell")
-    public TradeResponse sellStock(@RequestBody TradeRequest request) {
-        Optional<Portfolio> optionalPortfolio = portfolioRepository.findBySymbol(request.symbol());
-        Wallet myWallet = getMyWallet();
+    public Map<String, String> sellStock(@RequestBody Map<String, Object> payload, @RequestParam String username) {
+        Map<String, String> response = new HashMap<>();
+        Optional<Member> memberOpt = memberRepository.findByUsername(username);
 
-        if (optionalPortfolio.isEmpty() || optionalPortfolio.get().getAmount() < request.amount()) {
-            return new TradeResponse("FAIL", "보유 주식이 없거나 수량이 부족합니다!", myWallet.getBalance());
+        if (memberOpt.isEmpty()) {
+            response.put("status", "FAIL"); response.put("message", "로그인이 필요합니다.");
+            return response;
         }
 
-        Portfolio portfolio = optionalPortfolio.get();
+        Member member = memberOpt.get();
+        Wallet wallet = walletRepository.findByMember(member).orElse(null);
 
-        double totalRevenue = request.amount() * request.price();
-        myWallet.setBalance(myWallet.getBalance() + totalRevenue);
-        walletRepository.save(myWallet);
+        String symbol = (String) payload.get("symbol");
+        int amount = (int) payload.get("amount");
+        double price = Double.parseDouble(payload.get("price").toString());
+        double totalRevenue = price * amount;
 
-        portfolio.setAmount(portfolio.getAmount() - request.amount());
+        // 🛑 보유 주식이 충분한지 체크 (주식이 아예 없거나, 팔려는 양보다 적으면 컷!)
+        Optional<Portfolio> portfolioOpt = portfolioRepository.findByMemberAndSymbol(member, symbol);
+        if (portfolioOpt.isEmpty() || portfolioOpt.get().getAmount() < amount) {
+            response.put("status", "FAIL"); response.put("message", "보유 주식이 부족합니다!");
+            return response;
+        }
 
-        if (portfolio.getAmount() == 0) {
-            portfolioRepository.delete(portfolio);
+        Portfolio portfolio = portfolioOpt.get();
+
+        // 🟢 1. 포트폴리오에서 주식 빼기
+        int newAmount = portfolio.getAmount() - amount;
+        if (newAmount == 0) {
+            portfolioRepository.delete(portfolio); // 다 팔았으면 목록에서 아예 삭제
         } else {
+            portfolio.setAmount(newAmount);
             portfolioRepository.save(portfolio);
         }
 
-        TradeHistory history = new TradeHistory("SELL", request.symbol(), request.amount(), request.price());
-        historyRepository.save(history);
+        // 🟢 2. 지갑에 돈(수익금) 더하기
+        wallet.setBalance(wallet.getBalance() + totalRevenue);
+        walletRepository.save(wallet);
 
-        return new TradeResponse("SUCCESS", request.symbol() + " 매도 체결 완료!", myWallet.getBalance());
+        // 🟢 3. 영수증(History) 기록하기
+        TradeHistory history = new TradeHistory(member, "SELL", symbol, amount, price, LocalDateTime.now());
+        tradeHistoryRepository.save(history);
+
+        response.put("status", "SUCCESS"); response.put("message", symbol + " " + amount + "주 매도 완료!");
+        return response;
     }
-}
-
-record TradeRequest(String symbol, int amount, double price) {
-}
-
-record TradeResponse(String status, String message, double newBalance) {
 }

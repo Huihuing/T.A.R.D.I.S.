@@ -1,41 +1,61 @@
+require('dotenv').config(); // 👈 최상단에서 가장 먼저 .env 파일의 키를 읽어옵니다!
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
+const WebSocket = require('ws');
 
 const app = express();
-app.use(cors());
-
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
 });
 
-// 초기 가짜 주식 데이터
-let stocks = [
-    { symbol: 'AAPL', price: 150.00, name: 'Apple Inc.' },
-    { symbol: 'TSLA', price: 250.00, name: 'Tesla Inc.' },
-    { symbol: '^KS11', price: 2600.00, name: 'KOSPI Index' },
-];
+// 🔑 깃허브에 안 올라가는 안전한 환경변수에서 키를 꺼내 씁니다.
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
+
+const stockPrices = {
+    'AAPL': { symbol: 'AAPL', name: 'Apple Inc.', price: 175.00 },
+    'TSLA': { symbol: 'TSLA', name: 'Tesla Inc.', price: 240.00 },
+    'MSFT': { symbol: 'MSFT', name: 'Microsoft Corp.', price: 330.00 }
+};
+
+const finnhubSocket = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_API_KEY}`);
+
+finnhubSocket.on('open', () => {
+    console.log('✅ Finnhub WebSocket 연결 성공');
+    ['AAPL', 'TSLA', 'MSFT'].forEach(symbol => {
+        finnhubSocket.send(JSON.stringify({ 'type': 'subscribe', 'symbol': symbol }));
+    });
+});
+
+finnhubSocket.on('message', (data) => {
+    try {
+        const parsed = JSON.parse(data);
+        if (parsed.type === 'trade' && parsed.data) {
+            parsed.data.forEach(trade => {
+                if (stockPrices[trade.s]) {
+                    stockPrices[trade.s].price = trade.p; 
+                }
+            });
+        }
+    } catch (err) {
+        console.error('Finnhub 데이터 파싱 에러:', err);
+    }
+});
+
+finnhubSocket.on('error', (err) => console.error('Finnhub WebSocket 에러:', err.message));
 
 io.on('connection', (socket) => {
-    console.log(`[T.A.R.D.I.S] 클라이언트 연결됨: ${socket.id}`);
-
-    // 1초마다 가격을 랜덤하게 위아래로 흔들어서 전송합니다.
+    console.log(`[T.A.R.D.I.S] 프론트엔드 연결됨: ${socket.id}`);
     const interval = setInterval(() => {
-        stocks = stocks.map(stock => {
-            const change = (Math.random() - 0.5) * 0.02; // -1% ~ 1% 변동률
-            const newPrice = stock.price * (1 + change);
-            return { ...stock, price: parseFloat(newPrice.toFixed(2)) };
-        });
-        socket.emit('stock_update', stocks);
+        socket.emit('stockData', Object.values(stockPrices));
     }, 1000);
 
     socket.on('disconnect', () => {
-        console.log(`클라이언트 연결 종료: ${socket.id}`);
+        console.log(`프론트엔드 연결 종료: ${socket.id}`);
         clearInterval(interval);
     });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => console.log(`🚀 Socket Server running on port ${PORT}`));
+server.listen(3000, () => console.log('🚀 Socket Server running on port 3000'));
