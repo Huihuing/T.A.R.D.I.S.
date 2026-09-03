@@ -49,3 +49,9 @@ T.A.R.D.I.S.는 실시간 글로벌 주식 시세 스트리밍, 가상 자산 �
 * **Real-time Socket Server**: Node.js, Express, Socket.io, ws (Finnhub WebSocket Relay)
 * **Database**: MySQL / H2 (JPA Entity & Relational Mapping)
 * **External APIs**: Finnhub API, Naver Open API (NCP API HUB), TradingView Widget
+* **Cloud & DevOps**: Vercel (Frontend), Render (Backend & Docker), Aiven (Managed MySQL)
+
+---
+
+## 📖 Deployment & Setup Guide
+학원이나 집 등 다른 환경에서의 실행 방법 및 클라우드 배포 상세 설정은 [DEPLOYMENT.md](DEPLOYMENT.md) 문서를 참고하세요.
