@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Rocket, ShieldCheck, TrendingUp, BarChart2 } from 'lucide-react';
+import { Rocket, ShieldCheck, BarChart2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Home() {

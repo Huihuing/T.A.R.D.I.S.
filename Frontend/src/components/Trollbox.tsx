@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, User } from 'lucide-react';
+import { MessageSquare, X, Send } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 interface ChatMessage {

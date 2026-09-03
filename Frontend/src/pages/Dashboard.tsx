@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { Search, Briefcase, TrendingUp, TrendingDown, RefreshCw, Newspaper } from 'lucide-react';
+import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import EconomyModal from '../components/EconomyModal';
 
 interface TradeHistory { id: number; tradeType: string; symbol: string; amount: number; price: number; tradeTime: string; }
 interface PortfolioItem { symbol: string; amount: number; averagePrice: number; }
@@ -34,6 +35,7 @@ export default function Dashboard() {
     const [buyRatio, setBuyRatio] = useState<number>(50); 
     const [panelMode, setPanelMode] = useState<'summary' | 'top4'>('summary'); 
     const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
+    const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
     const [toasts, setToasts] = useState<TradeToast[]>([]);
     
     const [stocks, setStocks] = useState<any[]>([]);
@@ -257,14 +259,30 @@ export default function Dashboard() {
                     <h1 className="text-3xl font-extrabold text-white">환영합니다, <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400">{usernameStr}</span>님</h1>
                     <p className="text-slate-400 mt-2 text-sm">오늘의 시장 동향과 내 포트폴리오를 확인하세요.</p>
                 </div>
-                <div className="flex bg-slate-800/50 rounded-lg p-1 border border-slate-700 shadow-md backdrop-blur-md cursor-pointer select-none w-full sm:w-auto" onClick={() => setPanelMode(panelMode === 'summary' ? 'top4' : 'summary')}>
-                    <div className="relative flex items-center w-full sm:w-48 h-8 rounded-md">
-                        <motion.div className="absolute top-0 bottom-0 w-1/2 bg-sky-500 rounded-md shadow-md" layout transition={{ type: "spring", stiffness: 500, damping: 30 }} initial={false} animate={{ left: panelMode === 'summary' ? "0%" : "50%" }} />
-                        <span className={`flex-1 text-center text-xs font-bold z-10 ${panelMode === 'summary' ? 'text-white' : 'text-slate-500'}`}>내 요약</span>
-                        <span className={`flex-1 text-center text-xs font-bold z-10 ${panelMode === 'top4' ? 'text-white' : 'text-slate-500'}`}>시장 Top 4</span>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <button
+                        onClick={() => setIsEconomyModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 hover:from-amber-400 hover:to-pink-400 text-white font-extrabold text-xs shadow-lg shadow-orange-500/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                        <Gift className="w-4 h-4 text-amber-200" />
+                        데일리 혜택 & 출석
+                    </button>
+                    <div className="flex bg-slate-800/50 rounded-lg p-1 border border-slate-700 shadow-md backdrop-blur-md cursor-pointer select-none flex-1 sm:flex-initial" onClick={() => setPanelMode(panelMode === 'summary' ? 'top4' : 'summary')}>
+                        <div className="relative flex items-center w-full sm:w-48 h-8 rounded-md">
+                            <motion.div className="absolute top-0 bottom-0 w-1/2 bg-sky-500 rounded-md shadow-md" layout transition={{ type: "spring", stiffness: 500, damping: 30 }} initial={false} animate={{ left: panelMode === 'summary' ? "0%" : "50%" }} />
+                            <span className={`flex-1 text-center text-xs font-bold z-10 ${panelMode === 'summary' ? 'text-white' : 'text-slate-500'}`}>내 요약</span>
+                            <span className={`flex-1 text-center text-xs font-bold z-10 ${panelMode === 'top4' ? 'text-white' : 'text-slate-500'}`}>시장 Top 4</span>
+                        </div>
                     </div>
                 </div>
             </header>
+
+            <EconomyModal
+                isOpen={isEconomyModalOpen}
+                onClose={() => setIsEconomyModalOpen(false)}
+                onBalanceUpdate={(newBal) => setBalance(newBal)}
+                currentBalance={balance}
+            />
 
             <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {panelMode === 'summary' ? (

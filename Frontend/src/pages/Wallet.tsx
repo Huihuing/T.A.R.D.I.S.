@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Gift } from 'lucide-react';
+import EconomyModal from '../components/EconomyModal';
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
     const [amount, setAmount] = useState<number | ''>('');
     const [targetUser, setTargetUser] = useState<string>('');
     const [accountPassword, setAccountPassword] = useState<string>('');
+    const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -53,7 +56,32 @@ export default function Wallet() {
                     <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                     <p className="text-slate-400 font-bold mb-2">총 보유 현금 (Cash Balance)</p>
                     <div className="text-5xl font-mono font-black text-white">${balance.toFixed(2)}</div>
+                    
+                    <button
+                        onClick={() => setIsEconomyModalOpen(true)}
+                        className="mt-6 flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-pink-500 hover:from-amber-400 hover:to-pink-400 text-white font-extrabold text-xs shadow-lg shadow-orange-500/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                        <Gift className="w-4 h-4 text-amber-200" />
+                        일일 출석 체크 & 긴급 파산 구제 룰렛
+                    </button>
+
+                    {balance < 100 && (
+                        <div
+                            onClick={() => setIsEconomyModalOpen(true)}
+                            className="mt-3 p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-between cursor-pointer hover:bg-rose-500/30 transition-colors animate-pulse"
+                        >
+                            <span>🚨 잔고 $100 미만 경고!</span>
+                            <span className="underline">구제 룰렛 돌리기 ➔</span>
+                        </div>
+                    )}
                 </div>
+
+                <EconomyModal
+                    isOpen={isEconomyModalOpen}
+                    onClose={() => setIsEconomyModalOpen(false)}
+                    onBalanceUpdate={(newBal) => setBalance(newBal)}
+                    currentBalance={balance}
+                />
                 
                 <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 flex flex-col gap-4 shadow-xl">
                     <div className="bg-slate-900/50 p-4 rounded-xl border border-rose-500/30 mb-2">
