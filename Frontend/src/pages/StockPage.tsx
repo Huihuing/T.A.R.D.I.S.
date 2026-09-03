@@ -48,12 +48,10 @@ export default function StockPage() {
             });
             const newStocks = await Promise.all(promises);
             setStocks((prev) => {
-                if (startIndex === 0) return newStocks;
-                const existingSymbols = new Set(prev.map((s: any) => s.symbol));
-                const uniqueNew = newStocks.filter((s: any) => !existingSymbols.has(s.symbol));
+                const existingSymbols = new Set(prev.map(s => s.symbol));
+                const uniqueNew = newStocks.filter(s => !existingSymbols.has(s.symbol));
                 return [...prev, ...uniqueNew];
             });
-            setLoadedCount(endIndex);
         } catch (error) { console.error(error); } finally { setIsLoading(false); }
     };
 
