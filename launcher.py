@@ -1,9 +1,10 @@
 import os
 import sys
+import time
 import socket
+import threading
 import subprocess
 import tkinter as tk
-from tkinter import font
 
 # 기본 디렉터리 경로 설정 (launcher.py 위치 기준 자동 감지)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,17 +37,21 @@ SERVICES = {
     },
 }
 
+# 스레드 안전한 실시간 상태 저장소 ("stopped", "starting", "running", "stopping")
+service_states = {k: "stopped" for k in SERVICES}
+state_lock = threading.Lock()
+
 def is_port_in_use(port):
-    """지정된 포트가 현재 열려 있는지 확인"""
+    """지정된 포트가 현재 열려 있는지 확인 (타임아웃 0.15초)"""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.2)
+            s.settimeout(0.15)
             return s.connect_ex(('127.0.0.1', port)) == 0
     except Exception:
         return False
 
-def kill_port(port):
-    """해당 포트를 점유하고 있는 프로세스를 강제 종료"""
+def kill_port_sync(port):
+    """해당 포트를 점유하고 있는 프로세스를 강제 종료 (백그라운드 스레드에서만 실행)"""
     try:
         res = subprocess.run('netstat -ano -p tcp', capture_output=True, text=True, shell=True)
         pids = set()
@@ -62,25 +67,67 @@ def kill_port(port):
     except Exception:
         pass
 
-def start_service(key):
-    """개별 서비스 시작"""
+def status_monitor_thread():
+    """백그라운드 스레드: 포트 및 프로세스 상태를 비동기로 감지하여 메인 UI 스레드 차단 방지"""
+    while True:
+        for key, srv in SERVICES.items():
+            port_open = is_port_in_use(srv["port"])
+            proc_alive = srv["proc"] is not None and srv["proc"].poll() is None
+
+            with state_lock:
+                curr = service_states[key]
+                if port_open:
+                    service_states[key] = "running"
+                elif curr == "starting":
+                    # 부팅 시작 직후에는 포트가 열릴 때까지 starting 유지 (프로세스가 죽지 않았다면)
+                    if not proc_alive and srv["proc"] is not None:
+                        service_states[key] = "stopped"
+                elif curr == "stopping":
+                    # 정지 작업 진행 중
+                    if not port_open and not proc_alive:
+                        service_states[key] = "stopped"
+                elif proc_alive:
+                    service_states[key] = "starting"
+                else:
+                    service_states[key] = "stopped"
+
+        time.sleep(1.0)
+
+def _start_worker(key):
+    """프로세스 실행 비동기 워커"""
     srv = SERVICES[key]
-    if (srv["proc"] and srv["proc"].poll() is None) or is_port_in_use(srv["port"]):
-        return
-    srv["proc"] = subprocess.Popen(srv["cmd"], creationflags=subprocess.CREATE_NEW_CONSOLE)
-    update_ui()
+    try:
+        srv["proc"] = subprocess.Popen(srv["cmd"], creationflags=subprocess.CREATE_NEW_CONSOLE)
+    except Exception as e:
+        with state_lock:
+            service_states[key] = "stopped"
+
+def start_service(key):
+    """개별 서비스 비동기 시작 (UI 즉각 반응)"""
+    with state_lock:
+        if service_states[key] in ("running", "starting"):
+            return
+        service_states[key] = "starting"
+    threading.Thread(target=_start_worker, args=(key,), daemon=True).start()
+
+def _stop_worker(key):
+    """프로세스 및 포트 종료 비동기 워커 (UI 프리징 방지)"""
+    srv = SERVICES[key]
+    try:
+        if srv["proc"] and srv["proc"].poll() is None:
+            subprocess.run(f'taskkill /F /T /PID {srv["proc"].pid}', shell=True, capture_output=True)
+    except Exception:
+        pass
+    srv["proc"] = None
+    kill_port_sync(srv["port"])
+    with state_lock:
+        service_states[key] = "stopped"
 
 def stop_service(key):
-    """개별 서비스 종료 (프로세스 트리 및 포트 점유 프로세스 모두 정리)"""
-    srv = SERVICES[key]
-    if srv["proc"] and srv["proc"].poll() is None:
-        try:
-            subprocess.run(f'taskkill /F /T /PID {srv["proc"].pid}', shell=True, capture_output=True)
-        except Exception:
-            pass
-    srv["proc"] = None
-    kill_port(srv["port"])
-    update_ui()
+    """개별 서비스 비동기 종료 (UI 즉각 반응)"""
+    with state_lock:
+        service_states[key] = "stopping"
+    threading.Thread(target=_stop_worker, args=(key,), daemon=True).start()
 
 def start_all():
     """모든 서비스 일괄 시작"""
@@ -227,35 +274,37 @@ btn_stop_all = tk.Button(
 )
 btn_stop_all.pack(side="right", fill="x", expand=True, padx=(6, 0))
 
-def update_ui():
-    """주기적으로 각 서비스의 포트/프로세스 상태를 감지하여 UI 업데이트"""
+# 변경 감지용 캐시 (상태가 바뀔 때만 위젯 redraw 수행)
+last_rendered_states = {}
+
+def refresh_ui():
+    """UI 메인 루프: 메모리의 상태만 읽어 0ms로 즉각 렌더링 (잔렉 완전 제거)"""
+    with state_lock:
+        snapshot = dict(service_states)
+
     for key, srv in SERVICES.items():
-        port_open = is_port_in_use(srv["port"])
-        proc_alive = srv["proc"] is not None and srv["proc"].poll() is None
+        state = snapshot.get(key, "stopped")
+        if last_rendered_states.get(key) != state:
+            last_rendered_states[key] = state
+            lbl = ui_elements[key]["status"]
+            if state == "running":
+                lbl.config(text=f"● 실행 중 (Port {srv['port']})", fg="#34d399")
+            elif state == "starting":
+                lbl.config(text=f"● 부팅 중... (Port {srv['port']})", fg="#fbbf24")
+            elif state == "stopping":
+                lbl.config(text=f"● 종료 중... (Port {srv['port']})", fg="#f87171")
+            else:
+                lbl.config(text=f"● 정지됨 (Port {srv['port']})", fg="#94a3b8")
 
-        status_lbl = ui_elements[key]["status"]
-        if port_open:
-            status_lbl.config(
-                text=f"● 실행 중 (Port {srv['port']})",
-                fg="#34d399"  # 녹색
-            )
-        elif proc_alive:
-            status_lbl.config(
-                text=f"● 부팅 중... (Port {srv['port']})",
-                fg="#fbbf24"  # 주황색
-            )
-        else:
-            status_lbl.config(
-                text=f"● 정지됨 (Port {srv['port']})",
-                fg="#94a3b8"  # 회색
-            )
+    root.after(150, refresh_ui)
 
-    root.after(1000, update_ui)
+# 백그라운드 모니터 스레드 시작
+monitor_thread = threading.Thread(target=status_monitor_thread, daemon=True)
+monitor_thread.start()
 
-# 1초마다 상태 갱신 루프 시작
-root.after(100, update_ui)
+# UI 주기 갱신 루프 시작
+root.after(50, refresh_ui)
 
-# 프로그램 종료 시 정리
 def on_close():
     root.destroy()
 
