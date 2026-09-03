@@ -72,30 +72,30 @@ export default function Board() {
         } catch (e) {}
     };
 
-    // 💡 이미지 업로드 로직 (Imgur API)
+    // 💡 이미지 업로드 로직 (freeimage.host API)
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setIsUploading(true);
         const formData = new FormData();
-        formData.append('image', file);
+        // freeimage.host public API key
+        formData.append('key', '***REMOVED***'); 
+        formData.append('action', 'upload');
+        formData.append('source', file);
 
         try {
-            // Imgur 무료/익명 업로드 API 사용 (테스트용 공용 Client-ID 교체)
-            const res = await fetch('https://api.imgur.com/3/image', {
+            // Imgur 제한을 피하기 위해 대안 무료 이미지 호스팅 사용
+            const res = await fetch('https://freeimage.host/api/1/upload', {
                 method: 'POST',
-                headers: {
-                    Authorization: 'Client-ID ***REMOVED***' // 교체된 대체 키
-                },
                 body: formData
             });
             const data = await res.json();
-            if (data.success) {
-                const imageUrl = data.data.link;
+            if (data.status_code === 200) {
+                const imageUrl = data.image.url;
                 setContent(prev => prev + `\n![업로드된 이미지](${imageUrl})\n`);
             } else {
-                alert('이미지 업로드에 실패했습니다. (API 제한 초과 등)');
+                alert('이미지 업로드에 실패했습니다. (응답 오류)');
             }
         } catch (error) {
             alert('이미지 업로드 중 오류가 발생했습니다.');
