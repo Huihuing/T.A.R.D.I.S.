@@ -10,7 +10,9 @@ export default function Board() {
     const [content, setContent] = useState('');
     const [commentInput, setCommentInput] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [editingPostId, setEditingPostId] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const currentUser = localStorage.getItem('username');
     
     const fetchPosts = async () => {
         try {
@@ -36,12 +38,20 @@ export default function Board() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
-            await fetch('http://localhost:8080/api/board/posts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, title, content })
-            });
-            setTitle(''); setContent(''); setViewMode('list');
+            if (editingPostId) {
+                await fetch(`http://localhost:8080/api/board/posts/${editingPostId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, title, content })
+                });
+            } else {
+                await fetch('http://localhost:8080/api/board/posts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, title, content })
+                });
+            }
+            setTitle(''); setContent(''); setEditingPostId(null); setViewMode('list');
         } catch (e) {}
     };
 
@@ -72,11 +82,11 @@ export default function Board() {
         formData.append('image', file);
 
         try {
-            // Imgur 무료/익명 업로드 API 사용 (테스트용 공용 Client-ID)
+            // Imgur 무료/익명 업로드 API 사용 (테스트용 공용 Client-ID 교체)
             const res = await fetch('https://api.imgur.com/3/image', {
                 method: 'POST',
                 headers: {
-                    Authorization: 'Client-ID ***REMOVED***' // 실제 서비스시 교체 필요
+                    Authorization: 'Client-ID ***REMOVED***' // 교체된 대체 키
                 },
                 body: formData
             });
@@ -85,7 +95,7 @@ export default function Board() {
                 const imageUrl = data.data.link;
                 setContent(prev => prev + `\n![업로드된 이미지](${imageUrl})\n`);
             } else {
-                alert('이미지 업로드에 실패했습니다.');
+                alert('이미지 업로드에 실패했습니다. (API 제한 초과 등)');
             }
         } catch (error) {
             alert('이미지 업로드 중 오류가 발생했습니다.');
@@ -93,6 +103,23 @@ export default function Board() {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
+    };
+
+    const startEditPost = () => {
+        setTitle(selectedPost.title);
+        setContent(selectedPost.content);
+        setEditingPostId(selectedPost.id);
+        setViewMode('write');
+    };
+
+    const deletePost = async () => {
+        if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
+        try {
+            await fetch(`http://localhost:8080/api/board/posts/${selectedPost.id}?username=${currentUser}`, {
+                method: 'DELETE'
+            });
+            setViewMode('list');
+        } catch (e) {}
     };
 
     // 💡 수익률 첨부 버튼 로직
@@ -132,7 +159,7 @@ export default function Board() {
                     <p className="text-slate-400 text-sm mt-2">다른 투자자들과 인사이트를 공유하세요.</p>
                 </div>
                 {viewMode === 'list' && (
-                    <button onClick={() => setViewMode('write')} className="bg-sky-600 hover:bg-sky-500 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors">
+                    <button onClick={() => { setEditingPostId(null); setTitle(''); setContent(''); setViewMode('write'); }} className="bg-sky-600 hover:bg-sky-500 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors">
                         <Edit3 className="w-5 h-5" /> 글쓰기
                     </button>
                 )}
@@ -186,7 +213,9 @@ export default function Board() {
                             </div>
                             
                             <textarea placeholder="내용을 작성해 주세요... (마크다운 이미지 문법을 지원합니다)" value={content} onChange={e => setContent(e.target.value)} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar leading-relaxed" />
-                            <button type="submit" disabled={isUploading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-colors disabled:opacity-50">게시글 등록</button>
+                            <button type="submit" disabled={isUploading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-colors disabled:opacity-50">
+                                {editingPostId ? '게시글 수정' : '게시글 등록'}
+                            </button>
                         </form>
                     </motion.div>
                 )}
@@ -194,7 +223,15 @@ export default function Board() {
                 {/* 3. 상세 조회 및 댓글 화면 */}
                 {viewMode === 'detail' && selectedPost && (
                     <motion.div key="detail" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-slate-800/50 p-6 md:p-10 rounded-3xl border border-slate-700/50 shadow-lg">
-                        <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
+                        <div className="flex justify-between items-center mb-6">
+                            <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
+                            {selectedPost.author === currentUser && (
+                                <div className="flex gap-2">
+                                    <button onClick={startEditPost} className="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-white font-bold transition-colors">수정</button>
+                                    <button onClick={deletePost} className="text-sm bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded-lg font-bold transition-colors">삭제</button>
+                                </div>
+                            )}
+                        </div>
                         <h2 className="text-3xl font-black text-white mb-4">{selectedPost.title}</h2>
                         <div className="flex gap-4 text-sm text-sky-400 font-bold border-b border-slate-700 pb-6 mb-6">
                             <span>작성자: {selectedPost.author}</span>

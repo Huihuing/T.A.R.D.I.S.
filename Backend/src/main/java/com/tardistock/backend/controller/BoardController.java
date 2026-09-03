@@ -97,4 +97,37 @@ public class BoardController {
         commentRepository.save(comment);
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
+
+    @PutMapping("/posts/{id}")
+    public ResponseEntity<?> updatePost(@PathVariable Long id, @RequestBody Map<String, String> request) {
+        String username = request.get("username");
+        Optional<Post> postOpt = postRepository.findById(id);
+        if (postOpt.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "게시글이 없습니다."));
+        
+        Post post = postOpt.get();
+        if (!post.getMember().getUsername().equals(username)) {
+            return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
+        }
+        
+        post.setTitle(request.get("title"));
+        post.setContent(request.get("content"));
+        postRepository.save(post);
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
+    }
+
+    @DeleteMapping("/posts/{id}")
+    public ResponseEntity<?> deletePost(@PathVariable Long id, @RequestParam String username) {
+        Optional<Post> postOpt = postRepository.findById(id);
+        if (postOpt.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "게시글이 없습니다."));
+        
+        Post post = postOpt.get();
+        if (!post.getMember().getUsername().equals(username)) {
+            return ResponseEntity.status(403).body(Map.of("message", "삭제 권한이 없습니다."));
+        }
+        
+        // cascade 옵션이 없으므로, 관련된 댓글들도 지워줘야 할 수 있음
+        commentRepository.deleteAll(commentRepository.findByPostOrderByCreatedAtAsc(post));
+        postRepository.delete(post);
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
+    }
 }
