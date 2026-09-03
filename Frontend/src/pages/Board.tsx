@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Edit3, ArrowLeft, Send } from 'lucide-react';
+import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 export default function Board() {
     const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
@@ -9,6 +9,8 @@ export default function Board() {
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [commentInput, setCommentInput] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const fetchPosts = async () => {
         try {
@@ -60,6 +62,39 @@ export default function Board() {
         } catch (e) {}
     };
 
+    // 💡 이미지 업로드 로직 (Imgur API)
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            // Imgur 무료/익명 업로드 API 사용 (테스트용 공용 Client-ID)
+            const res = await fetch('https://api.imgur.com/3/image', {
+                method: 'POST',
+                headers: {
+                    Authorization: 'Client-ID ***REMOVED***' // 실제 서비스시 교체 필요
+                },
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success) {
+                const imageUrl = data.data.link;
+                setContent(prev => prev + `\n![업로드된 이미지](${imageUrl})\n`);
+            } else {
+                alert('이미지 업로드에 실패했습니다.');
+            }
+        } catch (error) {
+            alert('이미지 업로드 중 오류가 발생했습니다.');
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     // 💡 수익률 첨부 버튼 로직
     const appendROI = async () => {
         const username = localStorage.getItem('username');
@@ -68,10 +103,23 @@ export default function Board() {
             const res = await fetch(`http://localhost:8080/api/trade/portfolio?username=${username}`);
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
-                ? portfolio.map((p: any) => `${p.symbol} ${p.amount}주`).join(', ') 
+                ? portfolio.map((p: any) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n') 
                 : '보유 주식이 없습니다.';
-            setContent(prev => prev + `\n\n📊 [나의 포트폴리오 현황]\n${summary}`);
+            setContent(prev => prev + `\n\n📊 **[나의 포트폴리오 현황]**\n${summary}\n`);
         } catch (e) {}
+    };
+
+    // 💡 마크다운(이미지) 렌더링 함수
+    const renderContent = (text: string) => {
+        const parts = text.split(/(!\[.*?\]\(.*?\))/g);
+        
+        return parts.map((part, index) => {
+            const imgMatch = part.match(/!\[(.*?)\]\((.*?)\)/);
+            if (imgMatch) {
+                return <img key={index} src={imgMatch[2]} alt={imgMatch[1]} className="rounded-xl max-w-full my-4 shadow-lg border border-slate-700/50" loading="lazy" />;
+            }
+            return <span key={index}>{part}</span>;
+        });
     };
 
     return (
@@ -112,13 +160,33 @@ export default function Board() {
                         <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
                         <form onSubmit={submitPost} className="flex flex-col gap-4">
                             <input type="text" placeholder="제목을 입력하세요" value={title} onChange={e => setTitle(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-bold outline-none focus:border-sky-500" />
-                            <div className="flex justify-end">
-                                <button type="button" onClick={appendROI} className="text-xs bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-colors">
+                            
+                            <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-700">
+                                <div>
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        ref={fileInputRef}
+                                        onChange={handleImageUpload}
+                                    />
+                                    <button 
+                                        type="button" 
+                                        onClick={() => fileInputRef.current?.click()} 
+                                        disabled={isUploading}
+                                        className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                                        {isUploading ? '업로드 중...' : '📷 이미지 첨부'}
+                                    </button>
+                                </div>
+                                <button type="button" onClick={appendROI} className="text-sm bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white px-4 py-2 rounded-lg font-bold transition-colors">
                                     📊 내 포트폴리오 자랑하기
                                 </button>
                             </div>
-                            <textarea placeholder="내용을 작성해 주세요..." value={content} onChange={e => setContent(e.target.value)} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar" />
-                            <button type="submit" className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-colors">게시글 등록</button>
+                            
+                            <textarea placeholder="내용을 작성해 주세요... (마크다운 이미지 문법을 지원합니다)" value={content} onChange={e => setContent(e.target.value)} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar leading-relaxed" />
+                            <button type="submit" disabled={isUploading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-colors disabled:opacity-50">게시글 등록</button>
                         </form>
                     </motion.div>
                 )}
@@ -132,8 +200,9 @@ export default function Board() {
                             <span>작성자: {selectedPost.author}</span>
                             <span>작성일: {selectedPost.createdAt.substring(0, 16).replace('T', ' ')}</span>
                         </div>
-                        <div className="text-slate-200 leading-relaxed whitespace-pre-wrap min-h-[150px]">
-                            {selectedPost.content}
+                        
+                        <div className="text-slate-200 leading-relaxed whitespace-pre-wrap min-h-[150px] text-lg">
+                            {renderContent(selectedPost.content)}
                         </div>
 
                         {/* 댓글 영역 */}
