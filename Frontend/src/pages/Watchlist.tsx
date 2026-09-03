@@ -18,13 +18,13 @@ export default function Watchlist() {
         
         try {
             // DB에서 찜한 종목 리스트 가져오기
-            const res = await fetch(`http://localhost:8080/api/bookmark?username=${username}`);
+            const res = await fetch(`${API_URL}/api/bookmark?username=${username}`);
             const bookmarkedSymbols: string[] = await res.json();
             
             if (bookmarkedSymbols.length > 0) {
                 // 해당 종목들의 실시간 시세 불러오기
                 const promises = bookmarkedSymbols.map(async (symbol) => {
-                    const quoteRes = await fetch(`http://localhost:8080/api/stock/quote?symbol=${symbol}`);
+                    const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
                     if (quoteRes.status === 429) return { symbol, error: '한도 초과' };
                     const data = await quoteRes.json();
                     return { symbol, ...data };
@@ -50,7 +50,7 @@ export default function Watchlist() {
         const username = localStorage.getItem('username');
         if (!username) return;
         try {
-            const res = await fetch(`http://localhost:8080/api/bookmark/toggle`, {
+            const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, symbol, price: 0 })

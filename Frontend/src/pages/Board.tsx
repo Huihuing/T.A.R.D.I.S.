@@ -27,7 +27,7 @@ export default function Board() {
 
     const viewPostDetail = async (id: number) => {
         try {
-            const res = await fetch(`http://localhost:8080/api/board/posts/${id}`);
+            const res = await fetch(`${API_URL}/api/board/posts/${id}`);
             const data = await res.json();
             setSelectedPost(data);
             setViewMode('detail');
@@ -40,7 +40,7 @@ export default function Board() {
         if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
             if (editingPostId) {
-                await fetch(`http://localhost:8080/api/board/posts/${editingPostId}`, {
+                await fetch(`${API_URL}/api/board/posts/${editingPostId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, title, content })
@@ -114,7 +114,7 @@ export default function Board() {
     const deletePost = async () => {
         if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
         try {
-            await fetch(`http://localhost:8080/api/board/posts/${selectedPost.id}?username=${currentUser}`, {
+            await fetch(`${API_URL}/api/board/posts/${selectedPost.id}?username=${currentUser}`, {
                 method: 'DELETE'
             });
             setViewMode('list');
@@ -126,7 +126,7 @@ export default function Board() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
-            const res = await fetch(`http://localhost:8080/api/trade/portfolio?username=${username}`);
+            const res = await fetch(`${API_URL}/api/trade/portfolio?username=${username}`);
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
                 ? portfolio.map((p: any) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n') 

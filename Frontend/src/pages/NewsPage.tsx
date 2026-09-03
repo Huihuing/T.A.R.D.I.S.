@@ -22,11 +22,11 @@ export default function NewsPage() {
     const fetchNews = async (globalSymbol: string, koreaKeyword: string) => {
         setLoading(true);
         try {
-            const resGlobal = await fetch(`http://localhost:8080/api/news/global?symbol=${globalSymbol}`);
+            const resGlobal = await fetch(`${API_URL}/api/news/global?symbol=${globalSymbol}`);
             const globalData = await resGlobal.json();
             if (Array.isArray(globalData)) setGlobalNews(globalData);
             
-            const resKorea = await fetch(`http://localhost:8080/api/news/korea?query=${koreaKeyword}`);
+            const resKorea = await fetch(`${API_URL}/api/news/korea?query=${koreaKeyword}`);
             const koreaData = await resKorea.json();
             if (koreaData && koreaData.items) setKoreaNews(koreaData.items);
         } catch (err) { console.error("뉴스 로딩 에러:", err); }

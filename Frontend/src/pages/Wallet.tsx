@@ -18,7 +18,7 @@ export default function Wallet() {
     const fetchBalance = () => {
         const username = localStorage.getItem('username');
         if (username) {
-            fetch(`http://localhost:8080/api/trade/balance?username=${username}`, { headers: getAuthHeaders() })
+            fetch(`${API_URL}/api/trade/balance?username=${username}`, { headers: getAuthHeaders() })
                 .then(res => res.text()).then(bal => setBalance(Number(bal) || 0));
         }
     };
@@ -32,7 +32,7 @@ export default function Wallet() {
         if (!accountPassword) return alert("계좌 비밀번호를 입력해 주세요.");
         if (action === 'transfer' && !targetUser) return alert("송금 대상 유저명을 입력하세요.");
 
-        const url = `http://localhost:8080/api/account/${action}`;
+        const url = `${API_URL}/api/account/${action}`;
         const bodyData = action === 'transfer' ? { fromUser: username, toUser: targetUser, amount: Number(amount), accountPassword } : { username: username, amount: Number(amount), accountPassword };
 
         try {

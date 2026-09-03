@@ -27,7 +27,7 @@ export default function StockPage() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return;
         try {
-            const res = await fetch(`http://localhost:8080/api/bookmark?username=${username}`);
+            const res = await fetch(`${API_URL}/api/bookmark?username=${username}`);
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) setBookmarks(data);
@@ -42,7 +42,7 @@ export default function StockPage() {
         const symbolsToFetch = ALL_SYMBOLS.slice(startIndex, endIndex);
         try {
             const promises = symbolsToFetch.map(async (symbol) => {
-                const res = await fetch(`http://localhost:8080/api/stock/quote?symbol=${symbol}`);
+                const res = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
                 if (res.status === 429) return { symbol, error: '한도 초과' };
                 const data = await res.json();
                 return { symbol, ...data };
@@ -76,7 +76,7 @@ export default function StockPage() {
     const executeSearch = async (targetSymbol: string) => {
         setSearchQuery(''); setIsDropdownOpen(false); setIsSearching(true);
         try {
-            const quoteRes = await fetch(`http://localhost:8080/api/stock/quote?symbol=${targetSymbol}`);
+            const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${targetSymbol}`);
             if (quoteRes.status === 429) return alert("API 호출 한도를 초과했습니다.");
             const quoteData = await quoteRes.json();
             if (quoteData.c === 0 && quoteData.h === 0) alert("시세 데이터를 제공하지 않는 종목입니다.");
@@ -91,7 +91,7 @@ export default function StockPage() {
         else {
             setIsSearching(true);
             try {
-                const searchRes = await fetch(`http://localhost:8080/api/stock/search?query=${searchQuery.trim()}`);
+                const searchRes = await fetch(`${API_URL}/api/stock/search?query=${searchQuery.trim()}`);
                 const searchData = await searchRes.json();
                 if (searchData.result && searchData.result.length > 0) executeSearch(searchData.result[0].symbol);
                 else alert("결과가 없습니다.");
@@ -106,7 +106,7 @@ export default function StockPage() {
         if (!username || username === 'Guest') return alert("로그인이 필요합니다.");
         
         try {
-            const res = await fetch(`http://localhost:8080/api/bookmark/toggle`, {
+            const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, symbol, price: price || 0 })

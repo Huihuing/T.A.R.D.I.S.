@@ -85,15 +85,15 @@ export default function Dashboard() {
         if (!username) return;
         try {
             const headers = getAuthHeaders();
-            const balRes = await fetch(`http://localhost:8080/api/trade/balance?username=${username}`, { headers });
+            const balRes = await fetch(`${API_URL}/api/trade/balance?username=${username}`, { headers });
             setBalance(Number(await balRes.text()) || 0);
             
-            const histRes = await fetch(`http://localhost:8080/api/trade/history?username=${username}`, { headers });
+            const histRes = await fetch(`${API_URL}/api/trade/history?username=${username}`, { headers });
             const histData: TradeHistory[] = await histRes.json();
             setHistory(histData);
             if (histData.length > 0) setBuyRatio(Math.round((histData.filter(h => h.tradeType === 'BUY').length / histData.length) * 100));
             
-            const portRes = await fetch(`http://localhost:8080/api/trade/portfolio?username=${username}`, { headers });
+            const portRes = await fetch(`${API_URL}/api/trade/portfolio?username=${username}`, { headers });
             setPortfolio(await portRes.json());
         } catch (err) {}
     };
@@ -103,7 +103,7 @@ export default function Dashboard() {
         const symbolsToFetch = DASHBOARD_SYMBOLS.slice(startIdx, startIdx + BATCH_SIZE);
         try {
             const promises = symbolsToFetch.map(async (symbol) => {
-                const res = await fetch(`http://localhost:8080/api/stock/quote?symbol=${symbol}`);
+                const res = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
                 if (res.status === 429) return { symbol, error: '한도 대기' };
                 const data = await res.json();
                 return { symbol, ...data };
@@ -115,7 +115,7 @@ export default function Dashboard() {
     const fetchNewsData = async () => {
         setIsLoadingNews(true);
         try {
-            const resGlobal = await fetch(`http://localhost:8080/api/news/global?symbol=AAPL`);
+            const resGlobal = await fetch(`${API_URL}/api/news/global?symbol=AAPL`);
             const globalData = await resGlobal.json();
             if (Array.isArray(globalData)) setGlobalNewsList(globalData);
             
@@ -138,7 +138,7 @@ export default function Dashboard() {
             const symbolsToFetch = Array.from(new Set([...DASHBOARD_SYMBOLS, ...portfolio.map(p => p.symbol)]));
             for (const sym of symbolsToFetch) {
                 try {
-                    const res = await fetch(`http://localhost:8080/api/stock/quote?symbol=${sym}`);
+                    const res = await fetch(`${API_URL}/api/stock/quote?symbol=${sym}`);
                     const data = await res.json();
                     if (data && data.c) updatedData[sym] = { c: data.c, d: data.d, dp: data.dp };
                 } catch (err) {}
@@ -157,7 +157,7 @@ export default function Dashboard() {
     }, [watchlistData, portfolio, balance]);
 
     useEffect(() => {
-        fetch(`http://localhost:8080/api/stock/quote?symbol=${selectedSymbol}`).then(r=>r.json()).then(data => {
+        fetch(`${API_URL}/api/stock/quote?symbol=${selectedSymbol}`).then(r=>r.json()).then(data => {
             if (data && data.c) { setCurrentPrice(data.c); setPriceChange(data.d); setPercentChange(data.dp); }
         }).catch(()=>{});
     }, [selectedSymbol]);
@@ -294,7 +294,7 @@ export default function Dashboard() {
                                     <button 
                                         onClick={async () => {
                                             try {
-                                                const res = await fetch(`http://localhost:8080/api/trade/relief?username=${localStorage.getItem('username')}`, {
+                                                const res = await fetch(`${API_URL}/api/trade/relief?username=${localStorage.getItem('username')}`, {
                                                     method: 'POST',
                                                     headers: getAuthHeaders(),
                                                     body: JSON.stringify({ totalAssets })
@@ -484,7 +484,7 @@ export default function Dashboard() {
                                     const username = localStorage.getItem('username');
                                     if (!username) return alert("로그인이 필요합니다.");
                                     const amt = getValidAmount();
-                                    const res = await fetch(`http://localhost:8080/api/trade/sell?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
+                                    const res = await fetch(`${API_URL}/api/trade/sell?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
                                     const data = await res.json();
                                     if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('SELL', selectedSymbol, amt, currentPrice); } else alert(data.message);
                                 }}
@@ -494,7 +494,7 @@ export default function Dashboard() {
                                     const username = localStorage.getItem('username');
                                     if (!username) return alert("로그인이 필요합니다.");
                                     const amt = getValidAmount();
-                                    const res = await fetch(`http://localhost:8080/api/trade/buy?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
+                                    const res = await fetch(`${API_URL}/api/trade/buy?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
                                     const data = await res.json();
                                     if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('BUY', selectedSymbol, amt, currentPrice); } else alert(data.message);
                                 }}

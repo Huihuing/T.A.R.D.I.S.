@@ -56,7 +56,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         const username = localStorage.getItem('username');
         if (!username) return;
         try {
-            const res = await fetch(`http://localhost:8080/api/economy/status?username=${username}`, {
+            const res = await fetch(`${API_URL}/api/economy/status?username=${username}`, {
                 headers: getAuthHeaders()
             });
             if (res.ok) {
@@ -84,7 +84,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         if (!username || loading) return;
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:8080/api/economy/check-in`, {
+            const res = await fetch(`${API_URL}/api/economy/check-in`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({ username })
@@ -109,7 +109,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         if (!username || loading) return;
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:8080/api/economy/claim-quest`, {
+            const res = await fetch(`${API_URL}/api/economy/claim-quest`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({ username, questType })
@@ -150,7 +150,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         setTimeout(async () => {
             setIsSpinning(false);
             try {
-                const res = await fetch(`http://localhost:8080/api/economy/bankruptcy-relief`, {
+                const res = await fetch(`${API_URL}/api/economy/bankruptcy-relief`, {
                     method: 'POST',
                     headers: getAuthHeaders(),
                     body: JSON.stringify({ username, rewardAmount: prize })
