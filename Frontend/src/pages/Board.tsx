@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -16,7 +17,7 @@ export default function Board() {
     
     const fetchPosts = async () => {
         try {
-            const res = await fetch('http://localhost:8080/api/board/posts');
+            const res = await fetch(`${API_URL}/api/board/posts`);
             const data = await res.json();
             setPosts(data);
         } catch (e) {}
@@ -45,7 +46,7 @@ export default function Board() {
                     body: JSON.stringify({ username, title, content })
                 });
             } else {
-                await fetch('http://localhost:8080/api/board/posts', {
+                await fetch(`${API_URL}/api/board/posts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, title, content })
@@ -62,7 +63,7 @@ export default function Board() {
         if (!commentInput.trim()) return;
 
         try {
-            await fetch('http://localhost:8080/api/board/comments', {
+            await fetch(`${API_URL}/api/board/comments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, postId: selectedPost.id, content: commentInput })
@@ -83,7 +84,7 @@ export default function Board() {
 
         try {
             // CORS 에러 및 API 키 노출 방지를 위해 백엔드로 업로드를 요청합니다.
-            const res = await fetch('http://localhost:8080/api/board/upload', {
+            const res = await fetch(`${API_URL}/api/board/upload`, {
                 method: 'POST',
                 body: formData
             });

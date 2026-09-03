@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star } from 'lucide-react';

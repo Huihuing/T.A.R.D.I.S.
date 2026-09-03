@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { Gift } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';

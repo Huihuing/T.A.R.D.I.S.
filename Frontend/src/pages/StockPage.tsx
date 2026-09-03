@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Search, Star } from 'lucide-react'; // 💡 Star 추가
@@ -60,7 +61,7 @@ export default function StockPage() {
         fetchStockBatch(0, BATCH_SIZE); 
         const fetchAllSymbols = async () => {
             try {
-                const res = await fetch('http://localhost:8080/api/stock/symbols');
+                const res = await fetch(`${API_URL}/api/stock/symbols`);
                 const data = await res.json();
                 if (Array.isArray(data)) setAllSymbols(data);
             } catch (err) {}

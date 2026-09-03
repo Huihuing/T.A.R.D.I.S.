@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Crown, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
@@ -18,7 +19,7 @@ export default function Leaderboard() {
     const fetchLeaderboard = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('http://localhost:8080/api/leaderboard');
+            const res = await fetch(`${API_URL}/api/leaderboard`);
             const data = await res.json();
             setRankings(data);
         } catch (e) {

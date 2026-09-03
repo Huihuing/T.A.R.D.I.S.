@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Gift, Coins, CheckCircle2, Sparkles, X, Flame, RotateCcw, TrendingUp, MessageSquare, Award } from 'lucide-react';

@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, RefreshCw, RotateCcw } from 'lucide-react';

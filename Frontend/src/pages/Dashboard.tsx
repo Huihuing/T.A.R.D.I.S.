@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Client } from '@stomp/stompjs';
@@ -57,7 +58,7 @@ export default function Dashboard() {
         const username = localStorage.getItem('username');
         if (!username) return;
         const stompClient = new Client({
-            webSocketFactory: () => new SockJS('http://localhost:8080/ws-stomp'),
+            webSocketFactory: () => new SockJS(`${API_URL}/ws-stomp`),
             reconnectDelay: 5000,
             onConnect: () => {
                 stompClient.subscribe(`/topic/alerts/${username}`, (message) => {
@@ -118,7 +119,7 @@ export default function Dashboard() {
             const globalData = await resGlobal.json();
             if (Array.isArray(globalData)) setGlobalNewsList(globalData);
             
-            const resKorea = await fetch('http://localhost:8080/api/news/korea?query=증시 특징주');
+            const resKorea = await fetch(`${API_URL}/api/news/korea?query=증시 특징주`);
             const koreaData = await resKorea.json();
             if (koreaData && koreaData.items) setKoreaNewsList(koreaData.items);
         } catch (err) {} finally { setIsLoadingNews(false); }
@@ -128,7 +129,7 @@ export default function Dashboard() {
         fetchUserData(); 
         fetchStockBatch(0); 
         fetchNewsData();
-        fetch('http://localhost:8080/api/stock/symbols').then(r=>r.json()).then(d => { if(Array.isArray(d)) setAllSymbols(d); }).catch(()=>{});
+        fetch(`${API_URL}/api/stock/symbols`).then(r=>r.json()).then(d => { if(Array.isArray(d)) setAllSymbols(d); }).catch(()=>{});
     }, []);
 
     useEffect(() => {

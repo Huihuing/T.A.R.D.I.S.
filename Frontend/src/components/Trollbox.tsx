@@ -1,3 +1,4 @@
+import { API_URL, WS_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Send } from 'lucide-react';
@@ -29,7 +30,7 @@ export default function Trollbox() {
 
     useEffect(() => {
         // Node.js 소켓 서버(포트 3000) 연결
-        socket = io('http://localhost:3000');
+        socket = io(`${WS_URL}`);
 
         socket.on('receiveMessage', (msg: ChatMessage) => {
             setMessages((prev) => [...prev, msg]);
