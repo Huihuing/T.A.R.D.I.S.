@@ -1,36 +1,56 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import Home from './pages/Home'; 
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Wallet from './pages/Wallet';
-import Register from './pages/Register'; // 💡 추가
+import Register from './pages/Register';
 import StockPage from './pages/StockPage';
 import NewsPage from './pages/NewsPage';
+import Watchlist from './pages/Watchlist';
+import Board from './pages/Board'; // 💡 임포트 추가
+import Trollbox from './components/Trollbox';
+import Leaderboard from './pages/Leaderboard';
 
 export default function App() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev: boolean) => {
+      const newState = !prev;
+      localStorage.setItem('sidebarOpen', JSON.stringify(newState));
+      return newState;
+    });
+  };
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* 📜 로그인은 이제 /login 주소로 들어가야만 나옵니다 */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-        {/* 📜 기본 화면에는 무조건 사이드바와 대시보드가 나오게 설정합니다 */}
         <Route
           path="/*"
           element={
-            <div className="flex min-h-screen bg-slate-950">
-              <Sidebar />
-              <main className="flex-1 overflow-y-auto">
+            <div className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans">
+              <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
+              
+              <main className="flex-1 h-screen overflow-y-auto relative transition-all">
                 <Routes>
-                  {/* 주소창에 아무것도 안 쳐도(/) 대시보드가 나옵니다! */}
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/" element={<Home />} />
                   <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/register" element={<Register />} /> {/* 💡 추가 */}
                   <Route path="/stock" element={<StockPage />} />
                   <Route path="/news" element={<NewsPage />} />
-                  <Route path="/login" element={<Login />} />
                   <Route path="/wallet" element={<Wallet />} />
+                  <Route path="/watchlist" element={<Watchlist />} />
+                  <Route path="/board" element={<Board />} /> {/* 💡 라우트 추가 */}
+                  <Route path="/leaderboard" element={<Leaderboard />} />
                 </Routes>
+                <Trollbox />
               </main>
             </div>
           }

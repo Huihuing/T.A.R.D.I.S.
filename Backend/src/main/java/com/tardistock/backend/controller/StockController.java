@@ -10,6 +10,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.web.client.HttpClientErrorException;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/stock")
@@ -20,18 +22,23 @@ public class StockController {
     private String finnhubToken;
 
     // 📈 실시간 주가 가져오기
-    @GetMapping("/quote")
-    public ResponseEntity<?> getStockQuote(@RequestParam(defaultValue = "AAPL") String symbol) {
+@GetMapping("/quote")
+    public ResponseEntity<?> getStockQuote(@RequestParam String symbol) {
         try {
+            // 💡 1. restTemplate 객체 생성
+            RestTemplate restTemplate = new RestTemplate();
+            
+            // 💡 2. 변수명을 21번째 줄에 있는 finnhubToken으로 통일
             String url = "https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + finnhubToken;
             
-            RestTemplate restTemplate = new RestTemplate();
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
             return ResponseEntity.ok(response.getBody());
+            
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            System.out.println("Finnhub API 호출 한도 초과: 잠시 후 다시 시도하세요.");
+            return ResponseEntity.status(429).body(Map.of("message", "API 호출 한도 초과 (잠시 후 새로고침 해주세요)"));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("{\"error\": \"실시간 주가 로딩 실패\"}");
+            return ResponseEntity.status(500).body(Map.of("message", "주식 데이터를 불러오지 못했습니다."));
         }
     }
    // 📊 과거 주가 캔들 데이터 가져오기 (야후 파이낸스로 우회!)

@@ -43,33 +43,45 @@ export default function Wallet() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 text-white p-8 font-sans">
-            <h1 className="text-4xl font-extrabold text-sky-400 mb-8">💳 My Wallet</h1>
+        <div className="min-h-screen bg-[#0b1120] text-slate-200 p-6 md:p-8 font-sans">
+            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400 mb-8 pb-4 border-b border-slate-800">
+                💳 My Wallet
+            </h1>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
-                <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-center relative overflow-hidden">
+                <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700/50 shadow-xl flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                     <p className="text-slate-400 font-bold mb-2">총 보유 현금 (Cash Balance)</p>
-                    <div className="text-5xl font-mono font-bold text-white">${balance.toFixed(2)}</div>
+                    <div className="text-5xl font-mono font-black text-white">${balance.toFixed(2)}</div>
                 </div>
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 flex flex-col gap-4 shadow-xl">
+                
+                <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 flex flex-col gap-4 shadow-xl">
                     <div className="bg-slate-900/50 p-4 rounded-xl border border-rose-500/30 mb-2">
                         <label className="block text-rose-400 text-sm font-bold mb-2"><span>🔒</span> 2차 인증 (계좌 비밀번호)</label>
                         <input type="password" value={accountPassword} maxLength={4} onChange={(e) => setAccountPassword(e.target.value)} placeholder="숫자 4자리" className="w-full bg-slate-900 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-rose-500 outline-none font-mono tracking-[0.5em] text-center text-lg" />
                     </div>
                     <div>
                         <label className="block text-slate-400 text-sm font-bold mb-2">금액 (Amount USD)</label>
-                        <input type="number" min="0" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="0.00" className="w-full bg-slate-900 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-sky-500 outline-none font-mono text-lg" />
+                        <input type="number" min="0" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="0.00" className="w-full bg-slate-900 text-white px-4 py-3 rounded-lg border border-slate-700 focus:border-sky-500 outline-none font-mono text-lg" />
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => handleAction('deposit')} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded-lg font-bold">+ 입금 (Deposit)</button>
-                        <button onClick={() => handleAction('withdrawal')} className="flex-1 bg-slate-600 hover:bg-slate-500 py-3 rounded-lg font-bold">- 출금 (Withdrawal)</button>
+                        <button onClick={() => handleAction('deposit')} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold shadow-lg transition-colors">+ 입금 (Deposit)</button>
+                        <button onClick={() => handleAction('withdrawal')} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-3 rounded-lg font-bold shadow-lg transition-colors">- 출금 (Withdrawal)</button>
                     </div>
-                    <div className="flex items-center gap-4 my-1"><hr className="flex-1 border-slate-700" /><span className="text-xs text-slate-500 font-bold uppercase">or Transfer</span><hr className="flex-1 border-slate-700" /></div>
+                    
+                    <div className="flex items-center gap-4 my-2">
+                        <hr className="flex-1 border-slate-700" />
+                        <span className="text-xs text-slate-500 font-bold uppercase">or Transfer</span>
+                        <hr className="flex-1 border-slate-700" />
+                    </div>
+                    
                     <div>
                         <label className="block text-slate-400 text-sm font-bold mb-2">송금 대상 (Target Username)</label>
-                        <input type="text" value={targetUser} onChange={(e) => setTargetUser(e.target.value)} placeholder="받을 사람의 아이디" className="w-full bg-slate-900 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-sky-500 outline-none" />
+                        <input type="text" value={targetUser} onChange={(e) => setTargetUser(e.target.value)} placeholder="받을 사람의 아이디" className="w-full bg-slate-900 text-white px-4 py-3 rounded-lg border border-slate-700 focus:border-sky-500 outline-none" />
                     </div>
-                    <button onClick={() => handleAction('transfer')} className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-lg font-bold text-lg">송금하기 (Transfer) ➔</button>
+                    <button onClick={() => handleAction('transfer')} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-colors">
+                        송금하기 (Transfer) ➔
+                    </button>
                 </div>
             </div>
         </div>

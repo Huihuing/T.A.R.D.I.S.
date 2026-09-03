@@ -61,7 +61,8 @@ public class NewsController {
             
             // 🚨 2. 주소는 무조건 NCP API HUB 주소! + {query} 빈칸 뚫어두기
             // 🚨 맨 끝부분 sort=sim 을 sort=date 로 변경!
-            String url = "https://naverapihub.apigw.ntruss.com/search/v1/news?query={query}&display=4&sort=date";
+            // ✅ 수정 후 (display=4 삭제)
+            String url = "https://naverapihub.apigw.ntruss.com/search/v1/news?query={query}&display=100&sort=date";
             
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();

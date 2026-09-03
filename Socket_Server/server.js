@@ -1,4 +1,4 @@
-require('dotenv').config(); // 👈 최상단에서 가장 먼저 .env 파일의 키를 읽어옵니다!
+require('dotenv').config();
 
 const express = require('express');
 const http = require('http');
@@ -11,7 +11,6 @@ const io = new Server(server, {
     cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }
 });
 
-// 🔑 깃허브에 안 올라가는 안전한 환경변수에서 키를 꺼내 씁니다.
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 
 const stockPrices = {
@@ -51,6 +50,12 @@ io.on('connection', (socket) => {
     const interval = setInterval(() => {
         socket.emit('stockData', Object.values(stockPrices));
     }, 1000);
+
+    // 💡 추가된 실시간 채팅(Trollbox) 중계 로직
+    socket.on('sendMessage', (msgData) => {
+        // 누군가 메시지를 보내면, 접속한 "모든" 클라이언트에게 다시 쏴줍니다.
+        io.emit('receiveMessage', msgData);
+    });
 
     socket.on('disconnect', () => {
         console.log(`프론트엔드 연결 종료: ${socket.id}`);
