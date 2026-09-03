@@ -49,3 +49,4 @@ public class UserEconomy {
     public LocalDate getPostQuestClaimedDate() { return postQuestClaimedDate; }
     public void setPostQuestClaimedDate(LocalDate postQuestClaimedDate) { this.postQuestClaimedDate = postQuestClaimedDate; }
 }
+

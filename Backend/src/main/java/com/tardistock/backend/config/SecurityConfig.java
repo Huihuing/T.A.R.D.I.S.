@@ -42,8 +42,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
                 // 💡 주식 시세, 뉴스, 랭킹, 게시판 조회 등 공개 API 허용
                 .requestMatchers("/api/stock/**", "/api/news/**", "/api/leaderboard/**", "/api/board/**").permitAll()
-                // 💡 잔고, 주문, 가상경제 등 거래 관련 API도 개발/테스트 편의를 위해 열어두거나 인증 처리
-                .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**").permitAll()
+                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API도 개발/테스트 편의를 위해 열어두거나 인증 처리
+                .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**", "/api/bookmark/**").permitAll()
                 .anyRequest().authenticated()
             );
 

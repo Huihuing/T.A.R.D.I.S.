@@ -175,9 +175,6 @@ export default function Dashboard() {
         return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=1000&auto=format&fit=crop';
     };
 
-    const myStock = portfolio.find(p => p.symbol === selectedSymbol);
-    const unrealizedProfit = myStock && currentPrice > 0 ? (myStock.amount * currentPrice) - (myStock.amount * myStock.averagePrice) : 0;
-    const profitRate = myStock ? (unrealizedProfit / (myStock.amount * myStock.averagePrice)) * 100 : 0;
     const getValidAmount = () => (typeof tradeAmount === 'number' && tradeAmount > 0 ? tradeAmount : 1);
     
     const filteredSymbols = allSymbols.filter(s => s.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || s.description.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10);
@@ -383,7 +380,10 @@ export default function Dashboard() {
                                             ))}
                                         </Pie>
                                             <RechartsTooltip 
-                                                formatter={(value: any) => [`$${Number(value).toFixed(2)}`, '자산']}
+                                                formatter={(value: any, name: any) => [
+                                                    `$${Number(value).toFixed(2)} (${((Number(value) / (totalAssets || 1)) * 100).toFixed(1)}%)`,
+                                                    name === 'Cash' ? '💵 보유 현금 (Cash)' : `📈 ${name} (보유 주식)`
+                                                ]}
                                                 contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '0.75rem', color: '#f8fafc' }}
                                                 itemStyle={{ fontWeight: 'bold' }}
                                             />
@@ -396,16 +396,55 @@ export default function Dashboard() {
                             )}
                         </div>
 
-                        <div className="mb-4"><p className="text-slate-400 text-sm">Total Assets (총 자산)</p><p className="text-3xl font-mono font-black text-white">${totalAssets.toFixed(2)}</p></div>
-                        <div className="flex justify-between text-sm mb-2"><span className="text-slate-400">Cash Balance (현금)</span><span className="font-mono font-bold text-sky-400">${balance.toFixed(2)}</span></div>
-                        
-                        {myStock && (
-                            <div className="mt-4 p-4 bg-slate-900/50 rounded-xl cursor-pointer hover:ring-1 hover:ring-sky-500 transition-all" onClick={() => setSelectedSymbol(myStock.symbol)}>
-                                <div className="flex justify-between items-center mb-2"><span className="font-bold text-sky-400">{myStock.symbol} 보유량</span><span className="font-mono text-lg font-bold">{myStock.amount} 주</span></div>
-                                <div className="flex justify-between items-center text-sm"><span className="text-slate-400">평균 단가</span><span className="font-mono">${myStock.averagePrice.toFixed(2)}</span></div>
-                                <div className={`flex justify-between items-center text-sm mt-2 font-bold ${unrealizedProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}><span>평가 손익</span><span className="font-mono">{unrealizedProfit >= 0 ? '+' : ''}{unrealizedProfit.toFixed(2)} ({profitRate.toFixed(2)}%)</span></div>
+                        <div className="mb-4">
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Total Assets (총 자산)</p>
+                            <p className="text-3xl font-mono font-black text-white">${totalAssets.toFixed(2)}</p>
+                        </div>
+
+                        {/* 💡 보유 자산 상세 포트폴리오 리스트 (색상 닷 & 종목별 가치 표시) */}
+                        <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-700/60">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-3 h-3 rounded-full bg-[#0ea5e9] shadow-sm"></span>
+                                    <span className="text-xs font-bold text-slate-200">보유 현금 (Cash)</span>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs font-mono font-bold text-sky-400">${balance.toFixed(2)}</span>
+                                    <span className="text-[10px] text-slate-400 block font-mono">
+                                        {((balance / (totalAssets || 1)) * 100).toFixed(1)}%
+                                    </span>
+                                </div>
                             </div>
-                        )}
+
+                            {portfolio.map((p, index) => {
+                                const livePrice = watchlistData[p.symbol]?.c || p.averagePrice;
+                                const value = p.amount * livePrice;
+                                const profit = (livePrice - p.averagePrice) * p.amount;
+                                const isUp = profit >= 0;
+                                const color = CHART_COLORS[index % CHART_COLORS.length];
+                                return (
+                                    <div 
+                                        key={p.symbol} 
+                                        onClick={() => setSelectedSymbol(p.symbol)}
+                                        className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/40 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 cursor-pointer transition-all"
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: color }}></span>
+                                            <div>
+                                                <span className="text-xs font-bold text-white block">{p.symbol}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono">{p.amount}주 @ ${livePrice.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-xs font-mono font-bold text-white">${value.toFixed(2)}</span>
+                                            <span className={`text-[10px] block font-mono font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {isUp ? '+' : ''}{profit.toFixed(2)} ({((value / (totalAssets || 1)) * 100).toFixed(1)}%)
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-lg">

@@ -27,9 +27,13 @@ export default function StockPage() {
         if (!username || username === 'Guest') return;
         try {
             const res = await fetch(`http://localhost:8080/api/bookmark?username=${username}`);
-            const data = await res.json();
-            setBookmarks(data);
-        } catch (e) {}
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) setBookmarks(data);
+            }
+        } catch (e) {
+            console.error("북마크 조회 실패:", e);
+        }
     };
 
     const fetchStockBatch = async (startIndex: number, endIndex: number) => {
@@ -101,11 +105,14 @@ export default function StockPage() {
             const res = await fetch(`http://localhost:8080/api/bookmark/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, symbol, price })
+                body: JSON.stringify({ username, symbol, price: price || 0 })
             });
             const data = await res.json();
-            if (data.status === 'ADDED') setBookmarks(prev => [...prev, symbol]);
-            else if (data.status === 'REMOVED') setBookmarks(prev => prev.filter(s => s !== symbol));
+            if (data.status === 'ADDED') {
+                setBookmarks(prev => [...new Set([...prev, symbol])]);
+            } else if (data.status === 'REMOVED') {
+                setBookmarks(prev => prev.filter(s => s !== symbol));
+            }
         } catch (error) {
             console.error("북마크 변경 오류:", error);
         }
@@ -192,7 +199,19 @@ export default function StockPage() {
                             </div>
                             <div className="w-full md:w-80 p-4 sm:p-6 flex flex-col border-t md:border-t-0 md:border-l border-slate-800 overflow-y-auto">
                                 <div className="flex justify-between items-start mb-6">
-                                    <div><h2 className="text-2xl sm:text-3xl font-black text-white">{selectedStock.symbol}</h2>{selectedStock.description && <p className="text-xs text-slate-400 mt-1 truncate w-[200px] md:w-48">{selectedStock.description}</p>}</div>
+                                    <div>
+                                        <div className="flex items-center gap-3">
+                                            <h2 className="text-2xl sm:text-3xl font-black text-white">{selectedStock.symbol}</h2>
+                                            <button
+                                                onClick={(e) => toggleBookmark(e, selectedStock.symbol, selectedStock.c || 0)}
+                                                className="p-1 rounded-lg hover:bg-slate-800 transition-all hover:scale-110"
+                                                title="관심 종목 (Watchlist) 추가/삭제"
+                                            >
+                                                <Star className={`w-6 h-6 ${bookmarks.includes(selectedStock.symbol) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
+                                            </button>
+                                        </div>
+                                        {selectedStock.description && <p className="text-xs text-slate-400 mt-1 truncate w-[200px] md:w-48">{selectedStock.description}</p>}
+                                    </div>
                                     <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1.5 sm:p-1 transition-colors"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
                                 </div>
                                 <div className="mb-6 sm:mb-8">

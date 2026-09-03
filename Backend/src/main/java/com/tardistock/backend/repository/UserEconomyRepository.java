@@ -8,3 +8,4 @@ import java.util.Optional;
 public interface UserEconomyRepository extends JpaRepository<UserEconomy, Long> {
     Optional<UserEconomy> findByMember(Member member);
 }
+
