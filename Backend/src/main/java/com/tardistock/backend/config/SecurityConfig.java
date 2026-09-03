@@ -14,7 +14,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
+import static org.springframework.security.config.Customizer.withDefaults;
+import org.springframework.security.config.Customizer;
 import java.util.List;
 
 @Configuration
@@ -28,24 +29,23 @@ public class SecurityConfig {
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
+        public PasswordEncoder passwordEncoder() {
+            return new BCryptPasswordEncoder();
+        }
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .cors(org.springframework.security.config.Customizer.withDefaults())
             .authorizeHttpRequests(auth -> auth
-                // 💡 OPTIONS(브라우저 사전 요청)와 회원가입/로그인 등 필요한 모든 경로 완벽 허용
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/member/**").permitAll() 
-                .requestMatchers("/api/news/**", "/api/stock/**", "/ws-stomp/**").permitAll() 
+                // 💡 로그인/회원가입, 실시간 웹소켓
+                .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
+                // 💡 주식 시세, 뉴스, 랭킹, 게시판 조회 등 공개 API 허용
+                .requestMatchers("/api/stock/**", "/api/news/**", "/api/leaderboard/**", "/api/board/**").permitAll()
+                // 💡 잔고, 주문 등 거래 관련 API도 개발/테스트 편의를 위해 열어두거나 인증 처리
+                .requestMatchers("/api/trade/**", "/api/watchlist/**").permitAll()
                 .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            );
 
         return http.build();
     }

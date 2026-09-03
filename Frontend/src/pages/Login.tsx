@@ -1,58 +1,63 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useNavigate, Link } from 'react-router-dom';
+import { Home } from 'lucide-react'; // 💡 아이콘 추가
 
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const navigate = useNavigate();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            const res = await fetch('http://localhost:8080/api/member/login', {
+            const res = await fetch('http://localhost:8080/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });
             const data = await res.json();
-            if (res.ok && data.status === "SUCCESS") {
+            if (res.ok && data.token) {
                 localStorage.setItem('token', data.token);
-                localStorage.setItem('username', data.username);
-                alert("로그인 성공!");
-                window.location.href = '/dashboard';
-            } else { alert(`로그인 실패: ${data.message}`); }
-        } catch (error) { alert("서버와 통신할 수 없습니다."); } 
-        finally { setIsLoading(false); }
+                localStorage.setItem('username', username);
+                navigate('/dashboard');
+            } else {
+                alert(data.message || '로그인 실패');
+            }
+        } catch (err) {
+            alert('서버 오류가 발생했습니다.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-[#0b1120] flex items-center justify-center p-4 font-sans text-white relative">
-            <div className="absolute top-10 right-10 w-72 h-72 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute bottom-10 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="min-h-screen bg-[#0b1120] text-slate-200 flex items-center justify-center p-4 relative">
+            {/* 💡 홈으로 돌아가기 버튼 */}
+            <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 text-slate-400 hover:text-sky-400 font-bold transition-colors bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700/50">
+                <Home className="w-5 h-5" /> 홈으로
+            </Link>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 p-8 md:p-10 rounded-3xl shadow-2xl w-full max-w-md z-10">
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400 mb-2">T.A.R.D.I.S.</h1>
-                    <p className="text-slate-400 text-sm">Welcome back to the market.</p>
-                </div>
-                <form onSubmit={handleLogin} className="flex flex-col gap-5">
+            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 p-8 rounded-3xl w-full max-w-md shadow-2xl">
+                <h1 className="text-3xl font-black text-white text-center mb-6">로그인</h1>
+                <form onSubmit={handleLogin} className="flex flex-col gap-4">
                     <div>
-                        <label className="block text-slate-400 text-sm font-bold mb-2">아이디 (Username)</label>
-                        <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full bg-slate-900/80 px-4 py-3 rounded-xl border border-slate-700 focus:border-sky-500 outline-none transition-colors" />
+                        <label className="block text-sm text-slate-400 mb-1 font-bold">아이디 (Username)</label>
+                        <input type="text" value={username} onChange={e => setUsername(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500" />
                     </div>
                     <div>
-                        <label className="block text-slate-400 text-sm font-bold mb-2">비밀번호 (Password)</label>
-                        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-slate-900/80 px-4 py-3 rounded-xl border border-slate-700 focus:border-sky-500 outline-none transition-colors" />
+                        <label className="block text-sm text-slate-400 mb-1 font-bold">비밀번호 (Password)</label>
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500" />
                     </div>
-                    <button type="submit" disabled={isLoading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3.5 rounded-xl mt-4 transition-colors shadow-lg">
-                        {isLoading ? '인증 중...' : '로그인 (Login)'}
-                    </button>
-                    <button type="button" onClick={() => window.location.href = '/register'} className="text-slate-400 text-sm hover:text-sky-400 transition-colors mt-2">
-                        계정이 없으신가요? <span className="font-bold underline">회원가입 하기</span>
+                    <button type="submit" disabled={isLoading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3.5 rounded-xl mt-4 transition-colors shadow-lg disabled:opacity-50">
+                        {isLoading ? '로그인 중...' : '로그인'}
                     </button>
                 </form>
-            </motion.div>
+                <div className="text-center mt-6 text-sm text-slate-400">
+                    계정이 없으신가요? <Link to="/register" className="text-sky-400 font-bold hover:underline">회원가입</Link>
+                </div>
+            </div>
         </div>
     );
 }
