@@ -284,7 +284,32 @@ export default function Dashboard() {
             <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {panelMode === 'summary' ? (
                     <>
-                        <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 flex flex-col justify-between shadow-lg"><span className="text-slate-400 text-xs font-bold uppercase">Total Assets</span><div className="text-2xl font-mono font-bold mt-2 text-white">${totalAssets.toFixed(2)}</div><span className="text-xs text-sky-400 mt-1">Cash: ${balance.toFixed(2)}</span></div>
+                        <div className={`bg-slate-800/50 backdrop-blur-md border ${totalAssets < 100 ? 'border-rose-500/50 ring-1 ring-rose-500/50' : 'border-slate-700/50'} rounded-2xl p-5 flex flex-col justify-between shadow-lg`}>
+                            <span className="text-slate-400 text-xs font-bold uppercase">Total Assets</span>
+                            <div className="text-2xl font-mono font-bold mt-2 text-white">${totalAssets.toFixed(2)}</div>
+                            <div className="flex justify-between items-center mt-1">
+                                <span className="text-xs text-sky-400">Cash: ${balance.toFixed(2)}</span>
+                                {totalAssets < 100 && (
+                                    <button 
+                                        onClick={async () => {
+                                            try {
+                                                const res = await fetch(`http://localhost:8080/api/trade/relief?username=${localStorage.getItem('username')}`, {
+                                                    method: 'POST',
+                                                    headers: getAuthHeaders(),
+                                                    body: JSON.stringify({ totalAssets })
+                                                });
+                                                const data = await res.json();
+                                                alert(data.message);
+                                                if (data.status === 'SUCCESS') fetchUserData();
+                                            } catch(e) { alert('오류가 발생했습니다.'); }
+                                        }}
+                                        className="bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow animate-pulse"
+                                    >
+                                        🆘 파산 구제금 신청
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 flex flex-col justify-between shadow-lg"><span className="text-slate-400 text-xs font-bold uppercase">Market Sentiment</span><div className="text-xl font-mono font-bold mt-2 text-emerald-400 flex justify-between"><span>BUY {buyRatio}%</span><span className="text-rose-400">SELL {100 - buyRatio}%</span></div><div className="w-full bg-slate-700 h-2 rounded-full mt-2 overflow-hidden flex"><div className="bg-emerald-500 h-full" style={{ width: `${buyRatio}%` }}></div><div className="bg-rose-500 h-full" style={{ width: `${100 - buyRatio}%` }}></div></div></div>
                         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 flex flex-col justify-between shadow-lg"><span className="text-slate-400 text-xs font-bold uppercase">{selectedSymbol} Daily Change</span><div className={`text-2xl font-mono font-bold mt-2 ${percentChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{percentChange >= 0 ? '+' : ''}{percentChange.toFixed(2)}%</div><span className="text-xs text-slate-400 mt-1">Current: ${currentPrice.toFixed(2)}</span></div>
                         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700/50 rounded-2xl p-5 flex flex-col justify-between shadow-lg cursor-pointer hover:bg-slate-700 hover:border-sky-500 transition-all group" onClick={() => setIsPortfolioModalOpen(true)}>

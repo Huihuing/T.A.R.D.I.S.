@@ -71,7 +71,27 @@ public class AuthController {
             .map(member -> {
                 if (passwordEncoder.matches(password, member.getPassword())) {
                     String token = jwtTokenProvider.createToken(username);
-                    return ResponseEntity.ok(Map.of("token", token, "username", username));
+                    boolean dailyReward = false;
+                    
+                    // 💡 일일 출석 체크 로직
+                    java.time.LocalDate today = java.time.LocalDate.now();
+                    if (member.getLastLoginDate() == null || !member.getLastLoginDate().equals(today)) {
+                        member.setLastLoginDate(today);
+                        memberRepository.save(member);
+                        
+                        // 지갑에 500달러 추가
+                        walletRepository.findByMember(member).ifPresent(wallet -> {
+                            wallet.setBalance(wallet.getBalance() + 500.0);
+                            walletRepository.save(wallet);
+                        });
+                        dailyReward = true;
+                    }
+                    
+                    return ResponseEntity.ok(Map.of(
+                        "token", token, 
+                        "username", username,
+                        "dailyReward", dailyReward
+                    ));
                 }
                 return ResponseEntity.status(401).body(Map.of("message", "비밀번호가 일치하지 않습니다."));
             })

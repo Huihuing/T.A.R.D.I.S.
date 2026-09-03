@@ -24,6 +24,9 @@ public class Member {
     @Column(nullable = false)
     private String pin; // 암호화된 계좌 4자리 비밀번호
 
+    private java.time.LocalDate lastLoginDate;
+    private java.time.LocalDate lastReliefDate;
+
     public Member() {}
 
     public Member(String username, String password, String name, String email, String pin) {
@@ -49,6 +52,12 @@ public class Member {
 
     public String getPin() { return pin; }
     public void setPin(String pin) { this.pin = pin; }
+
+    public java.time.LocalDate getLastLoginDate() { return lastLoginDate; }
+    public void setLastLoginDate(java.time.LocalDate lastLoginDate) { this.lastLoginDate = lastLoginDate; }
+
+    public java.time.LocalDate getLastReliefDate() { return lastReliefDate; }
+    public void setLastReliefDate(java.time.LocalDate lastReliefDate) { this.lastReliefDate = lastReliefDate; }
 
     // 기존 랭킹 등에서 사용하던 nickname 호환용 (name 반환)
     public String getNickname() { return name != null ? name : username; }

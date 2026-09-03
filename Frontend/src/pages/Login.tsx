@@ -21,6 +21,12 @@ export default function Login() {
             if (res.ok && data.token) {
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('username', username);
+                
+                // 💡 일일 출석 보상 알림
+                if (data.dailyReward) {
+                    alert('🎉 일일 출석 체크 완료!\n시드머니 $500이 추가로 지급되었습니다.');
+                }
+                
                 navigate('/dashboard');
             } else {
                 alert(data.message || '로그인 실패');

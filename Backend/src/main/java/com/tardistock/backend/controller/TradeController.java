@@ -155,4 +155,45 @@ public class TradeController {
         response.put("status", "SUCCESS"); response.put("message", symbol + " " + amount + "주 매도 완료!");
         return response;
     }
+
+    // 🆘 6. 파산 구제 시스템 (Relief)
+    @PostMapping("/relief")
+    public Map<String, Object> bankruptcyRelief(@RequestBody Map<String, Object> payload, @RequestParam String username) {
+        Map<String, Object> response = new HashMap<>();
+        Optional<Member> memberOpt = memberRepository.findByUsername(username);
+
+        if (memberOpt.isEmpty()) {
+            response.put("status", "FAIL"); response.put("message", "로그인이 필요합니다.");
+            return response;
+        }
+
+        Member member = memberOpt.get();
+        double totalAssets = Double.parseDouble(payload.get("totalAssets").toString());
+
+        if (totalAssets >= 100.0) {
+            response.put("status", "FAIL"); response.put("message", "총자산이 $100 이상이므로 파산 구제 대상이 아닙니다.");
+            return response;
+        }
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (member.getLastReliefDate() != null && member.getLastReliefDate().equals(today)) {
+            response.put("status", "FAIL"); response.put("message", "파산 구제금은 하루에 한 번만 받을 수 있습니다.");
+            return response;
+        }
+
+        Wallet wallet = walletRepository.findByMember(member).orElse(null);
+        if (wallet != null) {
+            wallet.setBalance(wallet.getBalance() + 2000.0);
+            walletRepository.save(wallet);
+
+            member.setLastReliefDate(today);
+            memberRepository.save(member);
+
+            response.put("status", "SUCCESS");
+            response.put("message", "파산 구제금 $2,000이 지급되었습니다! 다시 일어나세요!");
+        } else {
+            response.put("status", "FAIL"); response.put("message", "지갑을 찾을 수 없습니다.");
+        }
+        return response;
+    }
 }
