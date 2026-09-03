@@ -130,4 +130,39 @@ public class BoardController {
         postRepository.delete(post);
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
+
+    @PostMapping("/upload")
+    public ResponseEntity<?> uploadImage(@RequestParam("image") org.springframework.web.multipart.MultipartFile image) {
+        try {
+            String url = "https://freeimage.host/api/1/upload";
+            org.springframework.util.LinkedMultiValueMap<String, Object> map = new org.springframework.util.LinkedMultiValueMap<>();
+            map.add("key", "***REMOVED***");
+            map.add("action", "upload");
+            
+            org.springframework.core.io.ByteArrayResource resource = new org.springframework.core.io.ByteArrayResource(image.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return image.getOriginalFilename() != null ? image.getOriginalFilename() : "image.jpg";
+                }
+            };
+            map.add("source", resource);
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
+            org.springframework.http.HttpEntity<org.springframework.util.LinkedMultiValueMap<String, Object>> requestEntity = new org.springframework.http.HttpEntity<>(map, headers);
+            
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
+            
+            Map<String, Object> body = response.getBody();
+            if (body != null && body.containsKey("status_code") && ((Integer) body.get("status_code") == 200)) {
+                Map<String, Object> imageMap = (Map<String, Object>) body.get("image");
+                return ResponseEntity.ok(Map.of("url", imageMap.get("url")));
+            }
+            return ResponseEntity.status(500).body(Map.of("message", "이미지 업로드 실패"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("message", "서버 오류: " + e.getMessage()));
+        }
+    }
 }

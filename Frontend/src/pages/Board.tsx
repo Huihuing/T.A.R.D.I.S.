@@ -72,30 +72,28 @@ export default function Board() {
         } catch (e) {}
     };
 
-    // 💡 이미지 업로드 로직 (freeimage.host API)
+    // 💡 이미지 업로드 로직 (Spring Boot 백엔드 프록시 API 경유)
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setIsUploading(true);
         const formData = new FormData();
-        // freeimage.host public API key
-        formData.append('key', '***REMOVED***'); 
-        formData.append('action', 'upload');
-        formData.append('source', file);
+        formData.append('image', file);
 
         try {
-            // Imgur 제한을 피하기 위해 대안 무료 이미지 호스팅 사용
-            const res = await fetch('https://freeimage.host/api/1/upload', {
+            // CORS 에러 및 API 키 노출 방지를 위해 백엔드로 업로드를 요청합니다.
+            const res = await fetch('http://localhost:8080/api/board/upload', {
                 method: 'POST',
                 body: formData
             });
-            const data = await res.json();
-            if (data.status_code === 200) {
-                const imageUrl = data.image.url;
+            
+            if (res.ok) {
+                const data = await res.json();
+                const imageUrl = data.url;
                 setContent(prev => prev + `\n![업로드된 이미지](${imageUrl})\n`);
             } else {
-                alert('이미지 업로드에 실패했습니다. (응답 오류)');
+                alert('이미지 업로드에 실패했습니다. (서버 응답 오류)');
             }
         } catch (error) {
             alert('이미지 업로드 중 오류가 발생했습니다.');
