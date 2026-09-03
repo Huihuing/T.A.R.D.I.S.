@@ -502,11 +502,12 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
                                                     style={{
                                                         transform: `rotate(${angle}deg)`,
                                                         transformOrigin: '50% 100%',
-                                                        backgroundColor: colors[i % colors.length]
+                                                        backgroundColor: colors[i % colors.length],
+                                                        clipPath: 'polygon(50% 100%, 0 0, 100% 0)'
                                                     }}
-                                                    className="absolute top-0 left-[16.6%] w-[66.8%] h-[50%] flex items-start justify-center pt-3 text-white font-mono font-extrabold text-xs shadow-inner opacity-90 border-r border-white/20"
+                                                    className="absolute top-0 left-[21.15%] w-[57.7%] h-[50%] flex items-start justify-center pt-4 text-white font-mono font-extrabold text-xs shadow-inner opacity-90"
                                                 >
-                                                    ${reward.toLocaleString()}
+                                                    <span style={{ transform: 'rotate(0deg)' }}>${reward.toLocaleString()}</span>
                                                 </div>
                                             );
                                         })}
