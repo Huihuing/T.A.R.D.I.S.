@@ -66,12 +66,12 @@ Java 21 및 Docker 기반으로 Spring Boot 서버를 24시간 호스팅합니�
 1. **[Render 대시보드](https://render.com/)** ➔ **[New +]** ➔ **[Web Service]** 클릭
 2. T.A.R.D.I.S. 깃허브 레포지토리 연결
 3. **기본 설정**:
-   - **Name**: 	ardistock (이 이름으로 해야 https://tardistock.onrender.com 주소가 생성됨)
+   - **Name**: `t-a-r-d-i-s` (실제 배포 주소: `https://t-a-r-d-i-s.onrender.com`)
    - **Environment**: Docker (루트 경로의 Dockerfile을 통해 자동 빌드됨)
    - **Branch**: main
 4. **Environment Variables (환경 변수)** 탭에서 3개 등록:
    - DB_URL: jdbc:mysql://[Aiven호스트]:[Aiven포트]/defaultdb?sslMode=REQUIRED&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-   - DB_USERNAME: vnadmin
+   - DB_USERNAME: avnadmin
    - DB_PASSWORD: [Aiven비밀번호]
 5. **[Save Changes]** 누르면 자동 배포 진행 ➔ 초록색 Live 확인!
 
@@ -84,12 +84,12 @@ Java 21 및 Docker 기반으로 Spring Boot 서버를 24시간 호스팅합니�
 1. **[Vercel 콘솔](https://vercel.com/)** ➔ **[Add New...]** ➔ **[Project]** 클릭
 2. T.A.R.D.I.S. 레포지토리 Import
 3. **프로젝트 설정**:
-   - **Project Name**: 	ardistock (도메인: 	ardistock.vercel.app 또는 	ardis-neon.vercel.app)
+   - **Project Name**: `tardis-neon` (실제 배포 도메인: `https://tardis-neon.vercel.app`)
    - **Root Directory**: Frontend 👈 **(필수! 반드시 Frontend 폴더 지정)**
    - **Framework Preset**: Vite
 4. **Environment Variables (환경 변수)** 등록:
-   - VITE_API_URL: https://tardistock.onrender.com
-   - VITE_WS_URL: https://tardistock.onrender.com
+   - VITE_API_URL: `https://t-a-r-d-i-s.onrender.com`
+   - VITE_WS_URL: `https://t-a-r-d-i-s.onrender.com`
    - ⚠️ **주의**: Type을 Secret이 아닌 **Config** 로 선택 후 저장!
 5. **[Deploy]** 클릭 ➔ 배포 완료!
 

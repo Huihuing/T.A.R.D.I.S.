@@ -36,16 +36,20 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(org.springframework.security.config.Customizer.withDefaults())
+            .cors(Customizer.withDefaults())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // 💡 브라우저 프리플라이트(OPTIONS) 전체 허용
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // 💡 로그인/회원가입, 실시간 웹소켓
-                .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
+                .requestMatchers("/api/auth/**", "/api/member/**", "/ws-stomp/**").permitAll()
                 // 💡 주식 시세, 뉴스, 랭킹, 게시판 조회 등 공개 API 허용
                 .requestMatchers("/api/stock/**", "/api/news/**", "/api/leaderboard/**", "/api/board/**").permitAll()
-                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API도 개발/테스트 편의를 위해 열어두거나 인증 처리
+                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API 허용
                 .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**", "/api/bookmark/**").permitAll()
                 .anyRequest().authenticated()
-            );
+            )
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
