@@ -45,8 +45,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/api/member/**", "/ws-stomp/**").permitAll()
                 // 💡 주식 시세, 뉴스, 랭킹, 게시판 조회 등 공개 API 허용
                 .requestMatchers("/api/stock/**", "/api/news/**", "/api/leaderboard/**", "/api/board/**").permitAll()
-                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API 허용
-                .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**", "/api/bookmark/**").permitAll()
+                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API는 인증 필요
+                .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**", "/api/bookmark/**").authenticated()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

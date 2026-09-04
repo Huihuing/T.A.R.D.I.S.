@@ -36,7 +36,8 @@ public class BoardController {
                 Map<String, Object> map = new HashMap<>();
                 map.put("id", post.getId());
                 map.put("title", post.getTitle());
-                map.put("author", post.getMember().getUsername());
+                String authorName = post.getMember() != null ? post.getMember().getUsername() : "ㅇㅇ(" + post.getGuestIp() + ")";
+                map.put("author", authorName);
                 map.put("createdAt", post.getCreatedAt().toString());
                 return map;
             }).collect(Collectors.toList());
@@ -53,7 +54,8 @@ public class BoardController {
             .map(c -> {
                 Map<String, Object> map = new HashMap<>();
                 map.put("id", c.getId());
-                map.put("author", c.getMember().getUsername());
+                String cAuthorName = c.getMember() != null ? c.getMember().getUsername() : "ㅇㅇ(" + c.getGuestIp() + ")";
+                map.put("author", cAuthorName);
                 map.put("content", c.getContent());
                 map.put("createdAt", c.getCreatedAt().toString());
                 return map;
@@ -63,7 +65,8 @@ public class BoardController {
         response.put("id", post.getId());
         response.put("title", post.getTitle());
         response.put("content", post.getContent());
-        response.put("author", post.getMember().getUsername());
+        String pAuthorName = post.getMember() != null ? post.getMember().getUsername() : "ㅇㅇ(" + post.getGuestIp() + ")";
+        response.put("author", pAuthorName);
         response.put("createdAt", post.getCreatedAt().toString());
         response.put("comments", comments);
 
@@ -71,30 +74,49 @@ public class BoardController {
     }
 
     @PostMapping("/posts")
-    public ResponseEntity<?> createPost(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> createPost(@RequestBody Map<String, String> request, jakarta.servlet.http.HttpServletRequest httpRequest) {
         String username = request.get("username");
-        Optional<Member> memberOpt = memberRepository.findByUsername(username);
-        if (memberOpt.isEmpty()) return ResponseEntity.status(401).body(Map.of("message", "로그인이 필요합니다."));
+        String title = request.get("title");
+        String content = request.get("content");
 
-        Post post = new Post(memberOpt.get(), request.get("title"), request.get("content"));
-        postRepository.save(post);
+        if (username != null && !username.trim().isEmpty()) {
+            Optional<Member> memberOpt = memberRepository.findByUsername(username);
+            if (memberOpt.isEmpty()) return ResponseEntity.status(401).body(Map.of("message", "로그인이 필요합니다."));
+            Post post = new Post(memberOpt.get(), title, content);
+            postRepository.save(post);
+        } else {
+            String clientIp = httpRequest.getHeader("X-Forwarded-For");
+            if (clientIp == null || clientIp.isEmpty()) clientIp = httpRequest.getRemoteAddr();
+            String maskedIp = maskIp(clientIp);
+            Post post = new Post(maskedIp, title, content);
+            postRepository.save(post);
+        }
+        
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
 
     @PostMapping("/comments")
-    public ResponseEntity<?> createComment(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<?> createComment(@RequestBody Map<String, Object> request, jakarta.servlet.http.HttpServletRequest httpRequest) {
         String username = (String) request.get("username");
-        // 💡 오타 수정: "postId" 뒤에서 괄호를 닫아줍니다.
         Long postId = Long.parseLong(request.get("postId").toString());
         String content = (String) request.get("content");
 
-        Optional<Member> memberOpt = memberRepository.findByUsername(username);
         Optional<Post> postOpt = postRepository.findById(postId);
-        
-        if (memberOpt.isEmpty() || postOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("message", "오류가 발생했습니다."));
+        if (postOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("message", "오류가 발생했습니다."));
 
-        Comment comment = new Comment(postOpt.get(), memberOpt.get(), content);
-        commentRepository.save(comment);
+        if (username != null && !username.trim().isEmpty()) {
+            Optional<Member> memberOpt = memberRepository.findByUsername(username);
+            if (memberOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("message", "오류가 발생했습니다."));
+            Comment comment = new Comment(postOpt.get(), memberOpt.get(), content);
+            commentRepository.save(comment);
+        } else {
+            String clientIp = httpRequest.getHeader("X-Forwarded-For");
+            if (clientIp == null || clientIp.isEmpty()) clientIp = httpRequest.getRemoteAddr();
+            String maskedIp = maskIp(clientIp);
+            Comment comment = new Comment(postOpt.get(), maskedIp, content);
+            commentRepository.save(comment);
+        }
+        
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
 
@@ -105,7 +127,7 @@ public class BoardController {
         if (postOpt.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "게시글이 없습니다."));
         
         Post post = postOpt.get();
-        if (!post.getMember().getUsername().equals(username)) {
+        if (post.getMember() == null || username == null || !post.getMember().getUsername().equals(username)) {
             return ResponseEntity.status(403).body(Map.of("message", "수정 권한이 없습니다."));
         }
         
@@ -121,7 +143,7 @@ public class BoardController {
         if (postOpt.isEmpty()) return ResponseEntity.status(404).body(Map.of("message", "게시글이 없습니다."));
         
         Post post = postOpt.get();
-        if (!post.getMember().getUsername().equals(username)) {
+        if (post.getMember() == null || username == null || !post.getMember().getUsername().equals(username)) {
             return ResponseEntity.status(403).body(Map.of("message", "삭제 권한이 없습니다."));
         }
         
@@ -164,5 +186,16 @@ public class BoardController {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("message", "서버 오류: " + e.getMessage()));
         }
+    }
+
+    private String maskIp(String ip) {
+        if (ip == null || ip.isEmpty()) return "unknown";
+        if (ip.contains(",")) ip = ip.split(",")[0].trim();
+        if (ip.equals("0:0:0:0:0:0:0:1")) return "127.0.*.*";
+        String[] parts = ip.split("\\.");
+        if (parts.length >= 2) {
+            return parts[0] + "." + parts[1];
+        }
+        return ip;
     }
 }

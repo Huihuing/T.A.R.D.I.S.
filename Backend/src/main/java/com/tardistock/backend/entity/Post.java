@@ -10,8 +10,11 @@ public class Post {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "member_id", nullable = false)
+    @JoinColumn(name = "member_id", nullable = true)
     private Member member;
+
+    @Column(nullable = true)
+    private String guestIp;
 
     @Column(nullable = false)
     private String title;
@@ -30,8 +33,16 @@ public class Post {
         this.createdAt = LocalDateTime.now();
     }
 
+    public Post(String guestIp, String title, String content) {
+        this.guestIp = guestIp;
+        this.title = title;
+        this.content = content;
+        this.createdAt = LocalDateTime.now();
+    }
+
     public Long getId() { return id; }
     public Member getMember() { return member; }
+    public String getGuestIp() { return guestIp; }
     public String getTitle() { return title; }
     public String getContent() { return content; }
     public LocalDateTime getCreatedAt() { return createdAt; }
