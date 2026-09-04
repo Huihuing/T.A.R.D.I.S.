@@ -44,6 +44,10 @@ T.A.R.D.I.S.는 실시간 글로벌 주식 시세 스트리밍, 가상 자산 �
   * 집, 학원 등 환경 변수가 없는 환경에서도 기본값으로 즉시 실행되는 스마트 폴백(Fallback) 구조 내장
   * 비동기 스레드 기반의 GUI 런처를 통해 MySQL, 백엔드, 프론트엔드, 소켓서버를 원클릭으로 일괄/개별 제어
 
+* **Security & API Architecture**
+  * **[Stateless JWT 인증 방식 복구]**: 세션을 사용하지 않는(Stateless) 토큰 기반 보안 정책을 활성화하고, 잔고/주문/가상경제 등 주요 거래 API에 대해 `JwtAuthenticationFilter` 기반의 강력한 접근 제어 적용
+  * **[클라우드 배포(CORS) 최적화]**: Vercel(프론트)과 Render(백엔드) 간의 원활한 통신을 위해 모든 출처(Origin)에 대해 CORS를 허용하고, 브라우저의 OPTIONS 프리플라이트 요청을 승인하여 403 Forbidden 이슈 완벽 차단
+
 ---
 
 ## 🛠️ Tech Stack
