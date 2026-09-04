@@ -6,6 +6,7 @@ import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PortfolioRepository;
 import com.tardistock.backend.repository.WalletRepository;
+import com.tardistock.backend.service.FinnhubPriceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,11 +24,14 @@ public class LeaderboardController {
     private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
     private final PortfolioRepository portfolioRepository;
+    private final FinnhubPriceService finnhubPriceService;
 
-    public LeaderboardController(MemberRepository memberRepository, WalletRepository walletRepository, PortfolioRepository portfolioRepository) {
+    public LeaderboardController(MemberRepository memberRepository, WalletRepository walletRepository,
+                                 PortfolioRepository portfolioRepository, FinnhubPriceService finnhubPriceService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.portfolioRepository = portfolioRepository;
+        this.finnhubPriceService = finnhubPriceService;
     }
 
     @GetMapping
@@ -45,8 +49,10 @@ public class LeaderboardController {
             List<Portfolio> portfolios = portfolioRepository.findByMember(member);
             double portfolioValue = 0.0;
             for (Portfolio p : portfolios) {
-                // 잦은 API 호출(Rate Limit)을 방지하기 위해 매수 평단가(AveragePrice)를 기준으로 자산 가치를 계산합니다.
-                portfolioValue += (p.getAmount() * p.getAveragePrice());
+                // Finnhub 실시간 시세로 자산 가치 계산 (API 실패 시 평단가로 폴백)
+                double currentPrice = finnhubPriceService.getPrice(p.getSymbol());
+                double priceToUse = currentPrice > 0 ? currentPrice : p.getAveragePrice();
+                portfolioValue += (p.getAmount() * priceToUse);
             }
 
             double totalAsset = balance + portfolioValue;
