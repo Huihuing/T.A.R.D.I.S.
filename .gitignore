@@ -1,2 +1,18 @@
-﻿__pycache__/
+__pycache__/
 *.py[cod]
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Local-only secrets / environment
+.env
+.env.*
+!.env.example
+Backend/src/main/resources/application-local.yaml
+Backend/src/main/resources/application-secret.yaml
+Backend/src/main/resources/application-secret.yml
+
+# Local IDE files
+.vscode/
+.idea/
