@@ -36,5 +36,10 @@ out/
 ### VS Code ###
 .vscode/
 
-### API/application ###
-application_api.yaml
+### Local-only configuration / secrets ###
+application-local.yaml
+application-secret.yaml
+application-secret.yml
+.env
+.env.*
+!.env.example
