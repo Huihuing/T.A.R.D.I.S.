@@ -13,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -48,6 +50,35 @@ class BoardControllerTest {
                 passwordEncoder,
                 notificationService
         );
+    }
+
+    @Test
+    void returnsPagedSearchResults() {
+        Post post = new Post("203.0.*.*", "검색손님", "encoded-pass", "테슬라 이야기", "본문");
+
+        when(postRepository.search(eq("테슬라"), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(
+                        java.util.List.of(post),
+                        PageRequest.of(0, 10),
+                        1
+                ));
+
+        ResponseEntity<?> response = controller.getPosts("테슬라", 0, 10);
+
+        assertEquals(200, response.getStatusCode().value());
+        assertInstanceOf(Map.class, response.getBody());
+
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        assertEquals(1L, body.get("totalElements"));
+        assertEquals(1, body.get("totalPages"));
+        assertEquals("테슬라", body.get("query"));
+
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> items =
+                (java.util.List<Map<String, Object>>) body.get("items");
+        assertEquals(1, items.size());
+        assertEquals("테슬라 이야기", items.get(0).get("title"));
+        assertEquals("검색손님", items.get(0).get("author"));
     }
 
     @Test
