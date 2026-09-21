@@ -1,4 +1,4 @@
-import { API_URL, WS_URL } from '../config';
+import { API_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -21,8 +21,14 @@ export default function Board() {
         try {
             const res = await fetch(`${API_URL}/api/board/posts`);
             const data = await res.json();
+            if (!res.ok) {
+                alert(data?.message || '게시글 목록을 불러오지 못했습니다.');
+                return;
+            }
             setPosts(data);
-        } catch (e) {}
+        } catch {
+            alert('게시글 목록을 불러오는 중 오류가 발생했습니다.');
+        }
     };
 
     useEffect(() => { fetchPosts(); }, [viewMode]);
@@ -31,29 +37,43 @@ export default function Board() {
         try {
             const res = await fetch(`${API_URL}/api/board/posts/${id}`);
             const data = await res.json();
+            if (!res.ok) {
+                alert(data?.message || '게시글을 불러오지 못했습니다.');
+                return;
+            }
             setSelectedPost(data);
             setViewMode('detail');
-        } catch (e) {}
+        } catch {
+            alert('게시글을 불러오는 중 오류가 발생했습니다.');
+        }
     };
 
     const submitPost = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            if (editingPostId) {
-                await fetch(`${API_URL}/api/board/posts/${editingPostId}`, {
-                    method: 'PUT',
+            const res = await fetch(
+                editingPostId
+                    ? `${API_URL}/api/board/posts/${editingPostId}`
+                    : `${API_URL}/api/board/posts`,
+                {
+                    method: editingPostId ? 'PUT' : 'POST',
                     headers: getAuthHeaders(),
                     body: JSON.stringify({ title, content })
-                });
-            } else {
-                await fetch(`${API_URL}/api/board/posts`, {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: JSON.stringify({ title, content })
-                });
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '게시글 저장에 실패했습니다.');
+                return;
             }
-            setTitle(''); setContent(''); setEditingPostId(null); setViewMode('list');
-        } catch (e) {}
+
+            setTitle('');
+            setContent('');
+            setEditingPostId(null);
+            setViewMode('list');
+        } catch {
+            alert('게시글 저장 중 오류가 발생했습니다.');
+        }
     };
 
     const submitComment = async (e: React.FormEvent) => {
@@ -61,14 +81,25 @@ export default function Board() {
         if (!commentInput.trim()) return;
 
         try {
-            await fetch(`${API_URL}/api/board/comments`, {
+            const res = await fetch(`${API_URL}/api/board/comments`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ postId: selectedPost.id, content: commentInput })
+                body: JSON.stringify({
+                    postId: selectedPost.id,
+                    content: commentInput
+                })
             });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '댓글 등록에 실패했습니다.');
+                return;
+            }
+
             setCommentInput('');
-            viewPostDetail(selectedPost.id); // 새로고침
-        } catch (e) {}
+            viewPostDetail(selectedPost.id);
+        } catch {
+            alert('댓글 등록 중 오류가 발생했습니다.');
+        }
     };
 
     // 💡 이미지 업로드 로직 (Spring Boot 백엔드 프록시 API 경유)
@@ -165,7 +196,11 @@ export default function Board() {
         return parts.map((part, index) => {
             const imgMatch = part.match(/!\[(.*?)\]\((.*?)\)/);
             if (imgMatch) {
-                return <img key={index} src={imgMatch[2]} alt={imgMatch[1]} className="rounded-xl max-w-full my-4 shadow-lg border border-slate-700/50" loading="lazy" />;
+                const imageUrl = imgMatch[2].trim();
+                if (!/^https?:\/\//i.test(imageUrl)) {
+                    return <span key={index}>{part}</span>;
+                }
+                return <img key={index} src={imageUrl} alt={imgMatch[1]} className="rounded-xl max-w-full my-4 shadow-lg border border-slate-700/50" loading="lazy" referrerPolicy="no-referrer" />;
             }
             return <span key={index}>{part}</span>;
         });
@@ -208,7 +243,7 @@ export default function Board() {
                     <motion.div key="write" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 shadow-lg">
                         <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6 font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
                         <form onSubmit={submitPost} className="flex flex-col gap-4">
-                            <input type="text" placeholder="제목을 입력하세요" value={title} onChange={e => setTitle(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-bold outline-none focus:border-sky-500" />
+                            <input type="text" placeholder="제목을 입력하세요" value={title} onChange={e => setTitle(e.target.value)} maxLength={120} required className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-bold outline-none focus:border-sky-500" />
                             
                             <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-700">
                                 {isGuest ? (
@@ -242,7 +277,7 @@ export default function Board() {
                                 )}
                             </div>
                             
-                            <textarea placeholder="내용을 작성해 주세요... (마크다운 이미지 문법을 지원합니다)" value={content} onChange={e => setContent(e.target.value)} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar leading-relaxed" />
+                            <textarea placeholder="내용을 작성해 주세요... (마크다운 이미지 문법을 지원합니다)" value={content} onChange={e => setContent(e.target.value)} maxLength={20000} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar leading-relaxed" />
                             <button type="submit" disabled={isUploading} className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-colors disabled:opacity-50">
                                 {editingPostId ? '게시글 수정' : '게시글 등록'}
                             </button>
@@ -284,7 +319,7 @@ export default function Board() {
                                 ))}
                             </div>
                             <form onSubmit={submitComment} className="flex gap-2 relative">
-                                <input type="text" value={commentInput} onChange={e => setCommentInput(e.target.value)} placeholder="댓글을 남겨보세요..." className="flex-1 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={commentInput} onChange={e => setCommentInput(e.target.value)} maxLength={3000} placeholder="댓글을 남겨보세요..." className="flex-1 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500 transition-colors" />
                                 <button type="submit" disabled={!commentInput.trim()} className="bg-sky-600 hover:bg-sky-500 text-white px-5 rounded-xl font-bold transition-colors disabled:opacity-50"><Send className="w-5 h-5" /></button>
                             </form>
                         </div>
