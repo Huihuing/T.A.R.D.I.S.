@@ -2,6 +2,7 @@ import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star } from 'lucide-react';
+import { getAuthHeaders } from '../auth';
 
 export default function Watchlist() {
     const [stocks, setStocks] = useState<any[]>([]);
@@ -18,7 +19,11 @@ export default function Watchlist() {
         
         try {
             // DB에서 찜한 종목 리스트 가져오기
-            const res = await fetch(`${API_URL}/api/bookmark?username=${username}`);
+            const res = await fetch(`${API_URL}/api/bookmark`, { headers: getAuthHeaders(false) });
+            if (!res.ok) {
+                setStocks([]);
+                return;
+            }
             const bookmarkedSymbols: string[] = await res.json();
             
             if (bookmarkedSymbols.length > 0) {
@@ -52,8 +57,8 @@ export default function Watchlist() {
         try {
             const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, symbol, price: 0 })
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ symbol, price: 0 })
             });
             const data = await res.json();
             if (data.status === 'REMOVED') {

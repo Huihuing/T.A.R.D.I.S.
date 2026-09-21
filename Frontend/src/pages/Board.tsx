@@ -2,6 +2,7 @@ import { API_URL, WS_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { getAuthHeaders } from '../auth';
 
 export default function Board() {
     const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
@@ -42,14 +43,14 @@ export default function Board() {
             if (editingPostId) {
                 await fetch(`${API_URL}/api/board/posts/${editingPostId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, title, content })
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ title, content })
                 });
             } else {
                 await fetch(`${API_URL}/api/board/posts`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, title, content })
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ title, content })
                 });
             }
             setTitle(''); setContent(''); setEditingPostId(null); setViewMode('list');
@@ -65,8 +66,8 @@ export default function Board() {
         try {
             await fetch(`${API_URL}/api/board/comments`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, postId: selectedPost.id, content: commentInput })
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ postId: selectedPost.id, content: commentInput })
             });
             setCommentInput('');
             viewPostDetail(selectedPost.id); // 새로고침
@@ -86,6 +87,7 @@ export default function Board() {
             // CORS 에러 및 API 키 노출 방지를 위해 백엔드로 업로드를 요청합니다.
             const res = await fetch(`${API_URL}/api/board/upload`, {
                 method: 'POST',
+                headers: getAuthHeaders(false),
                 body: formData
             });
             
@@ -114,8 +116,9 @@ export default function Board() {
     const deletePost = async () => {
         if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
         try {
-            await fetch(`${API_URL}/api/board/posts/${selectedPost.id}?username=${currentUser}`, {
-                method: 'DELETE'
+            await fetch(`${API_URL}/api/board/posts/${selectedPost.id}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders(false)
             });
             setViewMode('list');
         } catch (e) {}
@@ -126,7 +129,8 @@ export default function Board() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
-            const res = await fetch(`${API_URL}/api/trade/portfolio?username=${username}`);
+            const res = await fetch(`${API_URL}/api/trade/portfolio`, { headers: getAuthHeaders(false) });
+            if (!res.ok) return alert('포트폴리오를 불러오려면 다시 로그인해 주세요.');
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
                 ? portfolio.map((p: any) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n') 

@@ -67,10 +67,16 @@ public class AuthController {
         String username = request.get("username");
         String password = request.get("password");
 
-        return memberRepository.findByUsername(username)
+        if (username == null || username.isBlank() || password == null || password.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "아이디와 비밀번호를 입력해주세요."));
+        }
+
+        String normalizedUsername = username.trim();
+
+        return memberRepository.findByUsername(normalizedUsername)
             .map(member -> {
                 if (passwordEncoder.matches(password, member.getPassword())) {
-                    String token = jwtTokenProvider.createToken(username);
+                    String token = jwtTokenProvider.createToken(normalizedUsername);
                     boolean dailyReward = false;
                     
                     // 💡 일일 출석 체크 로직
@@ -89,7 +95,7 @@ public class AuthController {
                     
                     return ResponseEntity.ok(Map.of(
                         "token", token, 
-                        "username", username,
+                        "username", normalizedUsername,
                         "dailyReward", dailyReward
                     ));
                 }
