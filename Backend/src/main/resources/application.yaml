@@ -60,3 +60,8 @@ price-alert:
 limit-order:
   check-ms: ${LIMIT_ORDER_CHECK_MS:300000}
   initial-delay-ms: ${LIMIT_ORDER_INITIAL_DELAY_MS:90000}
+
+
+refresh-token:
+  ttl-days: ${REFRESH_TOKEN_TTL_DAYS:30}
+  cookie-secure: ${REFRESH_COOKIE_SECURE:true}
