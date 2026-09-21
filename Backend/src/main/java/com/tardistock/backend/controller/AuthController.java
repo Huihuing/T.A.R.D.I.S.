@@ -196,6 +196,11 @@ public class AuthController {
 
         return memberRepository.findByUsernameForUpdate(username)
                 .map(member -> {
+                    if (!member.isPasswordLoginEnabled()) {
+                        return ResponseEntity.status(401).body(
+                                Map.of("message",
+                                        "이 계정은 Google 로그인을 사용해주세요."));
+                    }
                     if (!passwordEncoder.matches(
                             password, member.getPassword())) {
                         return ResponseEntity.status(401).body(
@@ -336,6 +341,7 @@ public class AuthController {
         member.setSocialProvider(GOOGLE);
         member.setSocialSubject(identity.subject());
         member.setPinConfigured(false);
+        member.setPasswordLoginEnabled(false);
         memberRepository.save(member);
 
         Wallet wallet = new Wallet(member, 10000.0);
