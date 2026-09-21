@@ -16,6 +16,7 @@ import NotificationCenter from './components/NotificationCenter';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import ForgotPassword from './pages/ForgotPassword';
+import Admin from './pages/Admin';
 import { getStoredToken, refreshAccessToken } from './auth';
 
 export default function App() {
@@ -96,6 +97,7 @@ export default function App() {
                     path="/profile/:username"
                     element={<Profile />}
                   />
+                  <Route path="/admin" element={<Admin />} />
                 </Routes>
                 <NotificationCenter />
                 <Trollbox />
