@@ -13,6 +13,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.tardistock.backend.security.JwtAuthenticationFilter;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -141,6 +146,63 @@ class AuthControllerTest {
 
         assertEquals(401, response.getStatusCode().value());
         verify(jwtTokenProvider, never()).createToken(anyString());
+    }
+
+    @Test
+    void issuedJwtAuthenticatesSubsequentBearerRequest() throws Exception {
+        MemberRepository members = mock(MemberRepository.class);
+        WalletRepository wallets = mock(WalletRepository.class);
+        PasswordEncoder encoder = new BCryptPasswordEncoder();
+        JwtTokenProvider provider = new JwtTokenProvider(
+                "integration-test-secret-key-that-is-at-least-thirty-two-bytes",
+                60_000
+        );
+
+        Member member = new Member(
+                "alice",
+                encoder.encode("correct-password"),
+                "Alice",
+                "alice@example.test",
+                encoder.encode("1234")
+        );
+        member.setLastLoginDate(LocalDate.now());
+
+        when(members.findByUsernameForUpdate("alice")).thenReturn(Optional.of(member));
+
+        AuthController controller = new AuthController(
+                members,
+                wallets,
+                encoder,
+                provider
+        );
+
+        ResponseEntity<?> loginResponse = controller.login(Map.of(
+                "username", "alice",
+                "password", "correct-password"
+        ));
+
+        assertEquals(200, loginResponse.getStatusCode().value());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = (Map<String, Object>) loginResponse.getBody();
+        String token = (String) body.get("token");
+
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        try {
+            filter.doFilter(request, response, (req, res) -> {
+                assertEquals(
+                        "alice",
+                        SecurityContextHolder.getContext()
+                                .getAuthentication()
+                                .getName()
+                );
+            });
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @Test
