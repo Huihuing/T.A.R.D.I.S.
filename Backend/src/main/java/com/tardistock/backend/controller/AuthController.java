@@ -94,7 +94,8 @@ public class AuthController {
                 passwordEncoder.encode(pin)
         );
         memberRepository.save(member);
-        Wallet wallet = walletRepository.save(new Wallet(member, 10000.0));
+        Wallet wallet = new Wallet(member, 10000.0);
+        walletRepository.save(wallet);
         ledgerService.record(
                 member,
                 "INITIAL_BALANCE",
