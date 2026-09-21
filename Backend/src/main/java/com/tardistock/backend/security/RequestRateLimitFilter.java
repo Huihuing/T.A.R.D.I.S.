@@ -29,7 +29,8 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             Map.entry("POST:/api/board/upload", new Policy(10, 60)),
             Map.entry("POST:/api/account/transfer", new Policy(30, 60)),
             Map.entry("POST:/api/trade/buy", new Policy(60, 60)),
-            Map.entry("POST:/api/trade/sell", new Policy(60, 60))
+            Map.entry("POST:/api/trade/sell", new Policy(60, 60)),
+            Map.entry("POST:/api/price-alerts", new Policy(20, 60))
     );
 
     private static final Policy STOCK_READ_POLICY = new Policy(120, 60);
