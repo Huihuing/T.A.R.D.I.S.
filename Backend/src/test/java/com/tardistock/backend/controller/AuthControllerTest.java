@@ -7,6 +7,7 @@ import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.EmailVerificationService;
+import com.tardistock.backend.service.GoogleIdentityService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,8 @@ class AuthControllerTest {
     private LedgerService ledgerService;
     @Mock
     private EmailVerificationService emailVerificationService;
+    @Mock
+    private GoogleIdentityService googleIdentityService;
 
     private AuthController authController;
 
@@ -55,7 +58,8 @@ class AuthControllerTest {
                 passwordEncoder,
                 jwtTokenProvider,
                 ledgerService,
-                emailVerificationService
+                emailVerificationService,
+                googleIdentityService
         );
     }
 
@@ -190,7 +194,8 @@ class AuthControllerTest {
                 encoder,
                 provider,
                 mock(LedgerService.class),
-                mock(EmailVerificationService.class)
+                mock(EmailVerificationService.class),
+                mock(GoogleIdentityService.class)
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
@@ -290,4 +295,69 @@ class AuthControllerTest {
 
         verify(memberRepository, never()).save(any());
     }
+    @Test
+    void googleLoginCreatesVerifiedSocialAccountWithoutEmailCode() {
+        GoogleIdentityService.GoogleIdentity identity =
+                new GoogleIdentityService.GoogleIdentity(
+                        "google-subject-123",
+                        "google@example.com",
+                        "Google User"
+                );
+
+        when(googleIdentityService.verify("google-id-token"))
+                .thenReturn(identity);
+        when(memberRepository.findBySocialProviderAndSocialSubject(
+                "GOOGLE", "google-subject-123"))
+                .thenReturn(Optional.empty());
+        when(memberRepository.findByEmailIgnoreCase(
+                "google@example.com"))
+                .thenReturn(Optional.empty());
+        when(memberRepository.findByUsername(anyString()))
+                .thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString()))
+                .thenReturn("encoded-random-value");
+        when(memberRepository.save(any(Member.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        java.util.concurrent.atomic.AtomicReference<Member> created =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        when(memberRepository.save(any(Member.class)))
+                .thenAnswer(invocation -> {
+                    Member saved = invocation.getArgument(0);
+                    created.set(saved);
+                    return saved;
+                });
+        when(memberRepository.findByUsernameForUpdate(anyString()))
+                .thenAnswer(invocation ->
+                        Optional.ofNullable(created.get()));
+        when(walletRepository.findForUpdateByMember(any(Member.class)))
+                .thenAnswer(invocation ->
+                        Optional.of(new Wallet(
+                                invocation.getArgument(0),
+                                10000.0
+                        )));
+        when(jwtTokenProvider.createToken(anyString()))
+                .thenReturn("google.jwt.token");
+
+        ResponseEntity<?> response = authController.googleLogin(
+                Map.of("credential", "google-id-token"));
+
+        assertEquals(200, response.getStatusCode().value());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body =
+                (Map<String, Object>) response.getBody();
+
+        assertEquals("google.jwt.token", body.get("token"));
+        assertEquals(true, body.get("needsPinSetup"));
+        assertTrue(body.get("username").toString().startsWith("g_"));
+        assertEquals("GOOGLE", created.get().getSocialProvider());
+        assertEquals(
+                "google-subject-123",
+                created.get().getSocialSubject()
+        );
+        assertFalse(created.get().isPinConfigured());
+        verifyNoInteractions(emailVerificationService);
+        verify(walletRepository).save(any(Wallet.class));
+    }
+
 }

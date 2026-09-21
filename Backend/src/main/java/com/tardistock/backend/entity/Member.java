@@ -4,6 +4,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 @Entity
+@Table(uniqueConstraints = {
+        @UniqueConstraint(
+                name = "uk_member_social_identity",
+                columnNames = {"socialProvider", "socialSubject"}
+        )
+})
 public class Member {
 
     @Id
@@ -28,6 +34,15 @@ public class Member {
     @Column(nullable = false)
     private String pin;
 
+    @JsonIgnore
+    private String socialProvider;
+
+    @JsonIgnore
+    private String socialSubject;
+
+    @JsonIgnore
+    private Boolean pinConfigured;
+
     private java.time.LocalDate lastLoginDate;
     private java.time.LocalDate lastReliefDate;
 
@@ -39,6 +54,7 @@ public class Member {
         this.name = name;
         this.email = email;
         this.pin = pin;
+        this.pinConfigured = true;
     }
 
     public Long getId() { return id; }
@@ -56,6 +72,20 @@ public class Member {
 
     public String getPin() { return pin; }
     public void setPin(String pin) { this.pin = pin; }
+
+    public String getSocialProvider() { return socialProvider; }
+    public void setSocialProvider(String socialProvider) { this.socialProvider = socialProvider; }
+
+    public String getSocialSubject() { return socialSubject; }
+    public void setSocialSubject(String socialSubject) { this.socialSubject = socialSubject; }
+
+    public boolean isPinConfigured() {
+        return pinConfigured == null || pinConfigured;
+    }
+
+    public void setPinConfigured(boolean pinConfigured) {
+        this.pinConfigured = pinConfigured;
+    }
 
     public java.time.LocalDate getLastLoginDate() { return lastLoginDate; }
     public void setLastLoginDate(java.time.LocalDate lastLoginDate) { this.lastLoginDate = lastLoginDate; }

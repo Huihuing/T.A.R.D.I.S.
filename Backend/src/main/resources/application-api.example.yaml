@@ -8,6 +8,12 @@
 #     username: root
 #     password: YOUR_LOCAL_DB_PASSWORD
 
+# Local email verification example:
+# spring:
+#   mail:
+#     username: YOUR_GMAIL_ADDRESS
+#     password: YOUR_GMAIL_APP_PASSWORD
+
 finnhub:
   api:
     key: YOUR_FINNHUB_API_KEY
@@ -20,6 +26,10 @@ naver:
 freeimage:
   api:
     key: YOUR_FREEIMAGE_API_KEY
+
+google:
+  # OAuth 2.0 Web Client ID. This is an identifier, not a client secret.
+  client-id: YOUR_GOOGLE_OAUTH_CLIENT_ID
 
 jwt:
   secret: CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_BYTES

@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import Home from './pages/Home'; 
+import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Wallet from './pages/Wallet';
 import Register from './pages/Register';
+import SetupPin from './pages/SetupPin';
 import StockPage from './pages/StockPage';
 import NewsPage from './pages/NewsPage';
 import Watchlist from './pages/Watchlist';
-import Board from './pages/Board'; // 💡 임포트 추가
+import Board from './pages/Board';
 import Trollbox from './components/Trollbox';
 import Leaderboard from './pages/Leaderboard';
 
@@ -32,13 +33,17 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/setup-pin" element={<SetupPin />} />
 
         <Route
           path="/*"
           element={
             <div className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans">
-              <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
-              
+              <Sidebar
+                isOpen={isSidebarOpen}
+                toggleSidebar={toggleSidebar}
+              />
+
               <main className="flex-1 h-screen overflow-y-auto relative transition-all">
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -47,8 +52,11 @@ export default function App() {
                   <Route path="/news" element={<NewsPage />} />
                   <Route path="/wallet" element={<Wallet />} />
                   <Route path="/watchlist" element={<Watchlist />} />
-                  <Route path="/board" element={<Board />} /> {/* 💡 라우트 추가 */}
-                  <Route path="/leaderboard" element={<Leaderboard />} />
+                  <Route path="/board" element={<Board />} />
+                  <Route
+                    path="/leaderboard"
+                    element={<Leaderboard />}
+                  />
                 </Routes>
                 <Trollbox />
               </main>

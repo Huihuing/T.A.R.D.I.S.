@@ -12,6 +12,13 @@ import java.util.Optional;
 public interface MemberRepository extends JpaRepository<Member, Long> {
     Optional<Member> findByUsername(String username);
 
+    Optional<Member> findByEmailIgnoreCase(String email);
+
+    Optional<Member> findBySocialProviderAndSocialSubject(
+            String socialProvider,
+            String socialSubject
+    );
+
     boolean existsByEmailIgnoreCase(String email);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
