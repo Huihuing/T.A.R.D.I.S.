@@ -1,5 +1,6 @@
 package com.tardistock.backend.repository;
 
+import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.RefreshToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -14,4 +15,6 @@ public interface RefreshTokenRepository
     long deleteByTokenHash(String tokenHash);
 
     long deleteByExpiresAtBefore(LocalDateTime cutoff);
+
+    long deleteByMember(Member member);
 }
