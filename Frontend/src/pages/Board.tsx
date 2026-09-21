@@ -1,7 +1,7 @@
 import { API_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAuthHeaders } from '../auth';
 
 export default function Board() {
@@ -17,25 +17,61 @@ export default function Board() {
     const [guestPassword, setGuestPassword] = useState('');
     const [commentGuestNickname, setCommentGuestNickname] = useState('');
     const [commentGuestPassword, setCommentGuestPassword] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [page, setPage] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
+    const [totalElements, setTotalElements] = useState(0);
+    const [isListLoading, setIsListLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
     
     const fetchPosts = async () => {
+        if (viewMode !== 'list') return;
+
+        setIsListLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/board/posts`);
+            const params = new URLSearchParams({
+                page: String(page),
+                size: '10'
+            });
+            if (searchQuery) params.set('q', searchQuery);
+
+            const res = await fetch(
+                `${API_URL}/api/board/posts?${params.toString()}`
+            );
             const data = await res.json();
             if (!res.ok) {
                 alert(data?.message || '게시글 목록을 불러오지 못했습니다.');
                 return;
             }
-            setPosts(data);
+
+            setPosts(Array.isArray(data.items) ? data.items : []);
+            setTotalPages(Number(data.totalPages) || 0);
+            setTotalElements(Number(data.totalElements) || 0);
         } catch {
             alert('게시글 목록을 불러오는 중 오류가 발생했습니다.');
+        } finally {
+            setIsListLoading(false);
         }
     };
 
-    useEffect(() => { fetchPosts(); }, [viewMode]);
+    useEffect(() => {
+        fetchPosts();
+    }, [viewMode, page, searchQuery]);
+
+    const submitSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        setPage(0);
+        setSearchQuery(searchInput.trim());
+    };
+
+    const clearSearch = () => {
+        setSearchInput('');
+        setSearchQuery('');
+        setPage(0);
+    };
 
     const viewPostDetail = async (id: number) => {
         try {
@@ -302,7 +338,56 @@ export default function Board() {
                 {/* 1. 목록 화면 */}
                 {viewMode === 'list' && (
                     <motion.div key="list" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4">
-                        {posts.map((post) => (
+                        <form onSubmit={submitSearch} className="flex flex-col sm:flex-row gap-2 mb-2">
+                            <div className="flex-1 relative">
+                                <Search className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="search"
+                                    value={searchInput}
+                                    onChange={e => setSearchInput(e.target.value)}
+                                    placeholder="제목, 내용, 작성자 검색"
+                                    maxLength={100}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-11 pr-4 py-3 text-white outline-none focus:border-sky-500"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                className="bg-sky-600 hover:bg-sky-500 text-white px-5 py-3 rounded-xl font-bold"
+                            >
+                                검색
+                            </button>
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={clearSearch}
+                                    className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-xl font-bold"
+                                >
+                                    초기화
+                                </button>
+                            )}
+                        </form>
+
+                        <div className="text-xs text-slate-500 px-1">
+                            {searchQuery
+                                ? `"${searchQuery}" 검색 결과 ${totalElements}건`
+                                : `전체 ${totalElements}건`}
+                        </div>
+
+                        {isListLoading && (
+                            <div className="py-10 text-center text-slate-500">
+                                게시글을 불러오는 중...
+                            </div>
+                        )}
+
+                        {!isListLoading && posts.length === 0 && (
+                            <div className="py-12 text-center text-slate-500 bg-slate-800/30 rounded-2xl border border-slate-700/50">
+                                {searchQuery
+                                    ? '검색 결과가 없습니다.'
+                                    : '아직 게시글이 없습니다.'}
+                            </div>
+                        )}
+
+                        {!isListLoading && posts.map((post) => (
                             <div key={post.id} onClick={() => viewPostDetail(post.id)} className="bg-slate-800/50 backdrop-blur-md p-6 rounded-3xl border border-slate-700/50 shadow-lg cursor-pointer hover:border-sky-500 hover:bg-slate-800 transition-all group">
                                 <h3 className="text-xl font-bold text-white group-hover:text-sky-400 transition-colors">{post.title}</h3>
                                 <div className="flex items-center gap-4 mt-3 text-sm text-slate-400 font-bold">
@@ -311,6 +396,32 @@ export default function Board() {
                                 </div>
                             </div>
                         ))}
+
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-center gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(prev => Math.max(0, prev - 1))}
+                                    disabled={page <= 0}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 disabled:opacity-30"
+                                    aria-label="이전 페이지"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="text-sm text-slate-400">
+                                    {page + 1} / {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(prev => Math.min(totalPages - 1, prev + 1))}
+                                    disabled={page >= totalPages - 1}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 disabled:opacity-30"
+                                    aria-label="다음 페이지"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </div>
+                        )}
                     </motion.div>
                 )}
 
