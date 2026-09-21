@@ -55,3 +55,8 @@ jwt:
 price-alert:
   check-ms: ${PRICE_ALERT_CHECK_MS:300000}
   initial-delay-ms: ${PRICE_ALERT_INITIAL_DELAY_MS:60000}
+
+
+limit-order:
+  check-ms: ${LIMIT_ORDER_CHECK_MS:300000}
+  initial-delay-ms: ${LIMIT_ORDER_INITIAL_DELAY_MS:90000}
