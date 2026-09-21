@@ -1,6 +1,9 @@
+import { API_URL } from './config';
+
 export function clearAuth(): void {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    localStorage.removeItem('needsPinSetup');
 }
 
 function decodeJwtPayload(token: string): { exp?: number } | null {
@@ -21,7 +24,10 @@ function decodeJwtPayload(token: string): { exp?: number } | null {
     }
 }
 
-export function isTokenExpired(token: string, nowMs = Date.now()): boolean {
+export function isTokenExpired(
+    token: string,
+    nowMs = Date.now()
+): boolean {
     const payload = decodeJwtPayload(token);
     if (!payload || typeof payload.exp !== 'number') {
         return true;
@@ -37,14 +43,16 @@ export function getStoredToken(): string | null {
     }
 
     if (isTokenExpired(token)) {
-        clearAuth();
+        localStorage.removeItem('token');
         return null;
     }
 
     return token;
 }
 
-export function getAuthHeaders(includeJson = true): Record<string, string> {
+export function getAuthHeaders(
+    includeJson = true
+): Record<string, string> {
     const headers: Record<string, string> = {};
     if (includeJson) {
         headers['Content-Type'] = 'application/json';
@@ -56,4 +64,45 @@ export function getAuthHeaders(includeJson = true): Record<string, string> {
     }
 
     return headers;
+}
+
+export async function refreshAccessToken(): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_URL}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.token || !data.username) {
+            clearAuth();
+            return false;
+        }
+
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('username', data.username);
+
+        if (data.needsPinSetup) {
+            localStorage.setItem('needsPinSetup', 'true');
+        } else {
+            localStorage.removeItem('needsPinSetup');
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function logoutSession(): Promise<void> {
+    try {
+        await fetch(`${API_URL}/api/auth/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch {
+        // Local auth state is still cleared even if the server is unreachable.
+    } finally {
+        clearAuth();
+    }
 }
