@@ -43,3 +43,5 @@ application-secret.yml
 .env
 .env.*
 !.env.example
+
+application-api.yaml
