@@ -136,6 +136,28 @@ export default function Board() {
         } catch (e) {}
     };
 
+    const formatKstDateTime = (value: string) => {
+        if (!value) return '';
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+            ? value
+            : `${value}+09:00`;
+
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) {
+            return value.substring(0, 16).replace('T', ' ');
+        }
+
+        return new Intl.DateTimeFormat('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    };
+
     // 💡 마크다운(이미지) 렌더링 함수
     const renderContent = (text: string) => {
         const parts = text.split(/(!\[.*?\]\(.*?\))/g);
@@ -174,7 +196,7 @@ export default function Board() {
                                 <h3 className="text-xl font-bold text-white group-hover:text-sky-400 transition-colors">{post.title}</h3>
                                 <div className="flex items-center gap-4 mt-3 text-sm text-slate-400 font-bold">
                                     <span>👤 {post.author}</span>
-                                    <span>🕒 {post.createdAt.substring(0, 16).replace('T', ' ')}</span>
+                                    <span>🕒 {formatKstDateTime(post.createdAt)}</span>
                                 </div>
                             </div>
                         ))}
@@ -243,7 +265,7 @@ export default function Board() {
                         <h2 className="text-3xl font-black text-white mb-4">{selectedPost.title}</h2>
                         <div className="flex gap-4 text-sm text-sky-400 font-bold border-b border-slate-700 pb-6 mb-6">
                             <span>작성자: {selectedPost.author}</span>
-                            <span>작성일: {selectedPost.createdAt.substring(0, 16).replace('T', ' ')}</span>
+                            <span>작성일: {formatKstDateTime(selectedPost.createdAt)}</span>
                         </div>
                         
                         <div className="text-slate-200 leading-relaxed whitespace-pre-wrap min-h-[150px] text-lg">
@@ -256,7 +278,7 @@ export default function Board() {
                             <div className="flex flex-col gap-4 mb-6">
                                 {selectedPost.comments.map((c: any) => (
                                     <div key={c.id} className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                                        <div className="flex justify-between items-center mb-2"><span className="font-bold text-sky-400 text-sm">{c.author}</span><span className="text-xs text-slate-500">{c.createdAt.substring(0, 16).replace('T', ' ')}</span></div>
+                                        <div className="flex justify-between items-center mb-2"><span className="font-bold text-sky-400 text-sm">{c.author}</span><span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span></div>
                                         <p className="text-sm text-slate-300">{c.content}</p>
                                     </div>
                                 ))}
