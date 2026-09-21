@@ -71,6 +71,7 @@ export default function Login() {
         try {
             const res = await fetch(`${API_URL}/api/auth/google`, {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     credential: response.credential
