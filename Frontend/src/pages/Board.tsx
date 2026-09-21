@@ -15,6 +15,7 @@ export default function Board() {
     const [editingPostId, setEditingPostId] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
+    const isGuest = !currentUser || currentUser === 'Guest';
     
     const fetchPosts = async () => {
         try {
@@ -37,8 +38,6 @@ export default function Board() {
 
     const submitPost = async (e: React.FormEvent) => {
         e.preventDefault();
-        const username = localStorage.getItem('username');
-        if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
             if (editingPostId) {
                 await fetch(`${API_URL}/api/board/posts/${editingPostId}`, {
@@ -59,8 +58,6 @@ export default function Board() {
 
     const submitComment = async (e: React.FormEvent) => {
         e.preventDefault();
-        const username = localStorage.getItem('username');
-        if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         if (!commentInput.trim()) return;
 
         try {
@@ -192,27 +189,35 @@ export default function Board() {
                             <input type="text" placeholder="제목을 입력하세요" value={title} onChange={e => setTitle(e.target.value)} required className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white font-bold outline-none focus:border-sky-500" />
                             
                             <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-700">
-                                <div>
-                                    <input 
-                                        type="file" 
-                                        accept="image/*" 
-                                        className="hidden" 
-                                        ref={fileInputRef}
-                                        onChange={handleImageUpload}
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={() => fileInputRef.current?.click()} 
-                                        disabled={isUploading}
-                                        className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                                        {isUploading ? '업로드 중...' : '📷 이미지 첨부'}
-                                    </button>
-                                </div>
-                                <button type="button" onClick={appendROI} className="text-sm bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white px-4 py-2 rounded-lg font-bold transition-colors">
-                                    📊 내 포트폴리오 자랑하기
-                                </button>
+                                {isGuest ? (
+                                    <span className="text-sm text-slate-400">
+                                        비회원은 텍스트 글과 댓글을 작성할 수 있습니다.
+                                    </span>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                                ref={fileInputRef}
+                                                onChange={handleImageUpload}
+                                            />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => fileInputRef.current?.click()} 
+                                                disabled={isUploading}
+                                                className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 disabled:opacity-50"
+                                            >
+                                                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                                                {isUploading ? '업로드 중...' : '📷 이미지 첨부'}
+                                            </button>
+                                        </div>
+                                        <button type="button" onClick={appendROI} className="text-sm bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white px-4 py-2 rounded-lg font-bold transition-colors">
+                                            📊 내 포트폴리오 자랑하기
+                                        </button>
+                                    </>
+                                )}
                             </div>
                             
                             <textarea placeholder="내용을 작성해 주세요... (마크다운 이미지 문법을 지원합니다)" value={content} onChange={e => setContent(e.target.value)} required rows={10} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 custom-scrollbar leading-relaxed" />
