@@ -8,6 +8,8 @@ import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.EmailVerificationService;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.RefreshTokenService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ public class AuthController {
     private final LedgerService ledgerService;
     private final EmailVerificationService emailVerificationService;
     private final GoogleIdentityService googleIdentityService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthController(
             MemberRepository memberRepository,
@@ -50,7 +53,8 @@ public class AuthController {
             JwtTokenProvider jwtTokenProvider,
             LedgerService ledgerService,
             EmailVerificationService emailVerificationService,
-            GoogleIdentityService googleIdentityService) {
+            GoogleIdentityService googleIdentityService,
+            RefreshTokenService refreshTokenService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
@@ -58,6 +62,7 @@ public class AuthController {
         this.ledgerService = ledgerService;
         this.emailVerificationService = emailVerificationService;
         this.googleIdentityService = googleIdentityService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @PostMapping("/email/send")
@@ -255,6 +260,66 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(
+            @CookieValue(
+                    name = RefreshTokenService.COOKIE_NAME,
+                    required = false
+            ) String refreshToken) {
+        try {
+            RefreshTokenService.RotatedSession session =
+                    refreshTokenService.rotate(refreshToken);
+
+            Member member = session.member();
+            String accessToken = jwtTokenProvider.createToken(
+                    member.getUsername()
+            );
+
+            return ResponseEntity.ok()
+                    .header(
+                            HttpHeaders.SET_COOKIE,
+                            refreshTokenService
+                                    .buildCookie(session.rawToken())
+                                    .toString()
+                    )
+                    .body(Map.of(
+                            "token", accessToken,
+                            "username", member.getUsername(),
+                            "needsPinSetup", !member.isPinConfigured()
+                    ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401)
+                    .header(
+                            HttpHeaders.SET_COOKIE,
+                            refreshTokenService
+                                    .clearCookie()
+                                    .toString()
+                    )
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @CookieValue(
+                    name = RefreshTokenService.COOKIE_NAME,
+                    required = false
+            ) String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        refreshTokenService
+                                .clearCookie()
+                                .toString()
+                )
+                .body(Map.of(
+                        "status", "SUCCESS",
+                        "message", "로그아웃되었습니다."
+                ));
+    }
+
     private Member createGoogleMember(
             GoogleIdentityService.GoogleIdentity identity) {
         String username = generateGoogleUsername(identity.subject());
@@ -312,12 +377,21 @@ public class AuthController {
         }
 
         String token = jwtTokenProvider.createToken(username);
-        return ResponseEntity.ok(Map.of(
-                "token", token,
-                "username", username,
-                "dailyReward", dailyReward,
-                "needsPinSetup", !member.isPinConfigured()
-        ));
+        String refreshToken = refreshTokenService.issue(member);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        refreshTokenService
+                                .buildCookie(refreshToken)
+                                .toString()
+                )
+                .body(Map.of(
+                        "token", token,
+                        "username", username,
+                        "dailyReward", dailyReward,
+                        "needsPinSetup", !member.isPinConfigured()
+                ));
     }
 
     private String generateGoogleUsername(String subject) {
