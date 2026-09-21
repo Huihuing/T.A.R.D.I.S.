@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Home from './pages/Home';
@@ -14,12 +14,43 @@ import Board from './pages/Board';
 import Trollbox from './components/Trollbox';
 import NotificationCenter from './components/NotificationCenter';
 import Leaderboard from './pages/Leaderboard';
+import { getStoredToken, refreshAccessToken } from './auth';
 
 export default function App() {
+  const [, setSessionRevision] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  useEffect(() => {
+    let active = true;
+
+    const restoreIfNeeded = async () => {
+      if (getStoredToken()) return;
+      const restored = await refreshAccessToken();
+      if (active && restored) {
+        setSessionRevision(prev => prev + 1);
+      }
+    };
+
+    restoreIfNeeded();
+
+    const interval = window.setInterval(async () => {
+      const username = localStorage.getItem('username');
+      if (!username || username === 'Guest') return;
+
+      const refreshed = await refreshAccessToken();
+      if (active && refreshed) {
+        setSessionRevision(prev => prev + 1);
+      }
+    }, 10 * 60 * 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const toggleSidebar = () => {
     setIsSidebarOpen((prev: boolean) => {
