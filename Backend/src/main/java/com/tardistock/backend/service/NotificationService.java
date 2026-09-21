@@ -47,7 +47,7 @@ public class NotificationService {
 
         messagingTemplate.convertAndSend(
                 "/topic/alerts/" + member.getUsername(),
-                Map.of(
+                (Object) Map.of(
                         "id", notification.getId(),
                         "type", notification.getType(),
                         "message", notification.getMessage(),
