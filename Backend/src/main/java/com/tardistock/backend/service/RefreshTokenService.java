@@ -96,6 +96,12 @@ public class RefreshTokenService {
         refreshTokenRepository.deleteByTokenHash(hash(rawToken));
     }
 
+    @Transactional
+    public void revokeAll(Member member) {
+        if (member == null) return;
+        refreshTokenRepository.deleteByMember(member);
+    }
+
     public ResponseCookie buildCookie(String rawToken) {
         return ResponseCookie.from(COOKIE_NAME, rawToken)
                 .httpOnly(true)
