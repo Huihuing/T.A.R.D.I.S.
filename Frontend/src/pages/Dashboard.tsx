@@ -85,15 +85,15 @@ export default function Dashboard() {
         if (!username) return;
         try {
             const headers = getAuthHeaders();
-            const balRes = await fetch(`${API_URL}/api/trade/balance?username=${username}`, { headers });
+            const balRes = await fetch(`${API_URL}/api/trade/balance`, { headers });
             setBalance(Number(await balRes.text()) || 0);
             
-            const histRes = await fetch(`${API_URL}/api/trade/history?username=${username}`, { headers });
+            const histRes = await fetch(`${API_URL}/api/trade/history`, { headers });
             const histData: TradeHistory[] = await histRes.json();
             setHistory(histData);
             if (histData.length > 0) setBuyRatio(Math.round((histData.filter(h => h.tradeType === 'BUY').length / histData.length) * 100));
             
-            const portRes = await fetch(`${API_URL}/api/trade/portfolio?username=${username}`, { headers });
+            const portRes = await fetch(`${API_URL}/api/trade/portfolio`, { headers });
             setPortfolio(await portRes.json());
         } catch (err) {}
     };
@@ -294,10 +294,9 @@ export default function Dashboard() {
                                     <button 
                                         onClick={async () => {
                                             try {
-                                                const res = await fetch(`${API_URL}/api/trade/relief?username=${localStorage.getItem('username')}`, {
+                                                const res = await fetch(`${API_URL}/api/trade/relief`, {
                                                     method: 'POST',
-                                                    headers: getAuthHeaders(),
-                                                    body: JSON.stringify({ totalAssets })
+                                                    headers: getAuthHeaders()
                                                 });
                                                 const data = await res.json();
                                                 alert(data.message);
@@ -484,7 +483,7 @@ export default function Dashboard() {
                                     const username = localStorage.getItem('username');
                                     if (!username) return alert("로그인이 필요합니다.");
                                     const amt = getValidAmount();
-                                    const res = await fetch(`${API_URL}/api/trade/sell?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
+                                    const res = await fetch(`${API_URL}/api/trade/sell`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
                                     const data = await res.json();
                                     if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('SELL', selectedSymbol, amt, currentPrice); } else alert(data.message);
                                 }}
@@ -494,7 +493,7 @@ export default function Dashboard() {
                                     const username = localStorage.getItem('username');
                                     if (!username) return alert("로그인이 필요합니다.");
                                     const amt = getValidAmount();
-                                    const res = await fetch(`${API_URL}/api/trade/buy?username=${username}`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt, price: currentPrice }) });
+                                    const res = await fetch(`${API_URL}/api/trade/buy`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
                                     const data = await res.json();
                                     if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('BUY', selectedSymbol, amt, currentPrice); } else alert(data.message);
                                 }}

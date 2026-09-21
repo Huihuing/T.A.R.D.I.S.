@@ -21,7 +21,7 @@ export default function Login() {
             const data = await res.json();
             if (res.ok && data.token) {
                 localStorage.setItem('token', data.token);
-                localStorage.setItem('username', username);
+                localStorage.setItem('username', data.username || username.trim());
                 
                 // 💡 일일 출석 보상 알림
                 if (data.dailyReward) {
