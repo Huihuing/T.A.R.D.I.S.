@@ -2,6 +2,7 @@ import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Search, Star } from 'lucide-react'; // 💡 Star 추가
+import { getAuthHeaders } from '../auth';
 
 interface StockSymbol { symbol: string; description: string; displaySymbol: string; }
 
@@ -27,7 +28,7 @@ export default function StockPage() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return;
         try {
-            const res = await fetch(`${API_URL}/api/bookmark?username=${username}`);
+            const res = await fetch(`${API_URL}/api/bookmark`, { headers: getAuthHeaders(false) });
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) setBookmarks(data);
@@ -108,8 +109,8 @@ export default function StockPage() {
         try {
             const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, symbol, price: price || 0 })
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ symbol, price: price || 0 })
             });
             const data = await res.json();
             if (data.status === 'ADDED') {
