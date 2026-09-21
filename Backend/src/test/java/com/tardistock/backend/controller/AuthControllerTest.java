@@ -1,22 +1,25 @@
 package com.tardistock.backend.controller;
 
 import com.tardistock.backend.entity.Member;
+import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,12 +48,22 @@ class AuthControllerTest {
 
     @Test
     void loginIssuesJwtAfterPasswordVerification() {
-        Member member = new Member("alice", "encoded-password", "Alice", "alice@example.test", "encoded-pin");
-        member.setLastLoginDate(LocalDate.now());
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+        member.setLastLoginDate(LocalDate.now(ZoneId.of("Asia/Seoul")));
 
-        when(memberRepository.findByUsername("alice")).thenReturn(Optional.of(member));
-        when(passwordEncoder.matches("correct-password", "encoded-password")).thenReturn(true);
-        when(jwtTokenProvider.createToken("alice")).thenReturn("signed.jwt.token");
+        when(memberRepository.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(passwordEncoder.matches(
+                "correct-password", "encoded-password"))
+                .thenReturn(true);
+        when(jwtTokenProvider.createToken("alice"))
+                .thenReturn("signed.jwt.token");
 
         ResponseEntity<?> response = authController.login(Map.of(
                 "username", " alice ",
@@ -59,7 +72,8 @@ class AuthControllerTest {
 
         assertEquals(200, response.getStatusCode().value());
         @SuppressWarnings("unchecked")
-        Map<String, Object> body = (Map<String, Object>) response.getBody();
+        Map<String, Object> body =
+                (Map<String, Object>) response.getBody();
         assertEquals("signed.jwt.token", body.get("token"));
         assertEquals("alice", body.get("username"));
         assertEquals(false, body.get("dailyReward"));
@@ -67,11 +81,58 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginDoesNotIssueJwtForWrongPassword() {
-        Member member = new Member("alice", "encoded-password", "Alice", "alice@example.test", "encoded-pin");
+    void loginDailyRewardUsesLockedWalletAndOnlyOncePerDate() {
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+        member.setLastLoginDate(
+                LocalDate.now(ZoneId.of("Asia/Seoul")).minusDays(1));
+        Wallet wallet = new Wallet(member, 1000.0);
 
-        when(memberRepository.findByUsername("alice")).thenReturn(Optional.of(member));
-        when(passwordEncoder.matches("wrong-password", "encoded-password")).thenReturn(false);
+        when(memberRepository.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(passwordEncoder.matches(
+                "correct-password", "encoded-password"))
+                .thenReturn(true);
+        when(jwtTokenProvider.createToken("alice"))
+                .thenReturn("signed.jwt.token");
+        when(walletRepository.findForUpdateByMember(member))
+                .thenReturn(Optional.of(wallet));
+
+        ResponseEntity<?> response = authController.login(Map.of(
+                "username", "alice",
+                "password", "correct-password"
+        ));
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(1500.0, wallet.getBalance());
+        assertEquals(
+                LocalDate.now(ZoneId.of("Asia/Seoul")),
+                member.getLastLoginDate()
+        );
+        verify(walletRepository).findForUpdateByMember(member);
+        verify(walletRepository).save(wallet);
+    }
+
+    @Test
+    void loginDoesNotIssueJwtForWrongPassword() {
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(memberRepository.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(passwordEncoder.matches(
+                "wrong-password", "encoded-password"))
+                .thenReturn(false);
 
         ResponseEntity<?> response = authController.login(Map.of(
                 "username", "alice",
@@ -91,5 +152,59 @@ class AuthControllerTest {
 
         assertEquals(400, response.getStatusCode().value());
         verifyNoInteractions(memberRepository, jwtTokenProvider);
+    }
+
+    @Test
+    void registerNormalizesAndValidatesFields() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.empty());
+        when(memberRepository.existsByEmailIgnoreCase("alice@example.com"))
+                .thenReturn(false);
+        when(passwordEncoder.encode("password123"))
+                .thenReturn("encoded-password");
+        when(passwordEncoder.encode("1234"))
+                .thenReturn("encoded-pin");
+
+        ResponseEntity<?> response = authController.register(Map.of(
+                "username", " alice ",
+                "password", "password123",
+                "name", " Alice ",
+                "email", " Alice@Example.COM ",
+                "pin", "1234"
+        ));
+
+        assertEquals(200, response.getStatusCode().value());
+
+        ArgumentCaptor<Member> memberCaptor =
+                ArgumentCaptor.forClass(Member.class);
+        verify(memberRepository).save(memberCaptor.capture());
+        Member saved = memberCaptor.getValue();
+        assertEquals("alice", saved.getUsername());
+        assertEquals("alice@example.com", saved.getEmail());
+        assertEquals("Alice", saved.getName());
+        verify(walletRepository).save(any(Wallet.class));
+    }
+
+    @Test
+    void registerRejectsInvalidPinAndWeakPassword() {
+        ResponseEntity<?> weakPassword = authController.register(Map.of(
+                "username", "alice",
+                "password", "short",
+                "name", "Alice",
+                "email", "alice@example.com",
+                "pin", "1234"
+        ));
+        assertEquals(400, weakPassword.getStatusCode().value());
+
+        ResponseEntity<?> invalidPin = authController.register(Map.of(
+                "username", "alice",
+                "password", "password123",
+                "name", "Alice",
+                "email", "alice@example.com",
+                "pin", "12ab"
+        ));
+        assertEquals(400, invalidPin.getStatusCode().value());
+
+        verify(memberRepository, never()).save(any());
     }
 }

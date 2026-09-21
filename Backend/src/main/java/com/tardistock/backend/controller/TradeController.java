@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,8 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/trade")
 public class TradeController {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
@@ -70,10 +73,12 @@ public class TradeController {
 
     @PostMapping("/buy")
     @Transactional
-    public Map<String, String> buyStock(@RequestBody Map<String, Object> payload, Authentication authentication) {
+    public Map<String, String> buyStock(
+            @RequestBody Map<String, Object> payload,
+            Authentication authentication) {
         Map<String, String> response = new HashMap<>();
-        Optional<Member> memberOpt = authenticatedMember(authentication);
-        if (memberOpt.isEmpty()) {
+        String username = authenticatedUsername(authentication);
+        if (username == null) {
             return fail(response, "로그인이 필요합니다.");
         }
 
@@ -84,31 +89,42 @@ public class TradeController {
         }
 
         double price = finnhubPriceService.getPrice(symbol);
-        if (price <= 0) {
+        if (!Double.isFinite(price) || price <= 0) {
             return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
         }
 
-        Member member = memberOpt.get();
-        Wallet wallet = walletRepository.findByMember(member).orElse(null);
-        double totalCost = price * amount;
+        Member member = memberRepository.findByUsernameForUpdate(username).orElse(null);
+        if (member == null) {
+            return fail(response, "사용자를 찾을 수 없습니다.");
+        }
 
-        if (wallet == null || wallet.getBalance() < totalCost) {
+        Wallet wallet = walletRepository.findForUpdateByMember(member).orElse(null);
+        double totalCost = price * amount;
+        if (!Double.isFinite(totalCost) || wallet == null || wallet.getBalance() < totalCost) {
             return fail(response, "잔액이 부족합니다!");
         }
+
+        Portfolio portfolio = portfolioRepository.findForUpdateByMemberAndSymbol(member, symbol)
+                .orElse(new Portfolio(member, symbol, 0, 0.0));
 
         wallet.setBalance(wallet.getBalance() - totalCost);
         walletRepository.save(wallet);
 
-        Portfolio portfolio = portfolioRepository.findByMemberAndSymbol(member, symbol)
-                .orElse(new Portfolio(member, symbol, 0, 0.0));
-
-        double newTotalValue = (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
+        double newTotalValue =
+                (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
         int newAmount = portfolio.getAmount() + amount;
         portfolio.setAmount(newAmount);
         portfolio.setAveragePrice(newTotalValue / newAmount);
         portfolioRepository.save(portfolio);
 
-        tradeHistoryRepository.save(new TradeHistory(member, "BUY", symbol, amount, price, LocalDateTime.now()));
+        tradeHistoryRepository.save(new TradeHistory(
+                member,
+                "BUY",
+                symbol,
+                amount,
+                price,
+                LocalDateTime.now(KST)
+        ));
 
         response.put("status", "SUCCESS");
         response.put("message", symbol + " " + amount + "주 매수 완료!");
@@ -117,10 +133,12 @@ public class TradeController {
 
     @PostMapping("/sell")
     @Transactional
-    public Map<String, String> sellStock(@RequestBody Map<String, Object> payload, Authentication authentication) {
+    public Map<String, String> sellStock(
+            @RequestBody Map<String, Object> payload,
+            Authentication authentication) {
         Map<String, String> response = new HashMap<>();
-        Optional<Member> memberOpt = authenticatedMember(authentication);
-        if (memberOpt.isEmpty()) {
+        String username = authenticatedUsername(authentication);
+        if (username == null) {
             return fail(response, "로그인이 필요합니다.");
         }
 
@@ -131,17 +149,22 @@ public class TradeController {
         }
 
         double price = finnhubPriceService.getPrice(symbol);
-        if (price <= 0) {
+        if (!Double.isFinite(price) || price <= 0) {
             return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
         }
 
-        Member member = memberOpt.get();
-        Wallet wallet = walletRepository.findByMember(member).orElse(null);
+        Member member = memberRepository.findByUsernameForUpdate(username).orElse(null);
+        if (member == null) {
+            return fail(response, "사용자를 찾을 수 없습니다.");
+        }
+
+        Wallet wallet = walletRepository.findForUpdateByMember(member).orElse(null);
         if (wallet == null) {
             return fail(response, "지갑을 찾을 수 없습니다.");
         }
 
-        Optional<Portfolio> portfolioOpt = portfolioRepository.findByMemberAndSymbol(member, symbol);
+        Optional<Portfolio> portfolioOpt =
+                portfolioRepository.findForUpdateByMemberAndSymbol(member, symbol);
         if (portfolioOpt.isEmpty() || portfolioOpt.get().getAmount() < amount) {
             return fail(response, "보유 주식이 부족합니다!");
         }
@@ -158,7 +181,14 @@ public class TradeController {
         wallet.setBalance(wallet.getBalance() + (price * amount));
         walletRepository.save(wallet);
 
-        tradeHistoryRepository.save(new TradeHistory(member, "SELL", symbol, amount, price, LocalDateTime.now()));
+        tradeHistoryRepository.save(new TradeHistory(
+                member,
+                "SELL",
+                symbol,
+                amount,
+                price,
+                LocalDateTime.now(KST)
+        ));
 
         response.put("status", "SUCCESS");
         response.put("message", symbol + " " + amount + "주 매도 완료!");
@@ -167,18 +197,27 @@ public class TradeController {
 
     @PostMapping("/relief")
     public Map<String, Object> bankruptcyRelief(Authentication authentication) {
-        Optional<Member> memberOpt = authenticatedMember(authentication);
-        if (memberOpt.isEmpty()) {
+        String username = authenticatedUsername(authentication);
+        if (username == null) {
             return Map.of("status", "FAIL", "message", "로그인이 필요합니다.");
         }
-        return economyService.claimBankruptcyRelief(memberOpt.get().getUsername(), 1000.0);
+        return economyService.claimBankruptcyRelief(username, 1000.0);
     }
 
     private Optional<Member> authenticatedMember(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
-            return Optional.empty();
+        String username = authenticatedUsername(authentication);
+        return username == null
+                ? Optional.empty()
+                : memberRepository.findByUsername(username);
+    }
+
+    private String authenticatedUsername(Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
+                || "anonymousUser".equals(authentication.getName())) {
+            return null;
         }
-        return memberRepository.findByUsername(authentication.getName());
+        return authentication.getName();
     }
 
     private String normalizeSymbol(Object value) {
@@ -191,7 +230,7 @@ public class TradeController {
         if (value == null) return -1;
         try {
             int amount = Integer.parseInt(value.toString());
-            return amount > 0 ? amount : -1;
+            return amount > 0 && amount <= 1_000_000 ? amount : -1;
         } catch (NumberFormatException e) {
             return -1;
         }

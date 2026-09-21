@@ -7,11 +7,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
 public class EconomyService {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
@@ -35,54 +38,71 @@ public class EconomyService {
     }
 
     public UserEconomy getOrCreateEconomy(Member member) {
-        return userEconomyRepository.findByMember(member).orElseGet(() -> {
-            UserEconomy economy = new UserEconomy(member);
-            return userEconomyRepository.save(economy);
-        });
+        return userEconomyRepository.findByMember(member).orElseGet(() ->
+                userEconomyRepository.save(new UserEconomy(member)));
     }
 
-    @Transactional
+    private UserEconomy getOrCreateEconomyForUpdate(Member member) {
+        return userEconomyRepository.findForUpdateByMember(member).orElseGet(() ->
+                userEconomyRepository.save(new UserEconomy(member)));
+    }
+
+    @Transactional(readOnly = true)
     public Map<String, Object> getStatus(String username) {
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
         Wallet wallet = walletRepository.findByMember(member)
                 .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
-        UserEconomy economy = getOrCreateEconomy(member);
+        UserEconomy economy = userEconomyRepository.findByMember(member)
+                .orElse(new UserEconomy(member));
 
-        LocalDate today = LocalDate.now();
-        boolean canCheckIn = economy.getLastCheckInDate() == null || !economy.getLastCheckInDate().equals(today);
+        LocalDate today = LocalDate.now(KST);
+        boolean canCheckIn =
+                economy.getLastCheckInDate() == null
+                        || !economy.getLastCheckInDate().equals(today);
 
-        // 연속 출석 일수 계산
         int streak = economy.getAttendanceStreak();
-        if (economy.getLastCheckInDate() != null && !economy.getLastCheckInDate().equals(today) && !economy.getLastCheckInDate().equals(today.minusDays(1))) {
+        if (economy.getLastCheckInDate() != null
+                && !economy.getLastCheckInDate().equals(today)
+                && !economy.getLastCheckInDate().equals(today.minusDays(1))) {
             streak = 0;
         }
 
-        // 파산 구제 조건: 잔고 < 100 && (쿨타임 24시간 경과 또는 최초)
         double balance = wallet.getBalance();
         boolean balanceLow = balance < 100.0;
-        boolean cooldownPassed = economy.getLastBankruptcyClaim() == null ||
-                ChronoUnit.HOURS.between(economy.getLastBankruptcyClaim(), LocalDateTime.now()) >= 24;
+        LocalDateTime now = LocalDateTime.now(KST);
+        boolean cooldownPassed =
+                economy.getLastBankruptcyClaim() == null
+                        || ChronoUnit.HOURS.between(
+                                economy.getLastBankruptcyClaim(), now) >= 24;
         boolean canClaimBankruptcy = balanceLow && cooldownPassed;
 
         long hoursRemaining = 0;
         if (economy.getLastBankruptcyClaim() != null && !cooldownPassed) {
-            hoursRemaining = 24 - ChronoUnit.HOURS.between(economy.getLastBankruptcyClaim(), LocalDateTime.now());
+            hoursRemaining = Math.max(
+                    0,
+                    24 - ChronoUnit.HOURS.between(
+                            economy.getLastBankruptcyClaim(), now)
+            );
         }
 
-        // 일일 퀘스트 상태 판별
         List<TradeHistory> historyList = tradeHistoryRepository.findByMember(member);
-        boolean hasTradeToday = historyList.stream().anyMatch(t -> 
-                "BUY".equalsIgnoreCase(t.getTradeType()) && 
-                t.getTradeTime() != null && 
-                t.getTradeTime().toLocalDate().equals(today));
-        boolean tradeQuestClaimed = today.equals(economy.getTradeQuestClaimedDate());
+        boolean hasTradeToday = historyList.stream().anyMatch(t ->
+                "BUY".equalsIgnoreCase(t.getTradeType())
+                        && t.getTradeTime() != null
+                        && t.getTradeTime().toLocalDate().equals(today));
+        boolean tradeQuestClaimed =
+                today.equals(economy.getTradeQuestClaimedDate());
 
-        boolean hasPostToday = postRepository.findByMember(member).stream().anyMatch(p -> 
-                p.getCreatedAt() != null && p.getCreatedAt().toLocalDate().equals(today))
-                || commentRepository.findByMember(member).stream().anyMatch(c ->
-                c.getCreatedAt() != null && c.getCreatedAt().toLocalDate().equals(today));
-        boolean postQuestClaimed = today.equals(economy.getPostQuestClaimedDate());
+        boolean hasPostToday =
+                postRepository.findByMember(member).stream().anyMatch(p ->
+                        p.getCreatedAt() != null
+                                && p.getCreatedAt().toLocalDate().equals(today))
+                        || commentRepository.findByMember(member).stream().anyMatch(c ->
+                        c.getCreatedAt() != null
+                                && c.getCreatedAt().toLocalDate().equals(today));
+        boolean postQuestClaimed =
+                today.equals(economy.getPostQuestClaimedDate());
 
         Map<String, Object> result = new HashMap<>();
         result.put("username", username);
@@ -95,9 +115,16 @@ public class EconomyService {
         result.put("bankruptcyHoursRemaining", hoursRemaining);
 
         Map<String, Object> quests = new HashMap<>();
-        quests.put("checkIn", Map.of("completed", !canCheckIn, "reward", 500));
-        quests.put("trade", Map.of("completed", hasTradeToday, "claimed", tradeQuestClaimed, "reward", 300));
-        quests.put("community", Map.of("completed", hasPostToday, "claimed", postQuestClaimed, "reward", 200));
+        quests.put("checkIn",
+                Map.of("completed", !canCheckIn, "reward", 500));
+        quests.put("trade",
+                Map.of("completed", hasTradeToday,
+                        "claimed", tradeQuestClaimed,
+                        "reward", 300));
+        quests.put("community",
+                Map.of("completed", hasPostToday,
+                        "claimed", postQuestClaimed,
+                        "reward", 200));
         result.put("quests", quests);
 
         return result;
@@ -105,13 +132,13 @@ public class EconomyService {
 
     @Transactional
     public Map<String, Object> checkIn(String username) {
-        Member member = memberRepository.findByUsername(username)
+        Member member = memberRepository.findByUsernameForUpdate(username)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        Wallet wallet = walletRepository.findByMember(member)
+        Wallet wallet = walletRepository.findForUpdateByMember(member)
                 .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
-        UserEconomy economy = getOrCreateEconomy(member);
+        UserEconomy economy = getOrCreateEconomyForUpdate(member);
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KST);
         if (today.equals(economy.getLastCheckInDate())) {
             throw new IllegalStateException("오늘은 이미 출석 체크를 완료했습니다!");
         }
@@ -143,31 +170,43 @@ public class EconomyService {
         res.put("reward", reward);
         res.put("streak", newStreak);
         res.put("newBalance", wallet.getBalance());
-        res.put("message", "출석 체크 완료! $" + String.format("%.0f", reward) + "가 지급되었습니다." + bonusMsg);
+        res.put("message", "출석 체크 완료! $" + String.format("%.0f", reward)
+                + "가 지급되었습니다." + bonusMsg);
         return res;
     }
 
     @Transactional
-    public Map<String, Object> claimBankruptcyRelief(String username, double rewardAmount) {
-        Member member = memberRepository.findByUsername(username)
+    public Map<String, Object> claimBankruptcyRelief(
+            String username,
+            double rewardAmount) {
+        Member member = memberRepository.findByUsernameForUpdate(username)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        Wallet wallet = walletRepository.findByMember(member)
+        Wallet wallet = walletRepository.findForUpdateByMember(member)
                 .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
-        UserEconomy economy = getOrCreateEconomy(member);
+        UserEconomy economy = getOrCreateEconomyForUpdate(member);
+        LocalDateTime now = LocalDateTime.now(KST);
 
         if (wallet.getBalance() >= 100.0) {
-            throw new IllegalStateException("파산 구제 지원금은 보유 현금이 $100 미만일 때만 신청 가능합니다.");
+            throw new IllegalStateException(
+                    "파산 구제 지원금은 보유 현금이 $100 미만일 때만 신청 가능합니다.");
         }
 
-        if (economy.getLastBankruptcyClaim() != null &&
-                ChronoUnit.HOURS.between(economy.getLastBankruptcyClaim(), LocalDateTime.now()) < 24) {
-            long remaining = 24 - ChronoUnit.HOURS.between(economy.getLastBankruptcyClaim(), LocalDateTime.now());
-            throw new IllegalStateException("파산 지원금은 24시간마다 1회 지원됩니다. (남은 시간: " + remaining + "시간)");
+        if (economy.getLastBankruptcyClaim() != null
+                && ChronoUnit.HOURS.between(
+                        economy.getLastBankruptcyClaim(), now) < 24) {
+            long remaining = Math.max(
+                    1,
+                    24 - ChronoUnit.HOURS.between(
+                            economy.getLastBankruptcyClaim(), now)
+            );
+            throw new IllegalStateException(
+                    "파산 지원금은 24시간마다 1회 지원됩니다. (남은 시간: "
+                            + remaining + "시간)");
         }
 
         double validReward = Math.max(1000.0, Math.min(rewardAmount, 5000.0));
 
-        economy.setLastBankruptcyClaim(LocalDateTime.now());
+        economy.setLastBankruptcyClaim(now);
         userEconomyRepository.save(economy);
 
         wallet.setBalance(wallet.getBalance() + validReward);
@@ -177,46 +216,56 @@ public class EconomyService {
         res.put("status", "SUCCESS");
         res.put("reward", validReward);
         res.put("newBalance", wallet.getBalance());
-        res.put("message", "🎉 파산 구제 룰렛 당첨! 긴급 지원금 $" + String.format("%.0f", validReward) + "가 충전되었습니다.");
+        res.put("message", "🎉 파산 구제 룰렛 당첨! 긴급 지원금 $"
+                + String.format("%.0f", validReward)
+                + "가 충전되었습니다.");
         return res;
     }
 
     @Transactional
     public Map<String, Object> claimQuest(String username, String questType) {
-        Member member = memberRepository.findByUsername(username)
+        Member member = memberRepository.findByUsernameForUpdate(username)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        Wallet wallet = walletRepository.findByMember(member)
+        Wallet wallet = walletRepository.findForUpdateByMember(member)
                 .orElseThrow(() -> new IllegalArgumentException("지갑 정보를 찾을 수 없습니다."));
-        UserEconomy economy = getOrCreateEconomy(member);
-        LocalDate today = LocalDate.now();
+        UserEconomy economy = getOrCreateEconomyForUpdate(member);
+        LocalDate today = LocalDate.now(KST);
 
-        double reward = 0;
-        String questName = "";
+        double reward;
+        String questName;
 
         if ("TRADE".equalsIgnoreCase(questType)) {
             if (today.equals(economy.getTradeQuestClaimedDate())) {
-                throw new IllegalStateException("오늘의 매수 미션 보상을 이미 수령하셨습니다.");
+                throw new IllegalStateException(
+                        "오늘의 매수 미션 보상을 이미 수령하셨습니다.");
             }
-            boolean hasTradeToday = tradeHistoryRepository.findByMember(member).stream().anyMatch(t -> 
-                    "BUY".equalsIgnoreCase(t.getTradeType()) && 
-                    t.getTradeTime() != null && 
-                    t.getTradeTime().toLocalDate().equals(today));
+            boolean hasTradeToday =
+                    tradeHistoryRepository.findByMember(member).stream().anyMatch(t ->
+                            "BUY".equalsIgnoreCase(t.getTradeType())
+                                    && t.getTradeTime() != null
+                                    && t.getTradeTime().toLocalDate().equals(today));
             if (!hasTradeToday) {
-                throw new IllegalStateException("오늘 주식 매수(BUY) 기록이 없습니다. 먼저 주식을 매수해 보세요!");
+                throw new IllegalStateException(
+                        "오늘 주식 매수(BUY) 기록이 없습니다. 먼저 주식을 매수해 보세요!");
             }
             reward = 300.0;
             questName = "일일 매수 미션";
             economy.setTradeQuestClaimedDate(today);
         } else if ("COMMUNITY".equalsIgnoreCase(questType)) {
             if (today.equals(economy.getPostQuestClaimedDate())) {
-                throw new IllegalStateException("오늘의 커뮤니티 미션 보상을 이미 수령하셨습니다.");
+                throw new IllegalStateException(
+                        "오늘의 커뮤니티 미션 보상을 이미 수령하셨습니다.");
             }
-            boolean hasPostToday = postRepository.findByMember(member).stream().anyMatch(p -> 
-                    p.getCreatedAt() != null && p.getCreatedAt().toLocalDate().equals(today))
-                    || commentRepository.findByMember(member).stream().anyMatch(c ->
-                    c.getCreatedAt() != null && c.getCreatedAt().toLocalDate().equals(today));
+            boolean hasPostToday =
+                    postRepository.findByMember(member).stream().anyMatch(p ->
+                            p.getCreatedAt() != null
+                                    && p.getCreatedAt().toLocalDate().equals(today))
+                            || commentRepository.findByMember(member).stream().anyMatch(c ->
+                            c.getCreatedAt() != null
+                                    && c.getCreatedAt().toLocalDate().equals(today));
             if (!hasPostToday) {
-                throw new IllegalStateException("오늘 커뮤니티에 작성한 게시글이나 댓글이 없습니다. 커뮤니티에 참여해 보세요!");
+                throw new IllegalStateException(
+                        "오늘 커뮤니티에 작성한 게시글이나 댓글이 없습니다. 커뮤니티에 참여해 보세요!");
             }
             reward = 200.0;
             questName = "커뮤니티 활동 미션";
@@ -233,7 +282,9 @@ public class EconomyService {
         res.put("status", "SUCCESS");
         res.put("reward", reward);
         res.put("newBalance", wallet.getBalance());
-        res.put("message", "🎯 " + questName + " 보상 $" + String.format("%.0f", reward) + " 수령 완료!");
+        res.put("message", "🎯 " + questName + " 보상 $"
+                + String.format("%.0f", reward)
+                + " 수령 완료!");
         return res;
     }
 }

@@ -7,22 +7,32 @@ import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9_]{3,20}$");
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$");
 
     private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthController(MemberRepository memberRepository, 
-                          WalletRepository walletRepository, 
-                          PasswordEncoder passwordEncoder, 
+    public AuthController(MemberRepository memberRepository,
+                          WalletRepository walletRepository,
+                          PasswordEncoder passwordEncoder,
                           JwtTokenProvider jwtTokenProvider) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
@@ -31,76 +41,109 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Transactional
     public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
-        String username = request.get("username");
+        String username = normalize(request.get("username"));
         String password = request.get("password");
-        String name = request.get("name");
-        String email = request.get("email");
-        String pin = request.get("pin");
+        String name = normalize(request.get("name"));
+        String email = normalize(request.get("email"));
+        String pin = normalize(request.get("pin"));
 
-        // 유효성 검사
         if (username == null || password == null || name == null || email == null || pin == null) {
             return ResponseEntity.badRequest().body(Map.of("message", "모든 필드를 입력해주세요."));
+        }
+        if (!USERNAME_PATTERN.matcher(username).matches()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "아이디는 영문, 숫자, 밑줄(_)만 사용하여 3~20자로 입력해주세요."));
+        }
+        if (password.length() < 8 || password.length() > 64) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "비밀번호는 8~64자로 입력해주세요."));
+        }
+        if (name.length() > 40) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "이름은 40자 이하로 입력해주세요."));
+        }
+
+        String normalizedEmail = email.toLowerCase(Locale.ROOT);
+        if (normalizedEmail.length() > 254 || !EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "올바른 이메일 주소를 입력해주세요."));
+        }
+        if (!pin.matches("\\d{4}")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "계좌 PIN은 숫자 4자리로 입력해주세요."));
         }
 
         if (memberRepository.findByUsername(username).isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("message", "이미 존재하는 아이디입니다."));
         }
+        if (memberRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 이메일입니다."));
+        }
 
-        // 비밀번호 및 PIN 4자리 암호화
-        String encodedPassword = passwordEncoder.encode(password);
-        String encodedPin = passwordEncoder.encode(pin);
-
-        // Member 저장
-        Member member = new Member(username, encodedPassword, name, email, encodedPin);
+        Member member = new Member(
+                username,
+                passwordEncoder.encode(password),
+                name,
+                normalizedEmail,
+                passwordEncoder.encode(pin)
+        );
         memberRepository.save(member);
+        walletRepository.save(new Wallet(member, 10000.0));
 
-        // 신규 회원 초기 자본금 $10,000 지갑 생성
-        Wallet wallet = new Wallet(member, 10000.0);
-        walletRepository.save(wallet);
-
-        return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "회원가입이 완료되었습니다."));
+        return ResponseEntity.ok(Map.of(
+                "status", "SUCCESS",
+                "message", "회원가입이 완료되었습니다."
+        ));
     }
 
     @PostMapping("/login")
+    @Transactional
     public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
-        String username = request.get("username");
+        String username = normalize(request.get("username"));
         String password = request.get("password");
 
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "아이디와 비밀번호를 입력해주세요."));
+        if (username == null || password == null || password.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "아이디와 비밀번호를 입력해주세요."));
         }
 
-        String normalizedUsername = username.trim();
+        return memberRepository.findByUsernameForUpdate(username)
+                .map(member -> {
+                    if (!passwordEncoder.matches(password, member.getPassword())) {
+                        return ResponseEntity.status(401).body(
+                                Map.of("message", "비밀번호가 일치하지 않습니다."));
+                    }
 
-        return memberRepository.findByUsername(normalizedUsername)
-            .map(member -> {
-                if (passwordEncoder.matches(password, member.getPassword())) {
-                    String token = jwtTokenProvider.createToken(normalizedUsername);
+                    String token = jwtTokenProvider.createToken(username);
                     boolean dailyReward = false;
-                    
-                    // 💡 일일 출석 체크 로직
-                    java.time.LocalDate today = java.time.LocalDate.now();
+                    LocalDate today = LocalDate.now(KST);
+
                     if (member.getLastLoginDate() == null || !member.getLastLoginDate().equals(today)) {
-                        member.setLastLoginDate(today);
-                        memberRepository.save(member);
-                        
-                        // 지갑에 500달러 추가
-                        walletRepository.findByMember(member).ifPresent(wallet -> {
+                        Wallet wallet = walletRepository.findForUpdateByMember(member).orElse(null);
+                        if (wallet != null) {
                             wallet.setBalance(wallet.getBalance() + 500.0);
                             walletRepository.save(wallet);
-                        });
-                        dailyReward = true;
+                            member.setLastLoginDate(today);
+                            memberRepository.save(member);
+                            dailyReward = true;
+                        }
                     }
-                    
+
                     return ResponseEntity.ok(Map.of(
-                        "token", token, 
-                        "username", normalizedUsername,
-                        "dailyReward", dailyReward
+                            "token", token,
+                            "username", username,
+                            "dailyReward", dailyReward
                     ));
-                }
-                return ResponseEntity.status(401).body(Map.of("message", "비밀번호가 일치하지 않습니다."));
-            })
-            .orElseGet(() -> ResponseEntity.status(401).body(Map.of("message", "존재하지 않는 아이디입니다.")));
+                })
+                .orElseGet(() -> ResponseEntity.status(401).body(
+                        Map.of("message", "존재하지 않는 아이디입니다.")));
+    }
+
+    private String normalize(String value) {
+        if (value == null) return null;
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }
