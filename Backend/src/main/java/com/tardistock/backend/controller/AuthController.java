@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
+import com.tardistock.backend.service.LedgerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,15 +30,18 @@ public class AuthController {
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final LedgerService ledgerService;
 
     public AuthController(MemberRepository memberRepository,
                           WalletRepository walletRepository,
                           PasswordEncoder passwordEncoder,
-                          JwtTokenProvider jwtTokenProvider) {
+                          JwtTokenProvider jwtTokenProvider,
+                          LedgerService ledgerService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.ledgerService = ledgerService;
     }
 
     @PostMapping("/register")
@@ -90,7 +94,14 @@ public class AuthController {
                 passwordEncoder.encode(pin)
         );
         memberRepository.save(member);
-        walletRepository.save(new Wallet(member, 10000.0));
+        Wallet wallet = walletRepository.save(new Wallet(member, 10000.0));
+        ledgerService.record(
+                member,
+                "INITIAL_BALANCE",
+                10000.0,
+                wallet.getBalance(),
+                "회원가입 초기 가상자금"
+        );
 
         return ResponseEntity.ok(Map.of(
                 "status", "SUCCESS",
@@ -125,6 +136,13 @@ public class AuthController {
                         if (wallet != null) {
                             wallet.setBalance(wallet.getBalance() + 500.0);
                             walletRepository.save(wallet);
+                            ledgerService.record(
+                                    member,
+                                    "DAILY_LOGIN_REWARD",
+                                    500.0,
+                                    wallet.getBalance(),
+                                    "일일 로그인 보상"
+                            );
                             member.setLastLoginDate(today);
                             memberRepository.save(member);
                             dailyReward = true;

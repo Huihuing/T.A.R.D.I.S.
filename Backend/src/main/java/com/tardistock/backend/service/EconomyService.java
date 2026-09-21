@@ -22,19 +22,22 @@ public class EconomyService {
     private final TradeHistoryRepository tradeHistoryRepository;
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
+    private final LedgerService ledgerService;
 
     public EconomyService(MemberRepository memberRepository,
                           WalletRepository walletRepository,
                           UserEconomyRepository userEconomyRepository,
                           TradeHistoryRepository tradeHistoryRepository,
                           PostRepository postRepository,
-                          CommentRepository commentRepository) {
+                          CommentRepository commentRepository,
+                          LedgerService ledgerService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.userEconomyRepository = userEconomyRepository;
         this.tradeHistoryRepository = tradeHistoryRepository;
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
+        this.ledgerService = ledgerService;
     }
 
     public UserEconomy getOrCreateEconomy(Member member) {
@@ -164,6 +167,13 @@ public class EconomyService {
 
         wallet.setBalance(wallet.getBalance() + reward);
         walletRepository.save(wallet);
+        ledgerService.record(
+                member,
+                "CHECK_IN_REWARD",
+                reward,
+                wallet.getBalance(),
+                "출석 체크 보상"
+        );
 
         Map<String, Object> res = new HashMap<>();
         res.put("status", "SUCCESS");
@@ -211,6 +221,13 @@ public class EconomyService {
 
         wallet.setBalance(wallet.getBalance() + validReward);
         walletRepository.save(wallet);
+        ledgerService.record(
+                member,
+                "BANKRUPTCY_RELIEF",
+                validReward,
+                wallet.getBalance(),
+                "긴급 지원금"
+        );
 
         Map<String, Object> res = new HashMap<>();
         res.put("status", "SUCCESS");
@@ -277,6 +294,13 @@ public class EconomyService {
         userEconomyRepository.save(economy);
         wallet.setBalance(wallet.getBalance() + reward);
         walletRepository.save(wallet);
+        ledgerService.record(
+                member,
+                "QUEST_REWARD",
+                reward,
+                wallet.getBalance(),
+                questName + " 보상"
+        );
 
         Map<String, Object> res = new HashMap<>();
         res.put("status", "SUCCESS");

@@ -10,6 +10,7 @@ import com.tardistock.backend.repository.TradeHistoryRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.service.EconomyService;
 import com.tardistock.backend.service.FinnhubPriceService;
+import com.tardistock.backend.service.LedgerService;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,7 @@ public class TradeController {
     private final TradeHistoryRepository tradeHistoryRepository;
     private final FinnhubPriceService finnhubPriceService;
     private final EconomyService economyService;
+    private final LedgerService ledgerService;
 
     public TradeController(
             MemberRepository memberRepository,
@@ -40,13 +42,15 @@ public class TradeController {
             PortfolioRepository portfolioRepository,
             TradeHistoryRepository tradeHistoryRepository,
             FinnhubPriceService finnhubPriceService,
-            EconomyService economyService) {
+            EconomyService economyService,
+            LedgerService ledgerService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.portfolioRepository = portfolioRepository;
         this.tradeHistoryRepository = tradeHistoryRepository;
         this.finnhubPriceService = finnhubPriceService;
         this.economyService = economyService;
+        this.ledgerService = ledgerService;
     }
 
     @GetMapping("/balance")
@@ -125,6 +129,15 @@ public class TradeController {
                 price,
                 LocalDateTime.now(KST)
         ));
+        ledgerService.record(
+                member,
+                "STOCK_BUY",
+                -totalCost,
+                wallet.getBalance(),
+                null,
+                symbol,
+                symbol + " " + amount + "주 매수"
+        );
 
         response.put("status", "SUCCESS");
         response.put("message", symbol + " " + amount + "주 매수 완료!");
@@ -178,7 +191,8 @@ public class TradeController {
             portfolioRepository.save(portfolio);
         }
 
-        wallet.setBalance(wallet.getBalance() + (price * amount));
+        double proceeds = price * amount;
+        wallet.setBalance(wallet.getBalance() + proceeds);
         walletRepository.save(wallet);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -189,6 +203,15 @@ public class TradeController {
                 price,
                 LocalDateTime.now(KST)
         ));
+        ledgerService.record(
+                member,
+                "STOCK_SELL",
+                proceeds,
+                wallet.getBalance(),
+                null,
+                symbol,
+                symbol + " " + amount + "주 매도"
+        );
 
         response.put("status", "SUCCESS");
         response.put("message", symbol + " " + amount + "주 매도 완료!");

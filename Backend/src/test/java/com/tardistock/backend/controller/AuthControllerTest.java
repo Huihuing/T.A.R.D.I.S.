@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
+import com.tardistock.backend.service.LedgerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,8 @@ class AuthControllerTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+    @Mock
+    private LedgerService ledgerService;
 
     private AuthController authController;
 
@@ -47,7 +50,8 @@ class AuthControllerTest {
                 memberRepository,
                 walletRepository,
                 passwordEncoder,
-                jwtTokenProvider
+                jwtTokenProvider,
+                ledgerService
         );
     }
 
@@ -121,6 +125,13 @@ class AuthControllerTest {
         );
         verify(walletRepository).findForUpdateByMember(member);
         verify(walletRepository).save(wallet);
+        verify(ledgerService).record(
+                eq(member),
+                eq("DAILY_LOGIN_REWARD"),
+                eq(500.0),
+                eq(1500.0),
+                eq("일일 로그인 보상")
+        );
     }
 
     @Test
@@ -173,7 +184,8 @@ class AuthControllerTest {
                 members,
                 wallets,
                 encoder,
-                provider
+                provider,
+                mock(LedgerService.class)
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(

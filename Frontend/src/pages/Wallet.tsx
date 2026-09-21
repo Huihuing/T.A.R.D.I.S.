@@ -1,6 +1,6 @@
 import { API_URL } from '../config';
 import { useState, useEffect } from 'react';
-import { Gift, Send } from 'lucide-react';
+import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
 
 export default function Wallet() {
@@ -9,6 +9,7 @@ export default function Wallet() {
     const [targetUser, setTargetUser] = useState<string>('');
     const [accountPassword, setAccountPassword] = useState<string>('');
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
+    const [ledger, setLedger] = useState<any[]>([]);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -22,7 +23,37 @@ export default function Wallet() {
             .catch(() => setBalance(0));
     };
 
-    useEffect(() => { fetchBalance(); }, []);
+    const fetchLedger = () => {
+        fetch(`${API_URL}/api/account/ledger`, { headers: getAuthHeaders() })
+            .then(async res => {
+                const data = await res.json().catch(() => []);
+                return res.ok && Array.isArray(data) ? data : [];
+            })
+            .then(setLedger)
+            .catch(() => setLedger([]));
+    };
+
+    const formatKstDateTime = (value: string) => {
+        if (!value) return '';
+        const date = new Date(/[zZ]|[+-]\\d{2}:\\d{2}$/.test(value)
+            ? value
+            : `${value}+09:00`);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    };
+
+    useEffect(() => {
+        fetchBalance();
+        fetchLedger();
+    }, []);
 
     const handleTransfer = async () => {
         if (!amount || amount <= 0) return alert('올바른 금액을 입력하세요.');
@@ -46,6 +77,7 @@ export default function Wallet() {
                 setTargetUser('');
                 setAccountPassword('');
                 fetchBalance();
+                fetchLedger();
             } else {
                 alert(`오류: ${data.message || '송금에 실패했습니다.'}`);
             }
@@ -143,6 +175,47 @@ export default function Wallet() {
                         송금하기 ➔
                     </button>
                 </div>
+            </div>
+
+            <div className="mt-8 max-w-4xl bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 shadow-xl">
+                <div className="flex items-center gap-2 mb-5">
+                    <History className="w-5 h-5 text-sky-400" />
+                    <h2 className="font-extrabold text-white">가상자산 거래 원장</h2>
+                    <span className="text-xs text-slate-500">최근 100건</span>
+                </div>
+
+                {ledger.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-6 text-center">
+                        아직 기록된 거래 내역이 없습니다.
+                    </p>
+                ) : (
+                    <div className="flex flex-col gap-2">
+                        {ledger.map((entry) => (
+                            <div
+                                key={entry.id}
+                                className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 md:gap-5 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3"
+                            >
+                                <div>
+                                    <p className="text-sm font-bold text-slate-200">
+                                        {entry.description || entry.type}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {formatKstDateTime(entry.createdAt)}
+                                        {entry.counterparty ? ` · 상대: ${entry.counterparty}` : ''}
+                                        {entry.symbol ? ` · ${entry.symbol}` : ''}
+                                    </p>
+                                </div>
+                                <div className={`font-mono font-black ${Number(entry.amount) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {Number(entry.amount) >= 0 ? '+' : '-'}$
+                                    {Math.abs(Number(entry.amount) || 0).toFixed(2)}
+                                </div>
+                                <div className="text-xs text-slate-400 md:text-right">
+                                    잔액 ${Number(entry.balanceAfter || 0).toFixed(2)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

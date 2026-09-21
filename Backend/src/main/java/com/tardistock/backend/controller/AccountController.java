@@ -2,6 +2,7 @@ package com.tardistock.backend.controller;
 
 import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.WalletRepository;
+import com.tardistock.backend.service.LedgerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
@@ -21,14 +22,28 @@ public class AccountController {
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
+    private final LedgerService ledgerService;
 
     public AccountController(
             WalletRepository walletRepository,
             PasswordEncoder passwordEncoder,
-            SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate,
+            LedgerService ledgerService) {
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
         this.messagingTemplate = messagingTemplate;
+        this.ledgerService = ledgerService;
+    }
+
+    @GetMapping("/ledger")
+    public ResponseEntity<?> ledger(Authentication authentication) {
+        try {
+            return ResponseEntity.ok(
+                    ledgerService.recent(requireUsername(authentication)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/deposit")
@@ -103,6 +118,25 @@ public class AccountController {
             toWallet.setBalance(toWallet.getBalance() + amount);
             walletRepository.save(fromWallet);
             walletRepository.save(toWallet);
+
+            ledgerService.record(
+                    fromWallet.getMember(),
+                    "TRANSFER_OUT",
+                    -amount,
+                    fromWallet.getBalance(),
+                    toUsername,
+                    null,
+                    toUsername + "님에게 송금"
+            );
+            ledgerService.record(
+                    toWallet.getMember(),
+                    "TRANSFER_IN",
+                    amount,
+                    toWallet.getBalance(),
+                    fromUsername,
+                    null,
+                    fromUsername + "님에게서 송금 수신"
+            );
 
             messagingTemplate.convertAndSend(
                     "/topic/alerts/" + toUsername,
