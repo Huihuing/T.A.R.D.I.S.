@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy } from 'lucide-react';
+import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { logoutSession } from '../auth';
+import { getAuthHeaders, logoutSession } from '../auth';
+import { API_URL } from '../config';
+import { useEffect } from 'react';
 
 interface SidebarProps {
     isOpen?: boolean;
@@ -15,6 +17,20 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
     const isGuest = username === 'Guest';
     
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        if (isGuest) {
+            setIsAdmin(false);
+            return;
+        }
+
+        fetch(`${API_URL}/api/admin/me`, {
+            headers: getAuthHeaders(false)
+        })
+            .then(res => setIsAdmin(res.ok))
+            .catch(() => setIsAdmin(false));
+    }, [isGuest]);
 
     // 💡 Watchlist 메뉴 추가
     const navItems = [
@@ -26,6 +42,9 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
         { path: '/wallet', label: 'Wallet', icon: Wallet },
         { path: '/news', label: 'News', icon: Newspaper },
         { path: '/stock', label: 'Stock & Fund', icon: TrendingUp },
+        ...(isAdmin
+            ? [{ path: '/admin', label: 'Admin', icon: ShieldCheck }]
+            : []),
     ];
 
     const checkIsActive = (path: string) => location.pathname === path;
