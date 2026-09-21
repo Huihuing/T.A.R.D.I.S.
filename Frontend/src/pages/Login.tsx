@@ -216,10 +216,18 @@ export default function Login() {
                             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-sky-500"
                         />
                     </div>
+                    <div className="flex justify-end">
+                        <Link
+                            to="/forgot-password"
+                            className="text-xs text-sky-400 hover:underline font-bold"
+                        >
+                            비밀번호를 잊으셨나요?
+                        </Link>
+                    </div>
                     <button
                         type="submit"
                         disabled={isLoading || isGoogleLoading}
-                        className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3.5 rounded-xl mt-4 transition-colors shadow-lg disabled:opacity-50"
+                        className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3.5 rounded-xl mt-2 transition-colors shadow-lg disabled:opacity-50"
                     >
                         {isLoading ? '로그인 중...' : '로그인'}
                     </button>
