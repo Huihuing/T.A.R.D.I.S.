@@ -50,3 +50,8 @@ google:
 jwt:
   secret: ${JWT_SECRET:}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+
+price-alert:
+  check-ms: ${PRICE_ALERT_CHECK_MS:300000}
+  initial-delay-ms: ${PRICE_ALERT_INITIAL_DELAY_MS:60000}
