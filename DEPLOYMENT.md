@@ -57,6 +57,8 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
 | `JPA_SHOW_SQL` | `false` | SQL 로그 출력 여부 |
+| `JPA_DDL_AUTO` | `update` | Hibernate 스키마 정책. 운영 DB는 마이그레이션 도입 후 `validate` 전환 권장 |
+| `JWT_EXPIRATION_MS` | `86400000` | JWT 유효시간(ms), 기본 24시간 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
 
@@ -93,4 +95,5 @@ jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED&serverTimezone=Asia/Seoul&
 - 외부 API 키가 코드와 과거 Git history에 없음
 - 커밋 작성자 이메일이 GitHub noreply로 정리됨
 - Render와 Vercel 최신 배포가 정상
-- Naver/Finnhub/FreeImage 등 과거에 커밋된 적이 있는 자격정보는 재발급 후 Render/로컬 설정을 갱신
+- Naver/Finnhub 등 과거에 커밋된 적이 있는 자격정보는 재발급 후 Render/로컬 설정을 갱신
+- FreeImage처럼 키 회전 기능이 없는 서비스는 키를 서버 환경변수로만 사용하고 과거 클라이언트 배포를 제거
