@@ -76,6 +76,7 @@ public class SecurityConfig {
                     "/api/stock/**",
                     "/api/news/**",
                     "/api/leaderboard/**",
+                    "/api/profile/**",
                     "/api/board/**"
                 ).permitAll()
 
