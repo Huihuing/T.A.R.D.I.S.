@@ -16,6 +16,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     List<Post> findByMember(Member member);
 
+    long countByMember(Member member);
+
     @Query("""
             select p
             from Post p
