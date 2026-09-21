@@ -1,4 +1,4 @@
-﻿package com.tardistock.backend.security;
+package com.tardistock.backend.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
