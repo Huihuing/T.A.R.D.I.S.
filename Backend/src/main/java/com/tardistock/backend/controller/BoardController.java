@@ -9,6 +9,7 @@ import com.tardistock.backend.repository.PostRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -25,10 +26,15 @@ public class BoardController {
     private static final int MAX_TITLE_LENGTH = 120;
     private static final int MAX_POST_LENGTH = 20_000;
     private static final int MAX_COMMENT_LENGTH = 3_000;
+    private static final int MIN_GUEST_NICKNAME_LENGTH = 2;
+    private static final int MAX_GUEST_NICKNAME_LENGTH = 20;
+    private static final int MIN_GUEST_PASSWORD_LENGTH = 4;
+    private static final int MAX_GUEST_PASSWORD_LENGTH = 64;
 
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final MemberRepository memberRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${freeimage.api.key:}")
     private String freeimageApiKey;
@@ -36,10 +42,12 @@ public class BoardController {
     public BoardController(
             PostRepository postRepository,
             CommentRepository commentRepository,
-            MemberRepository memberRepository) {
+            MemberRepository memberRepository,
+            PasswordEncoder passwordEncoder) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.memberRepository = memberRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @GetMapping("/posts")
@@ -51,7 +59,10 @@ public class BoardController {
                             map.put("id", post.getId());
                             map.put("title", post.getTitle());
                             map.put("author", authorName(
-                                    post.getMember(), post.getGuestIp()));
+                                    post.getMember(),
+                                    post.getGuestNickname(),
+                                    post.getGuestIp()));
+                            map.put("isGuest", post.getMember() == null);
                             map.put("createdAt", post.getCreatedAt().toString());
                             return map;
                         })
@@ -74,7 +85,10 @@ public class BoardController {
                             Map<String, Object> map = new HashMap<>();
                             map.put("id", comment.getId());
                             map.put("author", authorName(
-                                    comment.getMember(), comment.getGuestIp()));
+                                    comment.getMember(),
+                                    comment.getGuestNickname(),
+                                    comment.getGuestIp()));
+                            map.put("isGuest", comment.getMember() == null);
                             map.put("content", comment.getContent());
                             map.put("createdAt", comment.getCreatedAt().toString());
                             return map;
@@ -85,7 +99,10 @@ public class BoardController {
         response.put("id", post.getId());
         response.put("title", post.getTitle());
         response.put("content", post.getContent());
-        response.put("author", authorName(post.getMember(), post.getGuestIp()));
+        response.put("author", authorName(
+                post.getMember(), post.getGuestNickname(), post.getGuestIp()));
+        response.put("isGuest", post.getMember() == null);
+        response.put("guestNickname", post.getGuestNickname());
         response.put("createdAt", post.getCreatedAt().toString());
         response.put("comments", comments);
         return ResponseEntity.ok(response);
@@ -106,8 +123,16 @@ public class BoardController {
         if (memberOpt.isPresent()) {
             postRepository.save(new Post(memberOpt.get(), title, content));
         } else {
+            String guestNickname = normalize(request.get("guestNickname"));
+            String guestPassword = request.get("guestPassword");
+            ResponseEntity<?> guestValidation =
+                    validateGuestCredentials(guestNickname, guestPassword);
+            if (guestValidation != null) return guestValidation;
+
             postRepository.save(new Post(
                     maskIp(getClientIp(httpRequest)),
+                    guestNickname,
+                    passwordEncoder.encode(guestPassword),
                     title,
                     content
             ));
@@ -154,13 +179,19 @@ public class BoardController {
             commentRepository.save(
                     new Comment(postOpt.get(), memberOpt.get(), content));
         } else {
-            commentRepository.save(
-                    new Comment(
-                            postOpt.get(),
-                            maskIp(getClientIp(httpRequest)),
-                            content
-                    )
-            );
+            String guestNickname = normalizeObject(request.get("guestNickname"));
+            String guestPassword = rawObject(request.get("guestPassword"));
+            ResponseEntity<?> guestValidation =
+                    validateGuestCredentials(guestNickname, guestPassword);
+            if (guestValidation != null) return guestValidation;
+
+            commentRepository.save(new Comment(
+                    postOpt.get(),
+                    maskIp(getClientIp(httpRequest)),
+                    guestNickname,
+                    passwordEncoder.encode(guestPassword),
+                    content
+            ));
         }
 
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
@@ -172,11 +203,6 @@ public class BoardController {
             @RequestBody Map<String, String> request,
             Authentication authentication) {
 
-        if (!hasAuthenticatedUser(authentication)) {
-            return ResponseEntity.status(401).body(
-                    Map.of("message", "로그인이 필요합니다."));
-        }
-
         Optional<Post> postOpt = postRepository.findById(id);
         if (postOpt.isEmpty()) {
             return ResponseEntity.status(404).body(
@@ -184,11 +210,9 @@ public class BoardController {
         }
 
         Post post = postOpt.get();
-        if (post.getMember() == null
-                || !post.getMember().getUsername().equals(authentication.getName())) {
-            return ResponseEntity.status(403).body(
-                    Map.of("message", "수정 권한이 없습니다."));
-        }
+        ResponseEntity<?> authorization =
+                authorizePostMutation(post, request.get("guestPassword"), authentication);
+        if (authorization != null) return authorization;
 
         String title = normalize(request.get("title"));
         String content = normalize(request.get("content"));
@@ -204,12 +228,8 @@ public class BoardController {
     @DeleteMapping("/posts/{id}")
     public ResponseEntity<?> deletePost(
             @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> request,
             Authentication authentication) {
-
-        if (!hasAuthenticatedUser(authentication)) {
-            return ResponseEntity.status(401).body(
-                    Map.of("message", "로그인이 필요합니다."));
-        }
 
         Optional<Post> postOpt = postRepository.findById(id);
         if (postOpt.isEmpty()) {
@@ -218,15 +238,36 @@ public class BoardController {
         }
 
         Post post = postOpt.get();
-        if (post.getMember() == null
-                || !post.getMember().getUsername().equals(authentication.getName())) {
-            return ResponseEntity.status(403).body(
-                    Map.of("message", "삭제 권한이 없습니다."));
-        }
+        String guestPassword = request == null ? null : request.get("guestPassword");
+        ResponseEntity<?> authorization =
+                authorizePostMutation(post, guestPassword, authentication);
+        if (authorization != null) return authorization;
 
         commentRepository.deleteAll(
                 commentRepository.findByPostOrderByCreatedAtAsc(post));
         postRepository.delete(post);
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
+    }
+
+    @DeleteMapping("/comments/{id}")
+    public ResponseEntity<?> deleteComment(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> request,
+            Authentication authentication) {
+
+        Optional<Comment> commentOpt = commentRepository.findById(id);
+        if (commentOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(
+                    Map.of("message", "댓글이 없습니다."));
+        }
+
+        Comment comment = commentOpt.get();
+        String guestPassword = request == null ? null : request.get("guestPassword");
+        ResponseEntity<?> authorization =
+                authorizeCommentMutation(comment, guestPassword, authentication);
+        if (authorization != null) return authorization;
+
+        commentRepository.delete(comment);
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
 
@@ -303,6 +344,66 @@ public class BoardController {
         }
     }
 
+    private ResponseEntity<?> authorizePostMutation(
+            Post post,
+            String guestPassword,
+            Authentication authentication) {
+        if (post.getMember() != null) {
+            if (!hasAuthenticatedUser(authentication)) {
+                return ResponseEntity.status(401).body(
+                        Map.of("message", "로그인이 필요합니다."));
+            }
+            if (!post.getMember().getUsername().equals(authentication.getName())) {
+                return ResponseEntity.status(403).body(
+                        Map.of("message", "수정/삭제 권한이 없습니다."));
+            }
+            return null;
+        }
+
+        if (post.getGuestPasswordHash() == null) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "message",
+                    "비밀번호 기능 도입 이전의 게스트 글은 수정/삭제할 수 없습니다."
+            ));
+        }
+        if (guestPassword == null
+                || !passwordEncoder.matches(
+                        guestPassword, post.getGuestPasswordHash())) {
+            return ResponseEntity.status(403).body(
+                    Map.of("message", "게스트 작성 비밀번호가 일치하지 않습니다."));
+        }
+        return null;
+    }
+
+    private ResponseEntity<?> authorizeCommentMutation(
+            Comment comment,
+            String guestPassword,
+            Authentication authentication) {
+        if (comment.getMember() != null) {
+            if (!hasAuthenticatedUser(authentication)
+                    || !comment.getMember().getUsername()
+                    .equals(authentication.getName())) {
+                return ResponseEntity.status(403).body(
+                        Map.of("message", "댓글 삭제 권한이 없습니다."));
+            }
+            return null;
+        }
+
+        if (comment.getGuestPasswordHash() == null) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "message",
+                    "비밀번호 기능 도입 이전의 게스트 댓글은 삭제할 수 없습니다."
+            ));
+        }
+        if (guestPassword == null
+                || !passwordEncoder.matches(
+                        guestPassword, comment.getGuestPasswordHash())) {
+            return ResponseEntity.status(403).body(
+                    Map.of("message", "게스트 작성 비밀번호가 일치하지 않습니다."));
+        }
+        return null;
+    }
+
     private ResponseEntity<?> validatePost(String title, String content) {
         if (title == null || content == null) {
             return ResponseEntity.badRequest().body(
@@ -321,6 +422,28 @@ public class BoardController {
         return null;
     }
 
+    private ResponseEntity<?> validateGuestCredentials(
+            String nickname,
+            String password) {
+        if (nickname == null
+                || nickname.length() < MIN_GUEST_NICKNAME_LENGTH
+                || nickname.length() > MAX_GUEST_NICKNAME_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message",
+                    "비회원 닉네임은 2~20자로 입력해주세요."
+            ));
+        }
+        if (password == null
+                || password.length() < MIN_GUEST_PASSWORD_LENGTH
+                || password.length() > MAX_GUEST_PASSWORD_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message",
+                    "비회원 작성 비밀번호는 4~64자로 입력해주세요."
+            ));
+        }
+        return null;
+    }
+
     private Optional<Member> getAuthenticatedMember(Authentication authentication) {
         if (!hasAuthenticatedUser(authentication)) {
             return Optional.empty();
@@ -335,10 +458,15 @@ public class BoardController {
                 && !"anonymousUser".equals(authentication.getName());
     }
 
-    private String authorName(Member member, String guestIp) {
-        return member != null
-                ? member.getUsername()
-                : "ㅇㅇ(" + guestIp + ")";
+    private String authorName(
+            Member member,
+            String guestNickname,
+            String guestIp) {
+        if (member != null) return member.getUsername();
+        if (guestNickname != null && !guestNickname.isBlank()) {
+            return guestNickname + "(" + guestIp + ")";
+        }
+        return "ㅇㅇ(" + guestIp + ")";
     }
 
     private String getClientIp(
@@ -376,5 +504,13 @@ public class BoardController {
         if (value == null) return null;
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeObject(Object value) {
+        return value == null ? null : normalize(value.toString());
+    }
+
+    private String rawObject(Object value) {
+        return value == null ? null : value.toString();
     }
 }

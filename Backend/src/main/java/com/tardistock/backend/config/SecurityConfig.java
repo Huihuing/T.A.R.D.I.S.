@@ -79,10 +79,18 @@ public class SecurityConfig {
                     "/api/board/**"
                 ).permitAll()
 
-                // Guest community posting remains supported.
+                // Guest community posting and password-protected mutations.
                 .requestMatchers(HttpMethod.POST,
                     "/api/board/posts",
                     "/api/board/comments"
+                ).permitAll()
+                .requestMatchers(HttpMethod.PUT,
+                    "/api/board/posts/**",
+                    "/api/board/comments/**"
+                ).permitAll()
+                .requestMatchers(HttpMethod.DELETE,
+                    "/api/board/posts/**",
+                    "/api/board/comments/**"
                 ).permitAll()
 
                 // Everything else requires a valid JWT.

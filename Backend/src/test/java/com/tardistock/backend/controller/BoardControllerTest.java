@@ -13,6 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Map;
 import java.util.Optional;
@@ -29,6 +30,8 @@ class BoardControllerTest {
     private CommentRepository commentRepository;
     @Mock
     private MemberRepository memberRepository;
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     private BoardController controller;
 
@@ -37,7 +40,8 @@ class BoardControllerTest {
         controller = new BoardController(
                 postRepository,
                 commentRepository,
-                memberRepository
+                memberRepository,
+                passwordEncoder
         );
     }
 
@@ -46,8 +50,15 @@ class BoardControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Forwarded-For", "203.0.113.44");
 
+        when(passwordEncoder.encode("guest-pass")).thenReturn("encoded-guest-pass");
+
         ResponseEntity<?> response = controller.createPost(
-                Map.of("title", "게스트 글", "content", "본문"),
+                Map.of(
+                        "title", "게스트 글",
+                        "content", "본문",
+                        "guestNickname", "손님",
+                        "guestPassword", "guest-pass"
+                ),
                 request,
                 null
         );
@@ -60,6 +71,8 @@ class BoardControllerTest {
 
         assertNull(saved.getMember());
         assertEquals("203.0.*.*", saved.getGuestIp());
+        assertEquals("손님", saved.getGuestNickname());
+        assertEquals("encoded-guest-pass", saved.getGuestPasswordHash());
         assertEquals("게스트 글", saved.getTitle());
     }
 
@@ -71,8 +84,15 @@ class BoardControllerTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Forwarded-For", "198.51.100.23");
 
+        when(passwordEncoder.encode("comment-pass")).thenReturn("encoded-comment-pass");
+
         ResponseEntity<?> response = controller.createComment(
-                Map.of("postId", 1L, "content", "게스트 댓글"),
+                Map.of(
+                        "postId", 1L,
+                        "content", "게스트 댓글",
+                        "guestNickname", "댓글손님",
+                        "guestPassword", "comment-pass"
+                ),
                 request,
                 null
         );
@@ -86,6 +106,8 @@ class BoardControllerTest {
 
         assertNull(saved.getMember());
         assertEquals("198.51.*.*", saved.getGuestIp());
+        assertEquals("댓글손님", saved.getGuestNickname());
+        assertEquals("encoded-comment-pass", saved.getGuestPasswordHash());
         assertEquals("게스트 댓글", saved.getContent());
     }
 
@@ -95,12 +117,82 @@ class BoardControllerTest {
         String tooLongTitle = "x".repeat(121);
 
         ResponseEntity<?> response = controller.createPost(
-                Map.of("title", tooLongTitle, "content", "본문"),
+                Map.of(
+                        "title", tooLongTitle,
+                        "content", "본문",
+                        "guestNickname", "손님",
+                        "guestPassword", "guest-pass"
+                ),
                 request,
                 null
         );
 
         assertEquals(400, response.getStatusCode().value());
         verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void guestPostRequiresNicknameAndPassword() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        ResponseEntity<?> response = controller.createPost(
+                Map.of("title", "제목", "content", "본문"),
+                request,
+                null
+        );
+
+        assertEquals(400, response.getStatusCode().value());
+        verify(postRepository, never()).save(any());
+    }
+
+    @Test
+    void guestCanUpdatePostWithCorrectPassword() {
+        Post post = new Post(
+                "203.0.*.*",
+                "손님",
+                "encoded-pass",
+                "기존 제목",
+                "기존 본문"
+        );
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(passwordEncoder.matches("guest-pass", "encoded-pass"))
+                .thenReturn(true);
+
+        ResponseEntity<?> response = controller.updatePost(
+                1L,
+                Map.of(
+                        "title", "수정 제목",
+                        "content", "수정 본문",
+                        "guestPassword", "guest-pass"
+                ),
+                null
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("수정 제목", post.getTitle());
+        verify(postRepository).save(post);
+    }
+
+    @Test
+    void guestCannotDeletePostWithWrongPassword() {
+        Post post = new Post(
+                "203.0.*.*",
+                "손님",
+                "encoded-pass",
+                "제목",
+                "본문"
+        );
+        when(postRepository.findById(1L)).thenReturn(Optional.of(post));
+        when(passwordEncoder.matches("wrong", "encoded-pass"))
+                .thenReturn(false);
+
+        ResponseEntity<?> response = controller.deletePost(
+                1L,
+                Map.of("guestPassword", "wrong"),
+                null
+        );
+
+        assertEquals(403, response.getStatusCode().value());
+        verify(postRepository, never()).delete(any());
     }
 }

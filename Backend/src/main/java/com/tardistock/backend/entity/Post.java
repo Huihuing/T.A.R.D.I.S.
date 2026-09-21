@@ -17,6 +17,12 @@ public class Post {
     @Column(nullable = true)
     private String guestIp;
 
+    @Column(nullable = true, length = 20)
+    private String guestNickname;
+
+    @Column(nullable = true, length = 100)
+    private String guestPasswordHash;
+
     @Column(nullable = false)
     private String title;
 
@@ -34,8 +40,20 @@ public class Post {
         this.createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
     }
 
+    // Legacy guest rows created before guest credentials were introduced.
     public Post(String guestIp, String title, String content) {
+        this(guestIp, null, null, title, content);
+    }
+
+    public Post(
+            String guestIp,
+            String guestNickname,
+            String guestPasswordHash,
+            String title,
+            String content) {
         this.guestIp = guestIp;
+        this.guestNickname = guestNickname;
+        this.guestPasswordHash = guestPasswordHash;
         this.title = title;
         this.content = content;
         this.createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
@@ -44,6 +62,8 @@ public class Post {
     public Long getId() { return id; }
     public Member getMember() { return member; }
     public String getGuestIp() { return guestIp; }
+    public String getGuestNickname() { return guestNickname; }
+    public String getGuestPasswordHash() { return guestPasswordHash; }
     public String getTitle() { return title; }
     public String getContent() { return content; }
     public LocalDateTime getCreatedAt() { return createdAt; }

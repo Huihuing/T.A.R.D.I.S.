@@ -13,6 +13,10 @@ export default function Board() {
     const [commentInput, setCommentInput] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(null);
+    const [guestNickname, setGuestNickname] = useState('');
+    const [guestPassword, setGuestPassword] = useState('');
+    const [commentGuestNickname, setCommentGuestNickname] = useState('');
+    const [commentGuestPassword, setCommentGuestPassword] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
@@ -51,6 +55,19 @@ export default function Board() {
     const submitPost = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            if (isGuest && (!guestPassword || (!editingPostId && !guestNickname.trim()))) {
+                alert(editingPostId
+                    ? '작성 비밀번호를 입력해주세요.'
+                    : '비회원 닉네임과 작성 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            const payload: any = { title, content };
+            if (isGuest) {
+                if (!editingPostId) payload.guestNickname = guestNickname.trim();
+                payload.guestPassword = guestPassword;
+            }
+
             const res = await fetch(
                 editingPostId
                     ? `${API_URL}/api/board/posts/${editingPostId}`
@@ -58,7 +75,7 @@ export default function Board() {
                 {
                     method: editingPostId ? 'PUT' : 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ title, content })
+                    body: JSON.stringify(payload)
                 }
             );
             const data = await res.json().catch(() => ({}));
@@ -69,6 +86,8 @@ export default function Board() {
 
             setTitle('');
             setContent('');
+            setGuestNickname('');
+            setGuestPassword('');
             setEditingPostId(null);
             setViewMode('list');
         } catch {
@@ -81,13 +100,24 @@ export default function Board() {
         if (!commentInput.trim()) return;
 
         try {
+            if (isGuest && (!commentGuestNickname.trim() || !commentGuestPassword)) {
+                alert('비회원 닉네임과 작성 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            const commentPayload: any = {
+                postId: selectedPost.id,
+                content: commentInput
+            };
+            if (isGuest) {
+                commentPayload.guestNickname = commentGuestNickname.trim();
+                commentPayload.guestPassword = commentGuestPassword;
+            }
+
             const res = await fetch(`${API_URL}/api/board/comments`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
-                body: JSON.stringify({
-                    postId: selectedPost.id,
-                    content: commentInput
-                })
+                body: JSON.stringify(commentPayload)
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -96,6 +126,7 @@ export default function Board() {
             }
 
             setCommentInput('');
+            setCommentGuestPassword('');
             viewPostDetail(selectedPost.id);
         } catch {
             alert('댓글 등록 중 오류가 발생했습니다.');
@@ -138,18 +169,63 @@ export default function Board() {
         setTitle(selectedPost.title);
         setContent(selectedPost.content);
         setEditingPostId(selectedPost.id);
+        setGuestNickname(selectedPost.guestNickname || '');
+        setGuestPassword('');
         setViewMode('write');
     };
 
     const deletePost = async () => {
         if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
+
+        let password = '';
+        if (selectedPost.isGuest) {
+            password = window.prompt('작성할 때 입력한 비밀번호를 입력하세요.') || '';
+            if (!password) return;
+        }
+
         try {
-            await fetch(`${API_URL}/api/board/posts/${selectedPost.id}`, {
+            const res = await fetch(`${API_URL}/api/board/posts/${selectedPost.id}`, {
                 method: 'DELETE',
-                headers: getAuthHeaders(false)
+                headers: getAuthHeaders(),
+                body: JSON.stringify(selectedPost.isGuest
+                    ? { guestPassword: password }
+                    : {})
             });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '게시글 삭제에 실패했습니다.');
+                return;
+            }
             setViewMode('list');
-        } catch (e) {}
+        } catch {
+            alert('게시글 삭제 중 오류가 발생했습니다.');
+        }
+    };
+
+    const deleteComment = async (comment: any) => {
+        let password = '';
+        if (comment.isGuest) {
+            password = window.prompt('댓글 작성 비밀번호를 입력하세요.') || '';
+            if (!password) return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/api/board/comments/${comment.id}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(comment.isGuest
+                    ? { guestPassword: password }
+                    : {})
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '댓글 삭제에 실패했습니다.');
+                return;
+            }
+            viewPostDetail(selectedPost.id);
+        } catch {
+            alert('댓글 삭제 중 오류가 발생했습니다.');
+        }
     };
 
     // 💡 수익률 첨부 버튼 로직
@@ -247,9 +323,30 @@ export default function Board() {
                             
                             <div className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-700">
                                 {isGuest ? (
-                                    <span className="text-sm text-slate-400">
-                                        비회원은 텍스트 글과 댓글을 작성할 수 있습니다.
-                                    </span>
+                                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {!editingPostId && (
+                                            <input
+                                                type="text"
+                                                value={guestNickname}
+                                                onChange={e => setGuestNickname(e.target.value)}
+                                                minLength={2}
+                                                maxLength={20}
+                                                placeholder="비회원 닉네임 (2~20자)"
+                                                required
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-sky-500"
+                                            />
+                                        )}
+                                        <input
+                                            type="password"
+                                            value={guestPassword}
+                                            onChange={e => setGuestPassword(e.target.value)}
+                                            minLength={4}
+                                            maxLength={64}
+                                            placeholder={editingPostId ? '작성 비밀번호' : '작성 비밀번호 (4~64자)'}
+                                            required
+                                            className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-sky-500"
+                                        />
+                                    </div>
                                 ) : (
                                     <>
                                         <div>
@@ -290,7 +387,7 @@ export default function Board() {
                     <motion.div key="detail" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-slate-800/50 p-6 md:p-10 rounded-3xl border border-slate-700/50 shadow-lg">
                         <div className="flex justify-between items-center mb-6">
                             <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
-                            {selectedPost.author === currentUser && (
+                            {(selectedPost.author === currentUser || selectedPost.isGuest) && (
                                 <div className="flex gap-2">
                                     <button onClick={startEditPost} className="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-white font-bold transition-colors">수정</button>
                                     <button onClick={deletePost} className="text-sm bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded-lg font-bold transition-colors">삭제</button>
@@ -313,14 +410,54 @@ export default function Board() {
                             <div className="flex flex-col gap-4 mb-6">
                                 {selectedPost.comments.map((c: any) => (
                                     <div key={c.id} className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                                        <div className="flex justify-between items-center mb-2"><span className="font-bold text-sky-400 text-sm">{c.author}</span><span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span></div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-sky-400 text-sm">{c.author}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span>
+                                                {(c.author === currentUser || c.isGuest) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => deleteComment(c)}
+                                                        className="text-xs text-rose-400 hover:text-rose-300"
+                                                    >
+                                                        삭제
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                         <p className="text-sm text-slate-300">{c.content}</p>
                                     </div>
                                 ))}
                             </div>
-                            <form onSubmit={submitComment} className="flex gap-2 relative">
-                                <input type="text" value={commentInput} onChange={e => setCommentInput(e.target.value)} maxLength={3000} placeholder="댓글을 남겨보세요..." className="flex-1 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500 transition-colors" />
-                                <button type="submit" disabled={!commentInput.trim()} className="bg-sky-600 hover:bg-sky-500 text-white px-5 rounded-xl font-bold transition-colors disabled:opacity-50"><Send className="w-5 h-5" /></button>
+                            <form onSubmit={submitComment} className="flex flex-col gap-2">
+                                {isGuest && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <input
+                                            type="text"
+                                            value={commentGuestNickname}
+                                            onChange={e => setCommentGuestNickname(e.target.value)}
+                                            minLength={2}
+                                            maxLength={20}
+                                            placeholder="비회원 닉네임"
+                                            required
+                                            className="bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500"
+                                        />
+                                        <input
+                                            type="password"
+                                            value={commentGuestPassword}
+                                            onChange={e => setCommentGuestPassword(e.target.value)}
+                                            minLength={4}
+                                            maxLength={64}
+                                            placeholder="댓글 비밀번호"
+                                            required
+                                            className="bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500"
+                                        />
+                                    </div>
+                                )}
+                                <div className="flex gap-2">
+                                    <input type="text" value={commentInput} onChange={e => setCommentInput(e.target.value)} maxLength={3000} placeholder="댓글을 남겨보세요..." className="flex-1 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-sky-500 transition-colors" />
+                                    <button type="submit" disabled={!commentInput.trim()} className="bg-sky-600 hover:bg-sky-500 text-white px-5 rounded-xl font-bold transition-colors disabled:opacity-50"><Send className="w-5 h-5" /></button>
+                                </div>
                             </form>
                         </div>
                     </motion.div>
