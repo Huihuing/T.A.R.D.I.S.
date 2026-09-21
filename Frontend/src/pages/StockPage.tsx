@@ -310,7 +310,40 @@ export default function StockPage() {
                                         </p>
                                         <p className="text-xs text-slate-500 mt-1">
                                             지정가 ${Number(order.limitPrice).toFixed(2)}
-                                            {order.fillPrice ? ' · 체결가 
+                                            {order.fillPrice
+                                                ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2)
+                                                : ''}
+                                        </p>
+                                    </div>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${order.status === 'PENDING'
+                                        ? 'bg-amber-500/15 text-amber-400'
+                                        : order.status === 'FILLED'
+                                            ? 'bg-emerald-500/15 text-emerald-400'
+                                            : 'bg-slate-700 text-slate-400'}`}>
+                                        {order.status}
+                                    </span>
+                                    {order.status === 'PENDING' ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => cancelLimitOrder(order.id)}
+                                            className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg"
+                                            aria-label="지정가 주문 취소"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    ) : (
+                                        <span className="text-xs text-slate-500 md:text-right">
+                                            {order.resultMessage || ''}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <AnimatePresence>
                 {selectedStock && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
                         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full max-h-[90vh]">
