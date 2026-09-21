@@ -65,3 +65,7 @@ limit-order:
 refresh-token:
   ttl-days: ${REFRESH_TOKEN_TTL_DAYS:30}
   cookie-secure: ${REFRESH_COOKIE_SECURE:true}
+
+
+admin:
+  usernames: ${ADMIN_USERNAMES:}
