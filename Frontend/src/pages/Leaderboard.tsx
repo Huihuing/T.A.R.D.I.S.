@@ -1,5 +1,6 @@
 import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Crown, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
@@ -74,8 +75,18 @@ export default function Leaderboard() {
                                 >
                                     {isMe && <span className="absolute top-3 right-4 text-xs font-black bg-yellow-500 text-slate-900 px-2 py-0.5 rounded-full">ME</span>}
                                     <div className="mb-4">{getRankIcon(ranker.rank)}</div>
-                                    <h3 className="text-2xl font-black text-white truncate w-full mb-1">{ranker.nickname}</h3>
-                                    <p className="text-xs text-slate-500 mb-6">@{ranker.username}</p>
+                                    <Link
+                                        to={`/profile/${encodeURIComponent(ranker.username)}`}
+                                        className="text-2xl font-black text-white hover:text-sky-400 truncate w-full mb-1 transition-colors"
+                                    >
+                                        {ranker.nickname}
+                                    </Link>
+                                    <Link
+                                        to={`/profile/${encodeURIComponent(ranker.username)}`}
+                                        className="text-xs text-slate-500 hover:text-sky-400 mb-6"
+                                    >
+                                        @{ranker.username}
+                                    </Link>
                                     
                                     <div className="w-full bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
                                         <div className="text-sm text-slate-400 mb-1">총 자산</div>
@@ -106,10 +117,18 @@ export default function Leaderboard() {
                                     <div className="flex items-center gap-4 sm:gap-6 w-1/3">
                                         <div className="w-8 flex justify-center">{getRankIcon(ranker.rank)}</div>
                                         <div className="flex flex-col">
-                                            <span className="font-bold text-white flex items-center gap-2">
+                                            <Link
+                                                to={`/profile/${encodeURIComponent(ranker.username)}`}
+                                                className="font-bold text-white hover:text-sky-400 flex items-center gap-2 transition-colors"
+                                            >
                                                 {ranker.nickname} {isMe && <span className="text-[10px] bg-yellow-500 text-slate-900 px-1.5 py-0.5 rounded-sm">ME</span>}
-                                            </span>
-                                            <span className="text-xs text-slate-500">@{ranker.username}</span>
+                                            </Link>
+                                            <Link
+                                                to={`/profile/${encodeURIComponent(ranker.username)}`}
+                                                className="text-xs text-slate-500 hover:text-sky-400"
+                                            >
+                                                @{ranker.username}
+                                            </Link>
                                         </div>
                                     </div>
                                     
