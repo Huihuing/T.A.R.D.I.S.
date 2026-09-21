@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logoutSession } from '../auth';
 
 interface SidebarProps {
     isOpen?: boolean;
@@ -28,6 +29,13 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
     ];
 
     const checkIsActive = (path: string) => location.pathname === path;
+
+    const handleLogout = async () => {
+        await logoutSession();
+        window.location.href = '/login';
+    };
+
+
 
     return (
         <>
@@ -68,7 +76,7 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
                                         로그인 / 회원가입
                                     </button>
                                 ) : (
-                                    <button onClick={() => { localStorage.clear(); window.location.href = '/login'; }} className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold border border-slate-700">
+                                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold border border-slate-700">
                                         <LogOut className="w-4 h-4" /> 로그아웃
                                     </button>
                                 )}
@@ -155,14 +163,14 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
                                         <button onClick={() => window.location.href = '/register'} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm font-bold border border-slate-600">회원가입</button>
                                     </>
                                 ) : (
-                                    <button onClick={() => { localStorage.clear(); window.location.href = '/login'; }} className="flex items-center justify-center gap-2 w-full py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-sm font-bold">
+                                    <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-sm font-bold">
                                         <LogOut className="w-4 h-4" /> <span>Logout</span>
                                     </button>
                                 )}
                             </div>
                         </>
                     ) : (
-                        <button onClick={() => { if(!isGuest) localStorage.clear(); window.location.href = '/login'; }} className="w-10 h-10 flex items-center justify-center bg-slate-700 hover:bg-sky-600 rounded-full text-slate-300 hover:text-white transition-colors">
+                        <button onClick={() => { if (isGuest) window.location.href = '/login'; else handleLogout(); }} className="w-10 h-10 flex items-center justify-center bg-slate-700 hover:bg-sky-600 rounded-full text-slate-300 hover:text-white transition-colors">
                             <LogOut className="w-5 h-5 ml-1" />
                         </button>
                     )}
