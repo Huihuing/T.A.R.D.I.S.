@@ -43,6 +43,9 @@ public class Member {
     @JsonIgnore
     private Boolean pinConfigured;
 
+    @JsonIgnore
+    private Boolean passwordLoginEnabled;
+
     private java.time.LocalDate lastLoginDate;
     private java.time.LocalDate lastReliefDate;
 
@@ -55,6 +58,7 @@ public class Member {
         this.email = email;
         this.pin = pin;
         this.pinConfigured = true;
+        this.passwordLoginEnabled = true;
     }
 
     public Long getId() { return id; }
@@ -85,6 +89,14 @@ public class Member {
 
     public void setPinConfigured(boolean pinConfigured) {
         this.pinConfigured = pinConfigured;
+    }
+
+    public boolean isPasswordLoginEnabled() {
+        return passwordLoginEnabled == null || passwordLoginEnabled;
+    }
+
+    public void setPasswordLoginEnabled(boolean passwordLoginEnabled) {
+        this.passwordLoginEnabled = passwordLoginEnabled;
     }
 
     public java.time.LocalDate getLastLoginDate() { return lastLoginDate; }
