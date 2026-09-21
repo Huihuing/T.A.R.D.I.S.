@@ -24,6 +24,8 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             Map.entry("POST:/api/auth/register", new Policy(5, 3600)),
             Map.entry("POST:/api/auth/email/send", new Policy(5, 600)),
             Map.entry("POST:/api/auth/email/verify", new Policy(20, 600)),
+            Map.entry("POST:/api/auth/password/send", new Policy(5, 600)),
+            Map.entry("POST:/api/auth/password/reset", new Policy(10, 600)),
             Map.entry("POST:/api/board/posts", new Policy(10, 60)),
             Map.entry("POST:/api/board/comments", new Policy(30, 60)),
             Map.entry("POST:/api/board/upload", new Policy(10, 60)),
