@@ -1,8 +1,10 @@
 package com.tardistock.backend.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.tardistock.backend.entity.Member;
+import com.tardistock.backend.entity.Wallet;
+import com.tardistock.backend.repository.MemberRepository;
+import com.tardistock.backend.repository.WalletRepository;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -10,141 +12,95 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/account")
 public class AccountController {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final MemberRepository memberRepository;
+    private final WalletRepository walletRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
-
-    private Map<String, Object> verifyAndGetAccount(String username, String rawPassword) {
-        String sql = "SELECT Account_accountNumber, Account_balance, Account_password FROM Account WHERE Account_owner = ?";
-        Map<String, Object> accountInfo = jdbcTemplate.queryForMap(sql, username);
-
-        String encodedPassword = (String) accountInfo.get("Account_password");
-        if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
-            throw new IllegalArgumentException("계좌 비밀번호가 일치하지 않습니다.");
-        }
-        return accountInfo;
+    public AccountController(
+            MemberRepository memberRepository,
+            WalletRepository walletRepository,
+            PasswordEncoder passwordEncoder,
+            SimpMessagingTemplate messagingTemplate) {
+        this.memberRepository = memberRepository;
+        this.walletRepository = walletRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @PostMapping("/deposit")
-    @Transactional
-    public ResponseEntity<?> deposit(@RequestBody Map<String, Object> request, Authentication authentication) {
-        try {
-            String username = requireUsername(authentication);
-            double amount = parsePositiveAmount(request.get("amount"));
-            String accountPassword = (String) request.get("accountPassword");
-
-            Map<String, Object> accountInfo = verifyAndGetAccount(username, accountPassword);
-            String accountNumber = (String) accountInfo.get("Account_accountNumber");
-            double currentBalance = ((Number) accountInfo.get("Account_balance")).doubleValue();
-            double afterBalance = currentBalance + amount;
-
-            jdbcTemplate.update("UPDATE Account SET Account_balance = ? WHERE Account_accountNumber = ?", afterBalance, accountNumber);
-            jdbcTemplate.update(
-                "INSERT INTO Deposit (Deposit_accountNumber, Deposit_amount, Deposit_balanceAfterDeposit, Deposit_depositDateTime) VALUES (?, ?, ?, NOW())",
-                accountNumber, amount, afterBalance
-            );
-
-            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "입금이 완료되었습니다."));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("message", "입금 중 오류가 발생했습니다."));
-        }
+    public ResponseEntity<?> deposit() {
+        return ResponseEntity.status(410).body(Map.of(
+                "message", "공개 버전에서는 임의 입금 기능을 사용하지 않습니다. 출석 및 활동 보상으로 가상 자산을 획득해주세요."
+        ));
     }
 
     @PostMapping("/withdrawal")
-    @Transactional
-    public ResponseEntity<?> withdrawal(@RequestBody Map<String, Object> request, Authentication authentication) {
-        try {
-            String username = requireUsername(authentication);
-            double amount = parsePositiveAmount(request.get("amount"));
-            String accountPassword = (String) request.get("accountPassword");
-
-            Map<String, Object> accountInfo = verifyAndGetAccount(username, accountPassword);
-            String accountNumber = (String) accountInfo.get("Account_accountNumber");
-            double currentBalance = ((Number) accountInfo.get("Account_balance")).doubleValue();
-
-            if (currentBalance < amount) {
-                return ResponseEntity.badRequest().body(Map.of("message", "잔고가 부족합니다."));
-            }
-
-            double afterBalance = currentBalance - amount;
-            jdbcTemplate.update("UPDATE Account SET Account_balance = ? WHERE Account_accountNumber = ?", afterBalance, accountNumber);
-            jdbcTemplate.update(
-                "INSERT INTO Withdrawal (Withdrawal_accountNumber, Withdrawal_amount, Withdrawal_balanceAfterWithdrawal, Withdrawal_withdrawalDateTime) VALUES (?, ?, ?, NOW())",
-                accountNumber, amount, afterBalance
-            );
-
-            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "출금이 완료되었습니다."));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("message", "출금 중 오류가 발생했습니다."));
-        }
+    public ResponseEntity<?> withdrawal() {
+        return ResponseEntity.status(410).body(Map.of(
+                "message", "공개 버전에서는 별도 출금 기능을 사용하지 않습니다."
+        ));
     }
 
     @PostMapping("/transfer")
     @Transactional
     public ResponseEntity<?> transfer(@RequestBody Map<String, Object> request, Authentication authentication) {
         try {
-            String fromUser = requireUsername(authentication);
-            String toUser = (String) request.get("toUser");
+            String fromUsername = requireUsername(authentication);
+            String toUsername = request.get("toUser") == null ? null : request.get("toUser").toString().trim();
+            String accountPassword = request.get("accountPassword") == null ? null : request.get("accountPassword").toString();
             double amount = parsePositiveAmount(request.get("amount"));
-            String accountPassword = (String) request.get("accountPassword");
 
-            if (toUser == null || toUser.isBlank()) {
+            if (toUsername == null || toUsername.isBlank()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "송금 대상을 입력하세요."));
             }
-            if (fromUser.equals(toUser)) {
+            if (fromUsername.equals(toUsername)) {
                 return ResponseEntity.badRequest().body(Map.of("message", "본인에게 송금할 수 없습니다."));
             }
 
-            Map<String, Object> fromAccountInfo = verifyAndGetAccount(fromUser, accountPassword);
-            String fromAccountNumber = (String) fromAccountInfo.get("Account_accountNumber");
-            double fromBalance = ((Number) fromAccountInfo.get("Account_balance")).doubleValue();
+            Member fromMember = memberRepository.findByUsername(fromUsername)
+                    .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
-            if (fromBalance < amount) {
+            if (accountPassword == null || !passwordEncoder.matches(accountPassword, fromMember.getPin())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "계좌 비밀번호가 일치하지 않습니다."));
+            }
+
+            Member toMember = memberRepository.findByUsername(toUsername)
+                    .orElseThrow(() -> new IllegalArgumentException("송금받을 유저가 존재하지 않습니다."));
+
+            Wallet fromWallet = walletRepository.findByMember(fromMember)
+                    .orElseThrow(() -> new IllegalArgumentException("보내는 사용자의 지갑을 찾을 수 없습니다."));
+            Wallet toWallet = walletRepository.findByMember(toMember)
+                    .orElseThrow(() -> new IllegalArgumentException("받는 사용자의 지갑을 찾을 수 없습니다."));
+
+            if (fromWallet.getBalance() < amount) {
                 return ResponseEntity.badRequest().body(Map.of("message", "잔고가 부족합니다."));
             }
 
-            Map<String, Object> toAccountInfo;
-            try {
-                toAccountInfo = jdbcTemplate.queryForMap(
-                    "SELECT Account_accountNumber, Account_balance FROM Account WHERE Account_owner = ?",
-                    toUser
-                );
-            } catch (Exception e) {
-                return ResponseEntity.badRequest().body(Map.of("message", "송금받을 유저가 존재하지 않습니다."));
-            }
-
-            String toAccountNumber = (String) toAccountInfo.get("Account_accountNumber");
-            double toBalance = ((Number) toAccountInfo.get("Account_balance")).doubleValue();
-            double afterFromBalance = fromBalance - amount;
-            double afterToBalance = toBalance + amount;
-
-            jdbcTemplate.update("UPDATE Account SET Account_balance = ? WHERE Account_accountNumber = ?", afterFromBalance, fromAccountNumber);
-            jdbcTemplate.update("UPDATE Account SET Account_balance = ? WHERE Account_accountNumber = ?", afterToBalance, toAccountNumber);
-            jdbcTemplate.update(
-                "INSERT INTO Transfer (Transfer_fromAccountNumber, Transfer_toAccountNumber, Transfer_amount, Transfer_balanceAfterTransfer, Transfer_transactionDate) VALUES (?, ?, ?, ?, NOW())",
-                fromAccountNumber, toAccountNumber, amount, afterFromBalance
-            );
+            fromWallet.setBalance(fromWallet.getBalance() - amount);
+            toWallet.setBalance(toWallet.getBalance() + amount);
+            walletRepository.save(fromWallet);
+            walletRepository.save(toWallet);
 
             messagingTemplate.convertAndSend(
-                "/topic/alerts/" + toUser,
-                (Object) Map.of("type", "TRANSFER", "message", fromUser + "님으로부터 $" + String.format("%.2f", amount) + " 송금이 도착했습니다!")
+                    "/topic/alerts/" + toUsername,
+                    (Object) Map.of(
+                            "type", "TRANSFER",
+                            "message", fromUsername + "님으로부터 $" + String.format("%.2f", amount) + " 송금이 도착했습니다!"
+                    )
             );
 
-            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", toUser + "님에게 송금이 완료되었습니다."));
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", toUsername + "님에게 송금이 완료되었습니다.",
+                    "newBalance", fromWallet.getBalance()
+            ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {

@@ -1,5 +1,12 @@
-﻿# Copy to application-api.yaml for local development.
+# Copy to application-api.yaml for local development.
 # application-api.yaml is ignored by Git.
+
+# Optional local database override:
+# spring:
+#   datasource:
+#     url: jdbc:mysql://localhost:3306/tardis?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+#     username: root
+#     password: YOUR_LOCAL_DB_PASSWORD
 
 finnhub:
   api:
@@ -9,6 +16,10 @@ naver:
   api:
     client-id: YOUR_NAVER_CLIENT_ID
     client-secret: YOUR_NAVER_CLIENT_SECRET
+
+freeimage:
+  api:
+    key: YOUR_FREEIMAGE_API_KEY
 
 jwt:
   secret: CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_BYTES
