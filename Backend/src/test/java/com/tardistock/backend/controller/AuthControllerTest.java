@@ -316,9 +316,6 @@ class AuthControllerTest {
                 .thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString()))
                 .thenReturn("encoded-random-value");
-        when(memberRepository.save(any(Member.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         java.util.concurrent.atomic.AtomicReference<Member> created =
                 new java.util.concurrent.atomic.AtomicReference<>();
         when(memberRepository.save(any(Member.class)))
