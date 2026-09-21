@@ -1,0 +1,14 @@
+﻿# Copy to application-api.yaml for local development.
+# application-api.yaml is ignored by Git.
+
+finnhub:
+  api:
+    key: YOUR_FINNHUB_API_KEY
+
+naver:
+  api:
+    client-id: YOUR_NAVER_CLIENT_ID
+    client-secret: YOUR_NAVER_CLIENT_SECRET
+
+jwt:
+  secret: CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_BYTES

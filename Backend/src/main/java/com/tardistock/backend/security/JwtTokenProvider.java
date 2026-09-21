@@ -1,17 +1,25 @@
-package com.tardistock.backend.security;
+﻿package com.tardistock.backend.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
 @Component
 public class JwtTokenProvider {
-    private final String SECRET_KEY = "***REMOVED_JWT_SECRET***";
-    private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
-    private final long TOKEN_VALID_TIME = 1000L * 60 * 60 * 24; // 24시간 유지
+    private final Key key;
+    private final long TOKEN_VALID_TIME = 1000L * 60 * 60 * 24;
+
+    public JwtTokenProvider(@Value("${jwt.secret}") String secretKey) {
+        if (secretKey == null || secretKey.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT secret must be configured and at least 32 bytes long.");
+        }
+        this.key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+    }
 
     public String createToken(String username) {
         Date now = new Date();

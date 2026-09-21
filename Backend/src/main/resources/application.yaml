@@ -1,4 +1,4 @@
-spring:
+﻿spring:
   application:
     name: backend
   datasource:
@@ -15,5 +15,19 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
-  profiles: 
-    include: api # stock/news GET api
+  profiles:
+    include: api
+
+# Production/Render: environment variables
+# Local: application-api.yaml overrides these values.
+finnhub:
+  api:
+    key: ${FINNHUB_API_KEY:}
+
+naver:
+  api:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+
+jwt:
+  secret: ${JWT_SECRET:}

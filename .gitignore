@@ -16,3 +16,5 @@ Backend/src/main/resources/application-secret.yml
 # Local IDE files
 .vscode/
 .idea/
+
+Backend/src/main/resources/application-api.yaml
