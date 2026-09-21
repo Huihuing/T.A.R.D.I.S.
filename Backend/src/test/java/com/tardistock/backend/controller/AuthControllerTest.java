@@ -268,7 +268,7 @@ class AuthControllerTest {
         assertEquals("alice", saved.getUsername());
         assertEquals("alice@example.com", saved.getEmail());
         assertEquals("Alice", saved.getName());
-        verify(walletRepository).save(any(Wallet.class));
+        verify(walletRepository, times(2)).save(any(Wallet.class));
         verify(emailVerificationService)
                 .consumeVerified("alice@example.com");
     }
