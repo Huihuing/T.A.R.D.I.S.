@@ -1,9 +1,11 @@
 package com.tardistock.backend.config;
 
 import com.tardistock.backend.security.JwtAuthenticationFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -14,8 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import static org.springframework.security.config.Customizer.withDefaults;
-import org.springframework.security.config.Customizer;
+
 import java.util.List;
 
 @Configuration
@@ -23,15 +24,20 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final String frontendUrl;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            @Value("${app.frontend-url:https://tardis-neon.vercel.app}") String frontendUrl) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.frontendUrl = frontendUrl;
     }
 
     @Bean
-        public PasswordEncoder passwordEncoder() {
-            return new BCryptPasswordEncoder();
-        }
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -39,14 +45,29 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 💡 브라우저 프리플라이트(OPTIONS) 전체 허용
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // 💡 로그인/회원가입, 실시간 웹소켓
-                .requestMatchers("/api/auth/**", "/api/member/**", "/ws-stomp/**").permitAll()
-                // 💡 주식 시세, 뉴스, 랭킹, 게시판 조회 등 공개 API 허용
-                .requestMatchers("/api/stock/**", "/api/news/**", "/api/leaderboard/**", "/api/board/**").permitAll()
-                // 💡 잔고, 주문, 가상경제, 북마크 등 거래 관련 API는 인증 필요
-                .requestMatchers("/api/trade/**", "/api/watchlist/**", "/api/economy/**", "/api/account/**", "/api/bookmark/**").authenticated()
+
+                // Legacy/raw-SQL endpoints are not used by the current frontend.
+                .requestMatchers("/api/member/**", "/api/wallet/**").denyAll()
+
+                // Authentication and SockJS handshake.
+                .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
+
+                // Public read-only APIs.
+                .requestMatchers(HttpMethod.GET,
+                    "/api/stock/**",
+                    "/api/news/**",
+                    "/api/leaderboard/**",
+                    "/api/board/**"
+                ).permitAll()
+
+                // Guest community posting remains supported.
+                .requestMatchers(HttpMethod.POST,
+                    "/api/board/posts",
+                    "/api/board/comments"
+                ).permitAll()
+
+                // Everything else requires a valid JWT.
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -54,15 +75,18 @@ public class SecurityConfig {
         return http.build();
     }
 
-@Bean
+    @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
-        // 🚀 모든 출처 허용 (403 완전 방지)
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowCredentials(false);
+        config.setAllowedOrigins(List.of(
+            frontendUrl,
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(List.of("*"));
-        
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;

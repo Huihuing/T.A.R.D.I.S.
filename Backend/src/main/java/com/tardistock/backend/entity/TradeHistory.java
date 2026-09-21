@@ -1,5 +1,6 @@
 package com.tardistock.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -9,12 +10,12 @@ public class TradeHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 📜 영수증의 주인이 누구인지(Member) 명시!
+    @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    private String tradeType; 
+    private String tradeType;
     private String symbol;
     private int amount;
     private double price;

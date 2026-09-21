@@ -10,13 +10,16 @@ spring:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: ${JPA_SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
   profiles:
     include: api
+
+app:
+  frontend-url: ${FRONTEND_URL:https://tardis-neon.vercel.app}
 
 # Production/Render: environment variables
 # Local: application-api.yaml overrides these values.
@@ -28,6 +31,10 @@ naver:
   api:
     client-id: ${NAVER_CLIENT_ID:}
     client-secret: ${NAVER_CLIENT_SECRET:}
+
+freeimage:
+  api:
+    key: ${FREEIMAGE_API_KEY:}
 
 jwt:
   secret: ${JWT_SECRET:}

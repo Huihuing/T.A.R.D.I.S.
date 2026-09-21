@@ -1,5 +1,6 @@
 package com.tardistock.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 @Entity
@@ -12,17 +13,20 @@ public class Member {
     @Column(nullable = false, unique = true)
     private String username;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String password;
 
     @Column(nullable = false)
     private String name;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String email;
 
+    @JsonIgnore
     @Column(nullable = false)
-    private String pin; // 암호화된 계좌 4자리 비밀번호
+    private String pin;
 
     private java.time.LocalDate lastLoginDate;
     private java.time.LocalDate lastReliefDate;
@@ -59,6 +63,5 @@ public class Member {
     public java.time.LocalDate getLastReliefDate() { return lastReliefDate; }
     public void setLastReliefDate(java.time.LocalDate lastReliefDate) { this.lastReliefDate = lastReliefDate; }
 
-    // 기존 랭킹 등에서 사용하던 nickname 호환용 (name 반환)
     public String getNickname() { return name != null ? name : username; }
 }
