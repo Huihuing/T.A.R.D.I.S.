@@ -78,7 +78,7 @@ class BoardControllerTest {
                 (java.util.List<Map<String, Object>>) body.get("items");
         assertEquals(1, items.size());
         assertEquals("테슬라 이야기", items.get(0).get("title"));
-        assertEquals("검색손님", items.get(0).get("author"));
+        assertEquals("검색손님(203.0.*.*)", items.get(0).get("author"));
     }
 
     @Test
