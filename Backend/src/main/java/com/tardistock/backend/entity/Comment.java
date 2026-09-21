@@ -2,6 +2,7 @@ package com.tardistock.backend.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 public class Comment {
@@ -31,14 +32,14 @@ public class Comment {
         this.post = post;
         this.member = member;
         this.content = content;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
     }
 
     public Comment(Post post, String guestIp, String content) {
         this.post = post;
         this.guestIp = guestIp;
         this.content = content;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
     }
 
     public Long getId() { return id; }
