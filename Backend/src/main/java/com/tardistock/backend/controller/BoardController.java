@@ -8,6 +8,9 @@ import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PostRepository;
 import com.tardistock.backend.service.NotificationService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -55,23 +58,48 @@ public class BoardController {
     }
 
     @GetMapping("/posts")
-    public ResponseEntity<?> getPosts() {
-        List<Map<String, Object>> posts =
-                postRepository.findAllByOrderByCreatedAtDesc().stream()
-                        .map(post -> {
-                            Map<String, Object> map = new HashMap<>();
-                            map.put("id", post.getId());
-                            map.put("title", post.getTitle());
-                            map.put("author", authorName(
-                                    post.getMember(),
-                                    post.getGuestNickname(),
-                                    post.getGuestIp()));
-                            map.put("isGuest", post.getMember() == null);
-                            map.put("createdAt", post.getCreatedAt().toString());
-                            return map;
-                        })
-                        .collect(Collectors.toList());
-        return ResponseEntity.ok(posts);
+    public ResponseEntity<?> getPosts(
+            @RequestParam(defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        String query = q == null ? "" : q.trim();
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 30));
+
+        Page<Post> result = postRepository.search(
+                query,
+                PageRequest.of(
+                        safePage,
+                        safeSize,
+                        Sort.by(Sort.Direction.DESC, "createdAt")
+                )
+        );
+
+        List<Map<String, Object>> posts = result.getContent().stream()
+                .map(post -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", post.getId());
+                    map.put("title", post.getTitle());
+                    map.put("author", authorName(
+                            post.getMember(),
+                            post.getGuestNickname(),
+                            post.getGuestIp()));
+                    map.put("isGuest", post.getMember() == null);
+                    map.put("createdAt", post.getCreatedAt().toString());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("items", posts);
+        response.put("page", result.getNumber());
+        response.put("size", result.getSize());
+        response.put("totalPages", result.getTotalPages());
+        response.put("totalElements", result.getTotalElements());
+        response.put("query", query);
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/posts/{id}")
