@@ -1,13 +1,17 @@
 import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, RefreshCw, X, Star } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw, X, Star, Bell, Trash2 } from 'lucide-react';
 import { getAuthHeaders } from '../auth';
 
 export default function Watchlist() {
     const [stocks, setStocks] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedStock, setSelectedStock] = useState<any | null>(null);
+    const [alerts, setAlerts] = useState<any[]>([]);
+    const [alertTarget, setAlertTarget] = useState<number | ''>('');
+    const [alertDirection, setAlertDirection] = useState<'ABOVE' | 'BELOW'>('ABOVE');
+    const [isSavingAlert, setIsSavingAlert] = useState(false);
 
     const fetchWatchlist = async () => {
         setIsLoading(true);
@@ -46,8 +50,29 @@ export default function Watchlist() {
         }
     };
 
+    const fetchAlerts = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAlerts([]);
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/api/price-alerts`, {
+                headers: getAuthHeaders(false)
+            });
+            const data = await res.json().catch(() => []);
+            if (res.ok && Array.isArray(data)) {
+                setAlerts(data);
+            }
+        } catch {
+            setAlerts([]);
+        }
+    };
+
     useEffect(() => { 
-        fetchWatchlist(); 
+        fetchWatchlist();
+        fetchAlerts();
     }, []);
 
     const removeBookmark = async (e: React.MouseEvent, symbol: string) => {
@@ -65,6 +90,59 @@ export default function Watchlist() {
                 setStocks(prev => prev.filter(s => s.symbol !== symbol));
             }
         } catch (e) {}
+    };
+
+    const createPriceAlert = async () => {
+        if (!selectedStock?.symbol) return;
+        if (!alertTarget || alertTarget <= 0) {
+            alert('목표 가격을 올바르게 입력해주세요.');
+            return;
+        }
+
+        setIsSavingAlert(true);
+        try {
+            const res = await fetch(`${API_URL}/api/price-alerts`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    symbol: selectedStock.symbol,
+                    direction: alertDirection,
+                    targetPrice: Number(alertTarget)
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || '가격 알림 등록에 실패했습니다.');
+                return;
+            }
+
+            alert(
+                `${selectedStock.symbol}이(가) ${Number(alertTarget).toFixed(2)} ${alertDirection === 'ABOVE' ? '이상' : '이하'}일 때 알림을 보내도록 등록했습니다.`
+            );
+            setAlertTarget('');
+            await fetchAlerts();
+        } catch {
+            alert('가격 알림 등록 중 오류가 발생했습니다.');
+        } finally {
+            setIsSavingAlert(false);
+        }
+    };
+
+    const deletePriceAlert = async (id: number) => {
+        try {
+            const res = await fetch(`${API_URL}/api/price-alerts/${id}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders(false)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || '가격 알림 삭제에 실패했습니다.');
+                return;
+            }
+            setAlerts(prev => prev.filter(item => item.id !== id));
+        } catch {
+            alert('가격 알림 삭제 중 오류가 발생했습니다.');
+        }
     };
 
     const isGuest = (localStorage.getItem('username') || 'Guest') === 'Guest';
@@ -132,6 +210,54 @@ export default function Watchlist() {
                 </div>
             )}
 
+            {!isGuest && (
+                <div className="mt-8 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Bell className="w-5 h-5 text-amber-400" />
+                        <h2 className="font-extrabold text-white">등록된 가격 알림</h2>
+                        <span className="text-xs text-slate-500">
+                            {alerts.filter(item => item.active).length}개 활성
+                        </span>
+                    </div>
+
+                    {alerts.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                            관심 종목을 눌러 목표 가격 알림을 등록할 수 있습니다.
+                        </p>
+                    ) : (
+                        <div className="flex flex-col gap-2">
+                            {alerts.map(item => (
+                                <div
+                                    key={item.id}
+                                    className="flex items-center justify-between gap-3 bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3"
+                                >
+                                    <div>
+                                        <p className="font-bold text-white">
+                                            {item.symbol} · ${Number(item.targetPrice).toFixed(2)} {item.direction === 'ABOVE' ? '이상' : '이하'}
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {item.active
+                                                ? '감시 중'
+                                                : item.triggeredAt
+                                                    ? '조건 도달 완료'
+                                                    : '비활성'}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => deletePriceAlert(item.id)}
+                                        className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg"
+                                        aria-label="가격 알림 삭제"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <AnimatePresence>
                 {selectedStock && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
@@ -154,7 +280,47 @@ export default function Watchlist() {
                                     <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">시가 (Open)</p><p className="font-mono font-bold text-white">${selectedStock.o?.toFixed(2)}</p></div>
                                     <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">전일 종가 (Prev)</p><p className="font-mono font-bold text-white">${selectedStock.pc?.toFixed(2)}</p></div>
                                 </div>
-                                <button onClick={() => alert('매수/매도 기능은 추후 연동됩니다.')} className="w-full mt-6 bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 sm:py-4 rounded-xl transition-colors shadow-lg text-base sm:text-lg">거래하기 (Trade)</button>
+                                <div className="mt-6 pt-5 border-t border-slate-800">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Bell className="w-4 h-4 text-amber-400" />
+                                        <h3 className="font-bold text-white text-sm">가격 도달 알림</h3>
+                                    </div>
+                                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={alertTarget}
+                                            onChange={e => setAlertTarget(
+                                                e.target.value === ''
+                                                    ? ''
+                                                    : Number(e.target.value)
+                                            )}
+                                            placeholder="목표 가격"
+                                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none focus:border-amber-500"
+                                        />
+                                        <select
+                                            value={alertDirection}
+                                            onChange={e => setAlertDirection(
+                                                e.target.value as 'ABOVE' | 'BELOW'
+                                            )}
+                                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none"
+                                        >
+                                            <option value="ABOVE">이상</option>
+                                            <option value="BELOW">이하</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={createPriceAlert}
+                                        disabled={isSavingAlert}
+                                        className="w-full mt-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-lg disabled:opacity-50"
+                                    >
+                                        {isSavingAlert ? '등록 중...' : '가격 알림 등록'}
+                                    </button>
+                                </div>
+
+                                <button onClick={() => alert('매수/매도 기능은 추후 연동됩니다.')} className="w-full mt-4 bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 sm:py-4 rounded-xl transition-colors shadow-lg text-base sm:text-lg">거래하기 (Trade)</button>
                             </div>
                         </motion.div>
                     </motion.div>
