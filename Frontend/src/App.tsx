@@ -14,6 +14,7 @@ import Board from './pages/Board';
 import Trollbox from './components/Trollbox';
 import NotificationCenter from './components/NotificationCenter';
 import Leaderboard from './pages/Leaderboard';
+import Profile from './pages/Profile';
 import { getStoredToken, refreshAccessToken } from './auth';
 
 export default function App() {
@@ -88,6 +89,10 @@ export default function App() {
                   <Route
                     path="/leaderboard"
                     element={<Leaderboard />}
+                  />
+                  <Route
+                    path="/profile/:username"
+                    element={<Profile />}
                   />
                 </Routes>
                 <NotificationCenter />
