@@ -6,6 +6,7 @@ import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.EmailVerificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,17 +32,59 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final LedgerService ledgerService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthController(MemberRepository memberRepository,
                           WalletRepository walletRepository,
                           PasswordEncoder passwordEncoder,
                           JwtTokenProvider jwtTokenProvider,
-                          LedgerService ledgerService) {
+                          LedgerService ledgerService,
+                          EmailVerificationService emailVerificationService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.ledgerService = ledgerService;
+        this.emailVerificationService = emailVerificationService;
+    }
+
+    @PostMapping("/email/send")
+    public ResponseEntity<?> sendEmailVerification(
+            @RequestBody Map<String, String> request) {
+        try {
+            emailVerificationService.sendCode(request.get("email"));
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "인증번호를 이메일로 전송했습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(503).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/email/verify")
+    public ResponseEntity<?> verifyEmail(
+            @RequestBody Map<String, String> request) {
+        try {
+            emailVerificationService.verifyCode(
+                    request.get("email"),
+                    request.get("code")
+            );
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "이메일 인증이 완료되었습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(410).body(
+                    Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/register")
@@ -84,6 +127,11 @@ public class AuthController {
         }
         if (memberRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             return ResponseEntity.badRequest().body(Map.of("message", "이미 사용 중인 이메일입니다."));
+        }
+        if (!emailVerificationService.consumeVerified(normalizedEmail)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "이메일 인증을 완료한 뒤 회원가입해주세요."
+            ));
         }
 
         Member member = new Member(

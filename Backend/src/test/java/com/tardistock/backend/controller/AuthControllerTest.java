@@ -6,6 +6,7 @@ import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.EmailVerificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,8 @@ class AuthControllerTest {
     private JwtTokenProvider jwtTokenProvider;
     @Mock
     private LedgerService ledgerService;
+    @Mock
+    private EmailVerificationService emailVerificationService;
 
     private AuthController authController;
 
@@ -51,7 +54,8 @@ class AuthControllerTest {
                 walletRepository,
                 passwordEncoder,
                 jwtTokenProvider,
-                ledgerService
+                ledgerService,
+                emailVerificationService
         );
     }
 
@@ -185,7 +189,8 @@ class AuthControllerTest {
                 wallets,
                 encoder,
                 provider,
-                mock(LedgerService.class)
+                mock(LedgerService.class),
+                mock(EmailVerificationService.class)
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
@@ -238,6 +243,8 @@ class AuthControllerTest {
                 .thenReturn("encoded-password");
         when(passwordEncoder.encode("1234"))
                 .thenReturn("encoded-pin");
+        when(emailVerificationService.consumeVerified("alice@example.com"))
+                .thenReturn(true);
 
         ResponseEntity<?> response = authController.register(Map.of(
                 "username", " alice ",
@@ -257,6 +264,8 @@ class AuthControllerTest {
         assertEquals("alice@example.com", saved.getEmail());
         assertEquals("Alice", saved.getName());
         verify(walletRepository).save(any(Wallet.class));
+        verify(emailVerificationService)
+                .consumeVerified("alice@example.com");
     }
 
     @Test
