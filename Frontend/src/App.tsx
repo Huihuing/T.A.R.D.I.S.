@@ -12,6 +12,7 @@ import NewsPage from './pages/NewsPage';
 import Watchlist from './pages/Watchlist';
 import Board from './pages/Board';
 import Trollbox from './components/Trollbox';
+import NotificationCenter from './components/NotificationCenter';
 import Leaderboard from './pages/Leaderboard';
 
 export default function App() {
@@ -58,6 +59,7 @@ export default function App() {
                     element={<Leaderboard />}
                   />
                 </Routes>
+                <NotificationCenter />
                 <Trollbox />
               </main>
             </div>

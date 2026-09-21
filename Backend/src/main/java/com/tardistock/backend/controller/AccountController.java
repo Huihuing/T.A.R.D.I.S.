@@ -5,8 +5,8 @@ import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.NotificationService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,19 +24,19 @@ public class AccountController {
     private final WalletRepository walletRepository;
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
     private final LedgerService ledgerService;
 
     public AccountController(
             WalletRepository walletRepository,
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
-            SimpMessagingTemplate messagingTemplate,
+            NotificationService notificationService,
             LedgerService ledgerService) {
         this.walletRepository = walletRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
-        this.messagingTemplate = messagingTemplate;
+        this.notificationService = notificationService;
         this.ledgerService = ledgerService;
     }
 
@@ -207,15 +207,12 @@ public class AccountController {
                     fromUsername + "님에게서 송금 수신"
             );
 
-            messagingTemplate.convertAndSend(
-                    "/topic/alerts/" + toUsername,
-                    (Object) Map.of(
-                            "type", "TRANSFER",
-                            "message",
-                            fromUsername + "님으로부터 $"
-                                    + String.format("%.2f", amount)
-                                    + " 송금이 도착했습니다!"
-                    )
+            notificationService.create(
+                    toWallet.getMember(),
+                    "TRANSFER",
+                    fromUsername + "님으로부터 $"
+                            + String.format("%.2f", amount)
+                            + " 송금이 도착했습니다!"
             );
 
             return ResponseEntity.ok(Map.of(

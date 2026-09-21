@@ -6,6 +6,7 @@ import com.tardistock.backend.entity.Post;
 import com.tardistock.backend.repository.CommentRepository;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PostRepository;
+import com.tardistock.backend.service.NotificationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -35,6 +36,7 @@ public class BoardController {
     private final CommentRepository commentRepository;
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     @Value("${freeimage.api.key:}")
     private String freeimageApiKey;
@@ -43,11 +45,13 @@ public class BoardController {
             PostRepository postRepository,
             CommentRepository commentRepository,
             MemberRepository memberRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            NotificationService notificationService) {
         this.postRepository = postRepository;
         this.commentRepository = commentRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.notificationService = notificationService;
     }
 
     @GetMapping("/posts")
@@ -175,7 +179,10 @@ public class BoardController {
         }
 
         Optional<Member> memberOpt = getAuthenticatedMember(authentication);
+        String commentAuthor;
+
         if (memberOpt.isPresent()) {
+            commentAuthor = memberOpt.get().getUsername();
             commentRepository.save(
                     new Comment(postOpt.get(), memberOpt.get(), content));
         } else {
@@ -185,6 +192,7 @@ public class BoardController {
                     validateGuestCredentials(guestNickname, guestPassword);
             if (guestValidation != null) return guestValidation;
 
+            commentAuthor = guestNickname;
             commentRepository.save(new Comment(
                     postOpt.get(),
                     maskIp(getClientIp(httpRequest)),
@@ -192,6 +200,16 @@ public class BoardController {
                     passwordEncoder.encode(guestPassword),
                     content
             ));
+        }
+
+        Member postOwner = postOpt.get().getMember();
+        if (postOwner != null
+                && !postOwner.getUsername().equals(commentAuthor)) {
+            notificationService.create(
+                    postOwner,
+                    "COMMENT",
+                    commentAuthor + "님이 회원님의 게시글에 댓글을 남겼습니다."
+            );
         }
 
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
