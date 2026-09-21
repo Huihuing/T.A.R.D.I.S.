@@ -1,6 +1,11 @@
 package com.tardistock.backend.security;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +36,24 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void rejectsTamperedToken() {
+        JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
+        String token = provider.createToken("alice");
+
+        String[] parts = token.split("\\.");
+        String payload = new String(
+                Base64.getUrlDecoder().decode(parts[1]),
+                StandardCharsets.UTF_8
+        ).replace("\"alice\"", "\"mallory\"");
+
+        parts[1] = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+
+        assertFalse(provider.validateToken(String.join(".", parts)));
+    }
+
+    @Test
     void rejectsExpiredToken() throws InterruptedException {
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, 5);
 
@@ -41,10 +64,33 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    void rejectsShortSecretAndBlankSubject() {
-        assertThrows(IllegalStateException.class, () -> new JwtTokenProvider("too-short", 60_000));
+    void appliesConfiguredExpiration() {
+        long lifetimeMs = 30_000L;
+        JwtTokenProvider provider = new JwtTokenProvider(SECRET, lifetimeMs);
+
+        String token = provider.createToken("alice");
+        Claims claims = Jwts.parserBuilder()
+                .setSigningKey(SECRET.getBytes(StandardCharsets.UTF_8))
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+
+        assertEquals(
+                lifetimeMs,
+                claims.getExpiration().getTime() - claims.getIssuedAt().getTime()
+        );
+    }
+
+    @Test
+    void rejectsShortSecretBlankSubjectAndInvalidExpiration() {
+        assertThrows(IllegalStateException.class, () ->
+                new JwtTokenProvider("too-short", 60_000));
+
+        assertThrows(IllegalStateException.class, () ->
+                new JwtTokenProvider(SECRET, 0));
 
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
-        assertThrows(IllegalArgumentException.class, () -> provider.createToken(" "));
+        assertThrows(IllegalArgumentException.class, () ->
+                provider.createToken(" "));
     }
 }
