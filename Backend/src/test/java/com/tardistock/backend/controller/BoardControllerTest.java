@@ -5,6 +5,8 @@ import com.tardistock.backend.entity.Post;
 import com.tardistock.backend.repository.CommentRepository;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PostRepository;
+import com.tardistock.backend.service.NotificationService;
+import com.tardistock.backend.entity.Member;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,8 @@ class BoardControllerTest {
     private MemberRepository memberRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
+    @Mock
+    private NotificationService notificationService;
 
     private BoardController controller;
 
@@ -41,7 +45,8 @@ class BoardControllerTest {
                 postRepository,
                 commentRepository,
                 memberRepository,
-                passwordEncoder
+                passwordEncoder,
+                notificationService
         );
     }
 
@@ -195,4 +200,49 @@ class BoardControllerTest {
         assertEquals(403, response.getStatusCode().value());
         verify(postRepository, never()).delete(any());
     }
+    @Test
+    void commentOnMemberPostCreatesNotificationForOwner() {
+        Member owner = new Member(
+                "owner",
+                "encoded",
+                "Owner",
+                "owner@example.test",
+                "encoded-pin"
+        );
+        Member commenter = new Member(
+                "commenter",
+                "encoded",
+                "Commenter",
+                "commenter@example.test",
+                "encoded-pin"
+        );
+        Post post = new Post(owner, "제목", "본문");
+
+        when(postRepository.findById(1L))
+                .thenReturn(Optional.of(post));
+        when(memberRepository.findByUsername("commenter"))
+                .thenReturn(Optional.of(commenter));
+
+        org.springframework.security.core.Authentication authentication =
+                mock(org.springframework.security.core.Authentication.class);
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getName()).thenReturn("commenter");
+
+        ResponseEntity<?> response = controller.createComment(
+                Map.of(
+                        "postId", 1L,
+                        "content", "댓글"
+                ),
+                new MockHttpServletRequest(),
+                authentication
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        verify(notificationService).create(
+                eq(owner),
+                eq("COMMENT"),
+                contains("commenter")
+        );
+    }
+
 }
