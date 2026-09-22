@@ -110,3 +110,38 @@ migration으로만 추가합니다.
 일반 B-tree index만 추가해도 큰 효과를 기대하기 어렵습니다.
 데이터가 충분히 커진 뒤 실제 병목이 확인되면 MySQL FULLTEXT 또는 별도 검색
 구조를 검토합니다. 현재 단계에서는 임의로 FULLTEXT를 추가하지 않습니다.
+
+
+## 스키마 일관성 확인 후보 / Schema consistency checks
+
+Flyway baseline 전에 실제 Aiven schema를 덤프한 뒤 아래 항목을 반드시 대조합니다.
+이 항목들은 **현재 운영 DB에 즉시 적용하지 않습니다.**
+
+### 댓글 본문 길이
+
+현재 API는 댓글을 최대 3,000자까지 허용하지만 `Comment.content` 엔티티는
+명시적인 `length` 또는 `TEXT` 타입을 지정하지 않습니다.
+
+확인 항목:
+
+- 실제 Aiven `comment.content` 컬럼이 `VARCHAR(255)`인지 `TEXT`인지
+- 3,000자 댓글 insert가 staging clone에서 정상 동작하는지
+- 실제 컬럼이 짧다면 Flyway migration으로 `TEXT` 또는 충분한 길이의 VARCHAR로 변경
+
+운영 schema 확인 전에는 `@Column(columnDefinition = "TEXT")`를 바로 추가하지 않습니다.
+현재 `ddl-auto=update`가 운영 DB를 자동 변경할 수 있기 때문입니다.
+
+### 금액 컬럼 정밀도
+
+현재 애플리케이션은 Wallet 및 거래/원장 금액 일부를 Java `double`로 보관합니다.
+코드에서는 현금 흐름을 센트 단위로 반올림해 부동소수점 잔여값 누적을 줄이고 있지만,
+장기적으로는 DB/Java 양쪽을 정밀 금액 타입으로 전환하는 것이 더 안전합니다.
+
+Flyway 전환 이후 검토 후보:
+
+- 지갑/원장/송금 금액: `DECIMAL(19,2)`
+- 주가/평단가/체결가: 필요 정밀도에 맞춘 `DECIMAL(19,4~6)`
+- Java 도메인: `BigDecimal`
+
+이 전환은 기존 double 데이터의 반올림 규칙과 API 호환성을 먼저 정의한 뒤
+별도 migration으로 수행합니다. 현재 운영 DB에는 자동 적용하지 않습니다.
