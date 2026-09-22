@@ -85,6 +85,32 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsRepeatedCommunityReports() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 10; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest("POST", "/api/board/reports");
+            request.setRemoteAddr("203.0.113.30");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest("POST", "/api/board/reports");
+        blocked.setRemoteAddr("203.0.113.30");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
     void countersAreSeparatedByClientIp() throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter();
 

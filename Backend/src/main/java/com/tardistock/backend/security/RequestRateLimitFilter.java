@@ -30,6 +30,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             Map.entry("POST:/api/auth/password/reset", new Policy(10, 600)),
             Map.entry("POST:/api/board/posts", new Policy(10, 60)),
             Map.entry("POST:/api/board/comments", new Policy(30, 60)),
+            Map.entry("POST:/api/board/reports", new Policy(10, 60)),
             Map.entry("POST:/api/board/upload", new Policy(10, 60)),
             Map.entry("POST:/api/account/transfer", new Policy(30, 60)),
             Map.entry("POST:/api/trade/buy", new Policy(60, 60)),
