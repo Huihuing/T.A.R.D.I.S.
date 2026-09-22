@@ -101,7 +101,7 @@ class PasswordResetServiceTest {
         reset.setExpiresAt(LocalDateTime.now(KST).plusMinutes(5));
         reset.setAttempts(0);
 
-        when(memberRepository.findByEmailForUpdate("alice@example.test"))
+        when(memberRepository.findByEmailIgnoreCase("alice@example.test"))
                 .thenReturn(Optional.of(member));
         when(resetRepository.findByEmailForUpdate("alice@example.test"))
                 .thenReturn(Optional.of(reset));
