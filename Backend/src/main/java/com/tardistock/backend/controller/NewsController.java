@@ -1,21 +1,28 @@
 package com.tardistock.backend.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/news")
-@CrossOrigin(origins = "*")
 public class NewsController {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(NewsController.class);
+    private static final Pattern SYMBOL_PATTERN =
+            Pattern.compile("^[A-Z0-9.-]{1,15}$");
+    private static final int MAX_QUERY_LENGTH = 120;
 
     @Value("${naver.api.client-id}")
     private String naverClientId;
@@ -23,63 +30,132 @@ public class NewsController {
     @Value("${naver.api.client-secret}")
     private String naverClientSecret;
 
-    // 🚨 여기에 핀허브 토큰을 가져오는 코드를 추가해 줍니다!
-    // 괄호 안의 이름은 application-api.yml에 적어두신 핀허브 키의 경로와 똑같이 맞춰주세요! 
-    @Value("${finnhub.api.key}") 
+    @Value("${finnhub.api.key}")
     private String finnhubToken;
 
-// 🇺🇸 1. 해외 뉴스 (Finnhub - 특정 종목 뉴스)
     @GetMapping("/global")
-    public ResponseEntity<?> getGlobalNews(@RequestParam(defaultValue = "AAPL") String symbol) {
+    public ResponseEntity<?> getGlobalNews(
+            @RequestParam(defaultValue = "AAPL") String symbol) {
+        String normalized = normalizeSymbol(symbol);
+        if (normalized == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "올바른 종목 심볼을 입력해주세요."
+            ));
+        }
+
         try {
-            // 오늘 날짜와 3일 전 날짜를 "YYYY-MM-DD" 포맷으로 자동 계산
             LocalDate today = LocalDate.now();
             LocalDate threeDaysAgo = today.minusDays(3);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            
-            String toDate = today.format(formatter);
-            String fromDate = threeDaysAgo.format(formatter);
+            DateTimeFormatter formatter =
+                    DateTimeFormatter.ISO_LOCAL_DATE;
 
-            // 종목 기호(symbol)와 날짜를 넣어 고퀄리티 종목 뉴스를 호출!
-            String url = "https://finnhub.io/api/v1/company-news?symbol=" + symbol + "&from=" + fromDate + "&to=" + toDate + "&token=" + finnhubToken;
-            
+            String url =
+                    "https://finnhub.io/api/v1/company-news?symbol="
+                            + normalized
+                            + "&from="
+                            + threeDaysAgo.format(formatter)
+                            + "&to="
+                            + today.format(formatter)
+                            + "&token="
+                            + finnhubToken;
+
             RestTemplate restTemplate = new RestTemplate();
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            
+            ResponseEntity<String> response =
+                    restTemplate.getForEntity(url, String.class);
+
             return ResponseEntity.ok(response.getBody());
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn(
+                    "Finnhub news rate limit reached for {}",
+                    normalized
+            );
+            return ResponseEntity.status(429).body(Map.of(
+                    "message", "뉴스 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            ));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("{\"error\": \"해외 뉴스 로딩 실패: " + e.getMessage() + "\"}");
+            log.warn(
+                    "Finnhub news request failed for {}: {}",
+                    normalized,
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "해외 뉴스를 일시적으로 불러오지 못했습니다."
+            ));
         }
     }
 
-// 🇰🇷 2. 국내 뉴스 (NAVER API HUB - NCP 최종 완벽 버전)
     @GetMapping("/korea")
-    public ResponseEntity<?> getKoreanNews(@RequestParam(defaultValue = "증시 시황 특징주 -연예 -정치") String query) {
+    public ResponseEntity<?> getKoreanNews(
+            @RequestParam(
+                    defaultValue = "증시 시황 특징주 -연예 -정치"
+            ) String query) {
+        String normalizedQuery = normalizeQuery(query);
+        if (normalizedQuery == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "검색어는 1~120자로 입력해주세요."
+            ));
+        }
+
         try {
-            // 🚨 1. 골칫덩어리 URLEncoder 완전히 삭제! (이중 인코딩 방지)
-            
-            // 🚨 2. 주소는 무조건 NCP API HUB 주소! + {query} 빈칸 뚫어두기
-            // 🚨 맨 끝부분 sort=sim 을 sort=date 로 변경!
-            // ✅ 수정 후 (display=4 삭제)
-            String url = "https://naverapihub.apigw.ntruss.com/search/v1/news?query={query}&display=100&sort=date";
-            
+            String url =
+                    "https://naverapihub.apigw.ntruss.com/search/v1/news"
+                            + "?query={query}&display=100&sort=date";
+
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
-            
-            // 🚨 3. 헤더도 무조건 NCP 전용 헤더! (회원님의 10글자/40글자 키 사용)
-            headers.set("X-NCP-APIGW-API-KEY-ID", naverClientId);
-            headers.set("X-NCP-APIGW-API-KEY", naverClientSecret);
-            
+            headers.set(
+                    "X-NCP-APIGW-API-KEY-ID",
+                    naverClientId
+            );
+            headers.set(
+                    "X-NCP-APIGW-API-KEY",
+                    naverClientSecret
+            );
+
             HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            // 🚨 4. exchange 마지막 파라미터로 query를 던져서 안전하게 변환!
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class, query);
-            
+
+            ResponseEntity<String> response =
+                    restTemplate.exchange(
+                            url,
+                            HttpMethod.GET,
+                            entity,
+                            String.class,
+                            normalizedQuery
+                    );
+
             return ResponseEntity.ok(response.getBody());
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("Naver news rate limit reached");
+            return ResponseEntity.status(429).body(Map.of(
+                    "message", "뉴스 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            ));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("{\"error\": \"NCP 뉴스 로딩 실패: " + e.getMessage() + "\"}");
+            log.warn(
+                    "Naver news request failed: {}",
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "국내 뉴스를 일시적으로 불러오지 못했습니다."
+            ));
         }
+    }
+
+    private String normalizeSymbol(String symbol) {
+        if (symbol == null) return null;
+        String normalized =
+                symbol.trim().toUpperCase(Locale.ROOT);
+        return SYMBOL_PATTERN.matcher(normalized).matches()
+                ? normalized
+                : null;
+    }
+
+    private String normalizeQuery(String query) {
+        if (query == null) return null;
+        String normalized = query.trim();
+        if (normalized.isEmpty()
+                || normalized.length() > MAX_QUERY_LENGTH) {
+            return null;
+        }
+        return normalized;
     }
 }
