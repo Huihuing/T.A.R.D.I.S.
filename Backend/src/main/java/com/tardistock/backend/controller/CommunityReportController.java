@@ -105,6 +105,18 @@ public class CommunityReportController {
             reporterUsername = authentication.getName();
         }
 
+        if (reporterUsername != null
+                && reportRepository
+                        .existsByTargetTypeAndTargetIdAndStatusAndReporterUsername(
+                                targetType,
+                                targetId,
+                                "OPEN",
+                                reporterUsername
+                        )) {
+            return ResponseEntity.status(409).body(
+                    Map.of("message", "이미 신고한 콘텐츠입니다."));
+        }
+
         CommunityReport report = reportRepository.save(new CommunityReport(
                 targetType,
                 targetId,

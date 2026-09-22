@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.CommunityReport;
 import com.tardistock.backend.entity.Post;
 import com.tardistock.backend.repository.*;
 import com.tardistock.backend.service.AdminAccessService;
+import jakarta.transaction.Transactional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -119,6 +120,7 @@ public class AdminController {
     }
 
     @PatchMapping("/reports/{id}")
+    @Transactional
     public ResponseEntity<?> resolveReport(
             @PathVariable Long id,
             @RequestBody Map<String, String> request,
@@ -133,6 +135,14 @@ public class AdminController {
         if (report == null) {
             return ResponseEntity.status(404)
                     .body(Map.of("message", "신고 내역이 없습니다."));
+        }
+
+        if (!"OPEN".equals(report.getStatus())) {
+            return ResponseEntity.status(409).body(
+                    Map.of(
+                            "message", "이미 처리된 신고입니다.",
+                            "status", report.getStatus()
+                    ));
         }
 
         String action = request.get("action");

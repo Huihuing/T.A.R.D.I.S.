@@ -121,4 +121,44 @@ class CommunityReportControllerTest {
         assertEquals("작성손님", report.getTargetAuthor());
         assertTrue(report.getTargetPreview().contains("테스트 글"));
     }
+    @Test
+    void rejectsDuplicateAuthenticatedReport() {
+        Post post = new Post(
+                "198.51.*.*",
+                "작성자",
+                "encoded-password",
+                "테스트 글",
+                "테스트 본문"
+        );
+        when(postRepository.findById(5L)).thenReturn(Optional.of(post));
+        when(reportRepository
+                .existsByTargetTypeAndTargetIdAndStatusAndReporterUsername(
+                        "POST",
+                        5L,
+                        "OPEN",
+                        "alice"
+                ))
+                .thenReturn(true);
+
+        var authentication =
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "alice",
+                        null,
+                        java.util.List.of()
+                );
+
+        ResponseEntity<?> response = controller.createReport(
+                Map.of(
+                        "targetType", "POST",
+                        "targetId", 5,
+                        "reason", "SPAM"
+                ),
+                new MockHttpServletRequest(),
+                authentication
+        );
+
+        assertEquals(409, response.getStatusCode().value());
+        verify(reportRepository, never()).save(any());
+    }
+
 }

@@ -18,5 +18,12 @@ public interface CommunityReportRepository
             String status
     );
 
+    boolean existsByTargetTypeAndTargetIdAndStatusAndReporterUsername(
+            String targetType,
+            Long targetId,
+            String status,
+            String reporterUsername
+    );
+
     long countByStatus(String status);
 }
