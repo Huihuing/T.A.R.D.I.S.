@@ -4,9 +4,13 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Notification;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.NotificationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -16,6 +20,8 @@ import java.util.Map;
 @Service
 public class NotificationService {
 
+    private static final Logger log =
+            LoggerFactory.getLogger(NotificationService.class);
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final NotificationRepository notificationRepository;
@@ -45,17 +51,7 @@ public class NotificationService {
                 )
         );
 
-        messagingTemplate.convertAndSend(
-                "/topic/alerts/" + member.getUsername(),
-                (Object) Map.of(
-                        "id", notification.getId(),
-                        "type", notification.getType(),
-                        "message", notification.getMessage(),
-                        "createdAt",
-                        notification.getCreatedAt().toString(),
-                        "read", false
-                )
-        );
+        publishAfterCommit(notification);
         return notification;
     }
 
@@ -105,6 +101,48 @@ public class NotificationService {
                 member,
                 LocalDateTime.now(KST)
         );
+    }
+
+    private void publishAfterCommit(Notification notification) {
+        if (TransactionSynchronizationManager
+                .isActualTransactionActive()
+                && TransactionSynchronizationManager
+                .isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            sendRealtime(notification);
+                        }
+                    }
+            );
+            return;
+        }
+
+        sendRealtime(notification);
+    }
+
+    private void sendRealtime(Notification notification) {
+        try {
+            messagingTemplate.convertAndSend(
+                    "/topic/alerts/"
+                            + notification.getMember().getUsername(),
+                    (Object) Map.of(
+                            "id", notification.getId(),
+                            "type", notification.getType(),
+                            "message", notification.getMessage(),
+                            "createdAt",
+                            notification.getCreatedAt().toString(),
+                            "read", false
+                    )
+            );
+        } catch (Exception e) {
+            log.warn(
+                    "Realtime notification delivery failed for {}: {}",
+                    notification.getMember().getUsername(),
+                    e.getClass().getSimpleName()
+            );
+        }
     }
 
     private Member requireMember(String username) {
