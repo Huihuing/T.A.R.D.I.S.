@@ -11,6 +11,7 @@ import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -327,6 +328,66 @@ public class AuthController {
                 ));
     }
 
+    @GetMapping("/sessions")
+    public ResponseEntity<?> sessions(
+            @CookieValue(
+                    name = RefreshTokenService.COOKIE_NAME,
+                    required = false
+            ) String refreshToken,
+            Authentication authentication) {
+        try {
+            Member member = memberRepository.findByUsername(
+                            requireUsername(authentication))
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."));
+
+            return ResponseEntity.ok(
+                    refreshTokenService.sessions(
+                            member,
+                            refreshToken
+                    )
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/sessions/revoke-others")
+    @Transactional
+    public ResponseEntity<?> revokeOtherSessions(
+            @CookieValue(
+                    name = RefreshTokenService.COOKIE_NAME,
+                    required = false
+            ) String refreshToken,
+            Authentication authentication) {
+        try {
+            Member member = memberRepository.findByUsernameForUpdate(
+                            requireUsername(authentication))
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."));
+
+            long revoked = refreshTokenService.revokeOtherSessions(
+                    member,
+                    refreshToken
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "revoked", revoked,
+                    "message",
+                    revoked > 0
+                            ? "다른 로그인 세션을 모두 종료했습니다."
+                            : "종료할 다른 로그인 세션이 없습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
     private Member createGoogleMember(
             GoogleIdentityService.GoogleIdentity identity) {
         String username = generateGoogleUsername(identity.subject());
@@ -423,6 +484,17 @@ public class AuthController {
             throw new IllegalStateException(
                     "Google 계정 아이디를 생성할 수 없습니다.");
         }
+    }
+
+    private String requireUsername(
+            Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
+                || "anonymousUser".equals(authentication.getName())) {
+            throw new IllegalArgumentException(
+                    "로그인이 필요합니다.");
+        }
+        return authentication.getName();
     }
 
     private String normalize(String value) {
