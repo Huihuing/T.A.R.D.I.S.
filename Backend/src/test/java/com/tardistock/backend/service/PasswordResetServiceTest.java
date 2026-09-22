@@ -46,7 +46,7 @@ class PasswordResetServiceTest {
         reset.setExpiresAt(LocalDateTime.now(KST).plusMinutes(5));
         reset.setAttempts(0);
 
-        when(resetRepository.findByEmailIgnoreCase("alice@example.test"))
+        when(resetRepository.findByEmailForUpdate("alice@example.test"))
                 .thenReturn(Optional.of(reset));
         when(passwordEncoder.matches(
                 "123456:ACCOUNT_SECURITY",
@@ -101,9 +101,9 @@ class PasswordResetServiceTest {
         reset.setExpiresAt(LocalDateTime.now(KST).plusMinutes(5));
         reset.setAttempts(0);
 
-        when(memberRepository.findByEmailIgnoreCase("alice@example.test"))
+        when(memberRepository.findByEmailForUpdate("alice@example.test"))
                 .thenReturn(Optional.of(member));
-        when(resetRepository.findByEmailIgnoreCase("alice@example.test"))
+        when(resetRepository.findByEmailForUpdate("alice@example.test"))
                 .thenReturn(Optional.of(reset));
         when(passwordEncoder.matches(
                 "654321:PASSWORD_RESET",
