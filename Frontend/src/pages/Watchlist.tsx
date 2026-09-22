@@ -1,10 +1,13 @@
 import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star, Bell, Trash2 } from 'lucide-react';
-import { getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { notify } from '../uiFeedback';
 
 export default function Watchlist() {
+    const navigate = useNavigate();
     const [stocks, setStocks] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedStock, setSelectedStock] = useState<any | null>(null);
@@ -23,7 +26,10 @@ export default function Watchlist() {
         
         try {
             // DB에서 찜한 종목 리스트 가져오기
-            const res = await fetch(`${API_URL}/api/bookmark`, { headers: getAuthHeaders(false) });
+            const res = await authFetch(
+                `${API_URL}/api/bookmark`,
+                { headers: getAuthHeaders(false) }
+            );
             if (!res.ok) {
                 setStocks([]);
                 return;
@@ -58,7 +64,7 @@ export default function Watchlist() {
         }
 
         try {
-            const res = await fetch(`${API_URL}/api/price-alerts`, {
+            const res = await authFetch(`${API_URL}/api/price-alerts`, {
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => []);
@@ -80,7 +86,7 @@ export default function Watchlist() {
         const username = localStorage.getItem('username');
         if (!username) return;
         try {
-            const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
+            const res = await authFetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({ symbol, price: 0 })
@@ -95,13 +101,13 @@ export default function Watchlist() {
     const createPriceAlert = async () => {
         if (!selectedStock?.symbol) return;
         if (!alertTarget || alertTarget <= 0) {
-            alert('목표 가격을 올바르게 입력해주세요.');
+            notify('목표 가격을 올바르게 입력해주세요.', 'warning');
             return;
         }
 
         setIsSavingAlert(true);
         try {
-            const res = await fetch(`${API_URL}/api/price-alerts`, {
+            const res = await authFetch(`${API_URL}/api/price-alerts`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -112,17 +118,18 @@ export default function Watchlist() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '가격 알림 등록에 실패했습니다.');
+                notify(data.message || '가격 알림 등록에 실패했습니다.', 'error');
                 return;
             }
 
-            alert(
-                `${selectedStock.symbol}이(가) ${Number(alertTarget).toFixed(2)} ${alertDirection === 'ABOVE' ? '이상' : '이하'}일 때 알림을 보내도록 등록했습니다.`
+            notify(
+                `${selectedStock.symbol}이(가) ${Number(alertTarget).toFixed(2)} ${alertDirection === 'ABOVE' ? '이상' : '이하'}일 때 알림을 보내도록 등록했습니다.`,
+                'success'
             );
             setAlertTarget('');
             await fetchAlerts();
         } catch {
-            alert('가격 알림 등록 중 오류가 발생했습니다.');
+            notify('가격 알림 등록 중 오류가 발생했습니다.', 'error');
         } finally {
             setIsSavingAlert(false);
         }
@@ -130,18 +137,19 @@ export default function Watchlist() {
 
     const deletePriceAlert = async (id: number) => {
         try {
-            const res = await fetch(`${API_URL}/api/price-alerts/${id}`, {
+            const res = await authFetch(`${API_URL}/api/price-alerts/${id}`, {
                 method: 'DELETE',
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '가격 알림 삭제에 실패했습니다.');
+                notify(data.message || '가격 알림 삭제에 실패했습니다.', 'error');
                 return;
             }
             setAlerts(prev => prev.filter(item => item.id !== id));
+            notify('가격 알림을 삭제했습니다.', 'success');
         } catch {
-            alert('가격 알림 삭제 중 오류가 발생했습니다.');
+            notify('가격 알림 삭제 중 오류가 발생했습니다.', 'error');
         }
     };
 
@@ -320,7 +328,15 @@ export default function Watchlist() {
                                     </button>
                                 </div>
 
-                                <button onClick={() => alert('매수/매도 기능은 추후 연동됩니다.')} className="w-full mt-4 bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 sm:py-4 rounded-xl transition-colors shadow-lg text-base sm:text-lg">거래하기 (Trade)</button>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate(
+                                        `/stock?symbol=${encodeURIComponent(selectedStock.symbol)}`
+                                    )}
+                                    className="w-full mt-4 bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 sm:py-4 rounded-xl transition-colors shadow-lg text-base sm:text-lg"
+                                >
+                                    이 종목 거래하기
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>
