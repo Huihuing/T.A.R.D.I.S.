@@ -211,13 +211,13 @@ public class AuthController {
                             password, member.getPassword())) {
                         return ResponseEntity.status(401).body(
                                 Map.of("message",
-                                        "비밀번호가 일치하지 않습니다."));
+                                        "아이디 또는 비밀번호가 일치하지 않습니다."));
                     }
                     return completeLogin(member);
                 })
                 .orElseGet(() -> ResponseEntity.status(401).body(
                         Map.of("message",
-                                "존재하지 않는 아이디입니다.")));
+                                "아이디 또는 비밀번호가 일치하지 않습니다.")));
     }
 
     @PostMapping("/google")
