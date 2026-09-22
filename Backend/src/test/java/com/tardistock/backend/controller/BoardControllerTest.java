@@ -232,6 +232,34 @@ class BoardControllerTest {
         verify(postRepository, never()).delete(any());
     }
     @Test
+    void guestCannotDeleteCommentWithWrongPassword() {
+        Post post = new Post("203.0.*.*", "제목", "본문");
+        Comment comment = new Comment(
+                post,
+                "198.51.*.*",
+                "댓글손님",
+                "encoded-comment-pass",
+                "댓글"
+        );
+
+        when(commentRepository.findById(1L))
+                .thenReturn(Optional.of(comment));
+        when(passwordEncoder.matches(
+                "wrong",
+                "encoded-comment-pass"
+        )).thenReturn(false);
+
+        ResponseEntity<?> response = controller.deleteComment(
+                1L,
+                Map.of("guestPassword", "wrong"),
+                null
+        );
+
+        assertEquals(403, response.getStatusCode().value());
+        verify(commentRepository, never()).delete(any());
+    }
+
+    @Test
     void commentOnMemberPostCreatesNotificationForOwner() {
         Member owner = new Member(
                 "owner",
