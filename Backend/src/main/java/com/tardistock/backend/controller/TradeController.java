@@ -64,7 +64,7 @@ public class TradeController {
     @GetMapping("/history")
     public List<TradeHistory> getHistory(Authentication authentication) {
         return authenticatedMember(authentication)
-                .map(tradeHistoryRepository::findByMember)
+                .map(tradeHistoryRepository::findTop500ByMemberOrderByTradeTimeDesc)
                 .orElseGet(List::of);
     }
 
