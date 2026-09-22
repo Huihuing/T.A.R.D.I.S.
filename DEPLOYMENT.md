@@ -72,9 +72,23 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 
 ### Render health check
 
-백엔드는 Spring Boot Actuator의 `/actuator/health`만 공개합니다.
-응답은 상세 내부정보를 노출하지 않고 DB 연결 상태를 포함한 전체 health만 제공합니다.
-Render Dashboard의 Health Check Path는 `/actuator/health`로 설정하는 것을 권장합니다.
+백엔드는 Spring Boot Actuator health endpoint만 익명 GET으로 공개하고 상세 내부정보는 노출하지 않습니다.
+
+운영 probe는 목적을 분리합니다.
+
+- `/actuator/health/liveness`: 애플리케이션 프로세스 자체의 생존 상태만 확인. DB 같은 외부 의존성은 포함하지 않음.
+- `/actuator/health/readiness`: `readinessState`와 `db`를 확인. 애플리케이션이 실제 요청을 처리할 준비가 됐고 Aiven MySQL 연결도 정상일 때만 준비 상태로 판단.
+- `/actuator/health`: 전체 health 조회용. Render 배포 게이트에는 더 명시적인 readiness endpoint를 사용.
+
+현재 Render 서비스의 Health Check Path가 비어 있으면 Render는 HTTP 애플리케이션 상태가 아니라 TCP 포트 오픈 여부만 검사합니다.
+Render Dashboard의 **Settings → Health Checks → Health Check Path**를 다음 값으로 설정하는 것을 권장합니다.
+
+```text
+/actuator/health/readiness
+```
+
+현재 연결된 자동화 권한으로는 Render 서비스의 Health Check Path 자체를 변경할 수 없으므로,
+Dashboard에서 한 번 설정한 뒤 다음 배포에서 readiness가 2xx일 때만 새 인스턴스가 트래픽을 받는지 확인합니다.
 
 ## 3. Vercel 프론트엔드
 
@@ -162,12 +176,13 @@ GitHub Actions 사용량을 줄이기 위해 일반 push/PR에서는 Actions CI�
 
 기본 검증 경로:
 
-1. GitHub `main`에 커밋
-2. Vercel이 `Frontend`를 빌드하고 Production 배포
-3. Render가 루트 `Dockerfile`에서 `./gradlew test bootJar --no-daemon`을 실행
-4. 백엔드 테스트가 모두 통과한 경우에만 Render 이미지 빌드·기동 진행
-5. Vercel이 `READY`, Render가 `live`인지 확인
-6. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
+1. 기능/운영 변경은 feature/dev/chore 브랜치에서 작업
+2. 완료된 묶음을 Squash Merge해 `main`에는 의미 있는 커밋만 반영
+3. Render가 `main` 커밋마다 루트 `Dockerfile`에서 frontend build와 `./gradlew test bootJar --no-daemon`을 검증
+4. 테스트가 통과한 경우에만 Render 이미지 빌드·기동 진행
+5. Render가 `live`이고 런타임 로그에 DB/JPA 기동 오류가 없는지 확인
+6. Vercel은 Git 자동 배포를 하지 않고, 프론트 변경 묶음이 완성됐을 때만 수동 Production deployment 생성
+7. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
 
 GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 필요할 때만 `workflow_dispatch`로 수동 실행합니다.
