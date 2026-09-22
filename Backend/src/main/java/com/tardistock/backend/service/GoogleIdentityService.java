@@ -1,9 +1,11 @@
 package com.tardistock.backend.service;
 
+import com.tardistock.backend.config.ExternalApiHttpClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -13,7 +15,8 @@ import java.util.Map;
 @Service
 public class GoogleIdentityService {
 
-    private final RestClient restClient = RestClient.create();
+    private final RestTemplate restTemplate =
+            ExternalApiHttpClient.create();
     private final String clientId;
 
     public GoogleIdentityService(
@@ -41,14 +44,19 @@ public class GoogleIdentityService {
                     .toUri();
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> payload = restClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .body(Map.class);
+            Map<String, Object> payload =
+                    restTemplate.getForObject(uri, Map.class);
 
-            return validatePayload(payload, Instant.now().getEpochSecond());
+            return validatePayload(
+                    payload,
+                    Instant.now().getEpochSecond()
+            );
         } catch (RestClientResponseException e) {
             throw invalidToken();
+        } catch (ResourceAccessException e) {
+            throw new IllegalStateException(
+                    "Google 로그인 서비스를 일시적으로 사용할 수 없습니다."
+            );
         }
     }
 
