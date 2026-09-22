@@ -97,6 +97,29 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void rotateUsesWriteLockedLookup() {
+        RefreshTokenRepository repository =
+                mock(RefreshTokenRepository.class);
+        RefreshTokenService service =
+                new RefreshTokenService(repository, 30, true);
+
+        Member member = mock(Member.class);
+        RefreshToken stored = mock(RefreshToken.class);
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+        when(stored.getMember()).thenReturn(member);
+        when(stored.getExpiresAt()).thenReturn(now.plusDays(1));
+        when(repository.findByTokenHashForUpdate(anyString()))
+                .thenReturn(Optional.of(stored));
+
+        service.rotate("current-refresh");
+
+        verify(repository).findByTokenHashForUpdate(anyString());
+        verify(repository).delete(stored);
+        verify(repository, atLeastOnce()).save(any(RefreshToken.class));
+    }
+
+    @Test
     void revokeOtherSessionsKeepsCurrentRefreshToken() {
         RefreshTokenRepository repository =
                 mock(RefreshTokenRepository.class);
@@ -110,7 +133,7 @@ class RefreshTokenServiceTest {
         when(member.getId()).thenReturn(10L);
         when(storedMember.getId()).thenReturn(10L);
         when(current.getMember()).thenReturn(storedMember);
-        when(repository.findByTokenHash(anyString()))
+        when(repository.findByTokenHashForUpdate(anyString()))
                 .thenReturn(Optional.of(current));
         when(repository.deleteByMemberAndTokenHashNot(
                 eq(member),
