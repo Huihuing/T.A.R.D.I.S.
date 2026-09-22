@@ -84,7 +84,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST,
                     "/api/board/posts",
                     "/api/board/comments",
-                    "/api/board/reports"
+                    "/api/board/reports",
+                    "/api/security/csp-report"
                 ).permitAll()
                 .requestMatchers(HttpMethod.PUT,
                     "/api/board/posts/**",
