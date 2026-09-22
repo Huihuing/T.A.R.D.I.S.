@@ -279,6 +279,30 @@ class AuthControllerTest {
     }
 
     @Test
+    void registerRejectsWhenEmailWasNotVerified() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.empty());
+        when(memberRepository.existsByEmailIgnoreCase(
+                "alice@example.com"
+        )).thenReturn(false);
+        when(emailVerificationService.consumeVerified(
+                "alice@example.com"
+        )).thenReturn(false);
+
+        ResponseEntity<?> response = authController.register(Map.of(
+                "username", "alice",
+                "password", "password123",
+                "name", "Alice",
+                "email", "alice@example.com",
+                "pin", "1234"
+        ));
+
+        assertEquals(400, response.getStatusCode().value());
+        verify(memberRepository, never()).save(any());
+        verify(walletRepository, never()).save(any());
+    }
+
+    @Test
     void registerRejectsInvalidPinAndWeakPassword() {
         ResponseEntity<?> weakPassword = authController.register(Map.of(
                 "username", "alice",
