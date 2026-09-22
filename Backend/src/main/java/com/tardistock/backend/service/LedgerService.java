@@ -26,16 +26,24 @@ public class LedgerService {
         this.memberRepository = memberRepository;
     }
 
-    public void record(
+    public LedgerEntry record(
             Member member,
             String type,
             double amount,
             double balanceAfter,
             String description) {
-        record(member, type, amount, balanceAfter, null, null, description);
+        return record(
+                member,
+                type,
+                amount,
+                balanceAfter,
+                null,
+                null,
+                description
+        );
     }
 
-    public void record(
+    public LedgerEntry record(
             Member member,
             String type,
             double amount,
@@ -43,7 +51,7 @@ public class LedgerService {
             String counterparty,
             String symbol,
             String description) {
-        ledgerEntryRepository.save(new LedgerEntry(
+        return ledgerEntryRepository.save(new LedgerEntry(
                 member,
                 type,
                 roundMoney(amount),
