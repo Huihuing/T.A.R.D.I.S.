@@ -80,7 +80,6 @@ Render Dashboard의 Health Check Path는 `/actuator/health`로 설정하는 것�
 Root Directory를 `Frontend`로 지정합니다.
 
 ```text
-VITE_API_URL=https://t-a-r-d-i-s.onrender.com
 VITE_WS_URL=https://t-a-r-d-i-s.onrender.com
 VITE_GOOGLE_CLIENT_ID=<Google OAuth Web Client ID>
 ```
