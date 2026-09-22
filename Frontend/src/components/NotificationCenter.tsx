@@ -14,7 +14,12 @@ import {
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { API_URL, WS_URL } from '../config';
-import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import {
+    authFetch,
+    getAuthHeaders,
+    getStoredToken,
+    refreshAccessToken
+} from '../auth';
 
 type NotificationItem = {
     id: number;
@@ -62,13 +67,23 @@ export default function NotificationCenter() {
     };
 
     useEffect(() => {
-        load();
+        let disposed = false;
+        let realtimeClient: Client | null = null;
 
-        const onFocus = () => load();
-        window.addEventListener('focus', onFocus);
+        const start = async () => {
+            if (isGuest) return;
 
-        const token = getStoredToken();
-        if (!isGuest && token) {
+            let token = getStoredToken();
+            if (!token) {
+                const restored = await refreshAccessToken();
+                if (!restored || disposed) return;
+                token = getStoredToken();
+            }
+            if (!token || disposed) return;
+
+            await load();
+            if (disposed) return;
+
             const client = new Client({
                 webSocketFactory: () =>
                     new SockJS(`${WS_URL}/ws-stomp`) as any,
@@ -109,14 +124,22 @@ export default function NotificationCenter() {
                 }
             });
 
-            client.activate();
+            realtimeClient = client;
             clientRef.current = client;
-        }
+            client.activate();
+        };
+
+        const onFocus = () => load();
+        window.addEventListener('focus', onFocus);
+        start();
 
         return () => {
+            disposed = true;
             window.removeEventListener('focus', onFocus);
-            clientRef.current?.deactivate();
-            clientRef.current = null;
+            realtimeClient?.deactivate();
+            if (clientRef.current === realtimeClient) {
+                clientRef.current = null;
+            }
         };
     }, [username, isGuest]);
 
