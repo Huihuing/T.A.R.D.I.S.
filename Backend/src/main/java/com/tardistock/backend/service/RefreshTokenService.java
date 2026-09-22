@@ -22,6 +22,7 @@ import java.util.List;
 public class RefreshTokenService {
 
     public static final String COOKIE_NAME = "refresh_token";
+    private static final int MAX_ACTIVE_SESSIONS = 20;
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -50,6 +51,7 @@ public class RefreshTokenService {
         ));
 
         cleanupExpired(now);
+        trimMemberSessions(member);
         return raw;
     }
 
@@ -88,6 +90,7 @@ public class RefreshTokenService {
         ));
 
         cleanupExpired(now);
+        trimMemberSessions(member);
         return new RotatedSession(member, replacement);
     }
 
@@ -192,6 +195,21 @@ public class RefreshTokenService {
 
     private void cleanupExpired(LocalDateTime now) {
         refreshTokenRepository.deleteByExpiresAtBefore(now);
+    }
+
+    private void trimMemberSessions(Member member) {
+        List<RefreshToken> sessions = refreshTokenRepository
+                .findByMemberOrderByCreatedAtDesc(member);
+        if (sessions.size() <= MAX_ACTIVE_SESSIONS) {
+            return;
+        }
+
+        refreshTokenRepository.deleteAll(
+                sessions.subList(
+                        MAX_ACTIVE_SESSIONS,
+                        sessions.size()
+                )
+        );
     }
 
     private String generateToken() {
