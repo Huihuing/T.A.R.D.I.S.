@@ -134,7 +134,7 @@ public class PasswordResetService {
         );
 
         reset.setEmail(email);
-        reset.setCodeHash(passwordEncoder.encode(code));
+        reset.setCodeHash(passwordEncoder.encode(code + ":ACCOUNT_SECURITY"));
         reset.setExpiresAt(now.plusMinutes(10));
         reset.setLastSentAt(now);
         reset.setAttempts(0);
