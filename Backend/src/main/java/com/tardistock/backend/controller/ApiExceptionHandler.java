@@ -1,0 +1,76 @@
+package com.tardistock.backend.controller;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+import java.util.Map;
+
+@RestControllerAdvice
+public class ApiExceptionHandler {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleIllegalArgument(
+            IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "message",
+                safeMessage(e.getMessage(), "요청 값이 올바르지 않습니다.")
+        ));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> handleIllegalState(
+            IllegalStateException e) {
+        return ResponseEntity.status(409).body(Map.of(
+                "message",
+                safeMessage(e.getMessage(), "현재 상태에서는 처리할 수 없습니다.")
+        ));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleUnreadableBody(
+            HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "message",
+                "요청 본문 형식이 올바르지 않습니다."
+        ));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<?> handleUploadTooLarge(
+            MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(413).body(Map.of(
+                "message",
+                "업로드 파일은 5MB 이하만 허용됩니다."
+        ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleUnexpected(Exception e) {
+        log.error(
+                "Unhandled API exception: {}",
+                e.getClass().getName(),
+                e
+        );
+        return ResponseEntity.status(500).body(Map.of(
+                "message",
+                "서버에서 요청을 처리하는 중 오류가 발생했습니다."
+        ));
+    }
+
+    private String safeMessage(
+            String message,
+            String fallback) {
+        if (message == null || message.isBlank()) {
+            return fallback;
+        }
+        return message;
+    }
+}
