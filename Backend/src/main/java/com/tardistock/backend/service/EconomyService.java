@@ -89,21 +89,33 @@ public class EconomyService {
             );
         }
 
-        List<TradeHistory> historyList = tradeHistoryRepository.findByMember(member);
-        boolean hasTradeToday = historyList.stream().anyMatch(t ->
-                "BUY".equalsIgnoreCase(t.getTradeType())
-                        && t.getTradeTime() != null
-                        && t.getTradeTime().toLocalDate().equals(today));
+        LocalDateTime dayStart = today.atStartOfDay();
+        LocalDateTime nextDayStart = today.plusDays(1).atStartOfDay();
+
+        boolean hasTradeToday =
+                tradeHistoryRepository
+                        .existsByMemberAndTradeTypeIgnoreCaseAndTradeTimeGreaterThanEqualAndTradeTimeLessThan(
+                                member,
+                                "BUY",
+                                dayStart,
+                                nextDayStart
+                        );
         boolean tradeQuestClaimed =
                 today.equals(economy.getTradeQuestClaimedDate());
 
         boolean hasPostToday =
-                postRepository.findByMember(member).stream().anyMatch(p ->
-                        p.getCreatedAt() != null
-                                && p.getCreatedAt().toLocalDate().equals(today))
-                        || commentRepository.findByMember(member).stream().anyMatch(c ->
-                        c.getCreatedAt() != null
-                                && c.getCreatedAt().toLocalDate().equals(today));
+                postRepository
+                        .existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                                member,
+                                dayStart,
+                                nextDayStart
+                        )
+                        || commentRepository
+                        .existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                                member,
+                                dayStart,
+                                nextDayStart
+                        );
         boolean postQuestClaimed =
                 today.equals(economy.getPostQuestClaimedDate());
 
@@ -256,11 +268,17 @@ public class EconomyService {
                 throw new IllegalStateException(
                         "오늘의 매수 미션 보상을 이미 수령하셨습니다.");
             }
+            LocalDateTime dayStart = today.atStartOfDay();
+            LocalDateTime nextDayStart =
+                    today.plusDays(1).atStartOfDay();
             boolean hasTradeToday =
-                    tradeHistoryRepository.findByMember(member).stream().anyMatch(t ->
-                            "BUY".equalsIgnoreCase(t.getTradeType())
-                                    && t.getTradeTime() != null
-                                    && t.getTradeTime().toLocalDate().equals(today));
+                    tradeHistoryRepository
+                            .existsByMemberAndTradeTypeIgnoreCaseAndTradeTimeGreaterThanEqualAndTradeTimeLessThan(
+                                    member,
+                                    "BUY",
+                                    dayStart,
+                                    nextDayStart
+                            );
             if (!hasTradeToday) {
                 throw new IllegalStateException(
                         "오늘 주식 매수(BUY) 기록이 없습니다. 먼저 주식을 매수해 보세요!");
@@ -273,13 +291,22 @@ public class EconomyService {
                 throw new IllegalStateException(
                         "오늘의 커뮤니티 미션 보상을 이미 수령하셨습니다.");
             }
+            LocalDateTime dayStart = today.atStartOfDay();
+            LocalDateTime nextDayStart =
+                    today.plusDays(1).atStartOfDay();
             boolean hasPostToday =
-                    postRepository.findByMember(member).stream().anyMatch(p ->
-                            p.getCreatedAt() != null
-                                    && p.getCreatedAt().toLocalDate().equals(today))
-                            || commentRepository.findByMember(member).stream().anyMatch(c ->
-                            c.getCreatedAt() != null
-                                    && c.getCreatedAt().toLocalDate().equals(today));
+                    postRepository
+                            .existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                                    member,
+                                    dayStart,
+                                    nextDayStart
+                            )
+                            || commentRepository
+                            .existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                                    member,
+                                    dayStart,
+                                    nextDayStart
+                            );
             if (!hasPostToday) {
                 throw new IllegalStateException(
                         "오늘 커뮤니티에 작성한 게시글이나 댓글이 없습니다. 커뮤니티에 참여해 보세요!");
