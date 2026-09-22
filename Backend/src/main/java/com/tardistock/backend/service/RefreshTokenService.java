@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 
 @Service
 public class RefreshTokenService {
@@ -102,6 +103,73 @@ public class RefreshTokenService {
         refreshTokenRepository.deleteByMember(member);
     }
 
+    @Transactional(readOnly = true)
+    public List<SessionInfo> sessions(
+            Member member,
+            String currentRawToken) {
+        if (member == null) {
+            throw new IllegalArgumentException(
+                    "사용자를 찾을 수 없습니다."
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        String currentHash =
+                currentRawToken == null || currentRawToken.isBlank()
+                        ? ""
+                        : hash(currentRawToken);
+
+        return refreshTokenRepository
+                .findByMemberOrderByCreatedAtDesc(member)
+                .stream()
+                .filter(token -> token.getExpiresAt().isAfter(now))
+                .map(token -> new SessionInfo(
+                        token.getId(),
+                        token.getCreatedAt(),
+                        token.getExpiresAt(),
+                        token.getTokenHash().equals(currentHash)
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public long revokeOtherSessions(
+            Member member,
+            String currentRawToken) {
+        if (member == null) {
+            throw new IllegalArgumentException(
+                    "사용자를 찾을 수 없습니다."
+            );
+        }
+        if (currentRawToken == null || currentRawToken.isBlank()) {
+            throw new IllegalArgumentException(
+                    "현재 로그인 세션을 확인할 수 없습니다."
+            );
+        }
+
+        String currentHash = hash(currentRawToken);
+        RefreshToken current = refreshTokenRepository
+                .findByTokenHash(currentHash)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "현재 로그인 세션이 유효하지 않습니다."
+                ));
+
+        if (current.getMember() == null
+                || current.getMember().getId() == null
+                || member.getId() == null
+                || !current.getMember().getId().equals(member.getId())) {
+            throw new IllegalArgumentException(
+                    "현재 로그인 세션이 계정과 일치하지 않습니다."
+            );
+        }
+
+        return refreshTokenRepository
+                .deleteByMemberAndTokenHashNot(
+                        member,
+                        currentHash
+                );
+    }
+
     public ResponseCookie buildCookie(String rawToken) {
         return ResponseCookie.from(COOKIE_NAME, rawToken)
                 .httpOnly(true)
@@ -150,5 +218,12 @@ public class RefreshTokenService {
     public record RotatedSession(
             Member member,
             String rawToken
+    ) {}
+
+    public record SessionInfo(
+            Long id,
+            LocalDateTime createdAt,
+            LocalDateTime expiresAt,
+            boolean current
     ) {}
 }
