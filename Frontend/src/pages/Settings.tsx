@@ -855,7 +855,7 @@ export default function Settings() {
                                         활성 로그인 세션
                                     </h2>
                                     <p className="text-sm text-slate-400 mt-1">
-                                        refresh token 기준 로그인 세션입니다. 현재 브라우저는 유지한 채 다른 세션을 종료할 수 있습니다.
+                                        refresh token 기준 로그인 세션입니다. 현재 브라우저는 유지한 채 다른 세션을 종료할 수 있습니다. 이미 발급된 access token은 최대 15분 안에 만료됩니다.
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
