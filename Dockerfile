@@ -1,6 +1,21 @@
-# Build stage
+# Frontend validation stage
+FROM node:24-alpine AS frontend-check
+WORKDIR /frontend
+
+COPY Frontend/package.json Frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY Frontend/ .
+RUN npm run build
+
+# Backend build stage
 FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /app
+
+# Make the Render build depend on a successful frontend production build.
+# The generated files are only a validation artifact and are not shipped
+# in the backend runtime image.
+COPY --from=frontend-check /frontend/dist /tmp/frontend-build-check
 
 # Copy gradle wrapper and configs
 COPY Backend/gradlew .
