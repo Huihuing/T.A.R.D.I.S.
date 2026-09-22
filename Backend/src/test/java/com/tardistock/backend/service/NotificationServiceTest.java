@@ -6,6 +6,7 @@ import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.NotificationRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,6 +17,61 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 class NotificationServiceTest {
+
+    @Test
+    void transactionalCreateWaitsUntilAfterCommit() {
+        NotificationRepository notifications =
+                mock(NotificationRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        SimpMessagingTemplate messaging =
+                mock(SimpMessagingTemplate.class);
+
+        Member member = new Member(
+                "alice",
+                "pw",
+                "Alice",
+                "alice@example.test",
+                "pin"
+        );
+        Notification saved = mock(Notification.class);
+        when(saved.getId()).thenReturn(1L);
+        when(saved.getMember()).thenReturn(member);
+        when(saved.getType()).thenReturn("GENERAL");
+        when(saved.getMessage()).thenReturn("hello");
+        when(saved.getCreatedAt()).thenReturn(
+                LocalDateTime.of(2026, 9, 22, 15, 0)
+        );
+        when(notifications.save(any(Notification.class)))
+                .thenReturn(saved);
+
+        NotificationService service = new NotificationService(
+                notifications,
+                members,
+                messaging
+        );
+
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager
+                .setActualTransactionActive(true);
+        try {
+            service.create(member, "GENERAL", "hello");
+
+            verifyNoInteractions(messaging);
+
+            TransactionSynchronizationManager
+                    .getSynchronizations()
+                    .forEach(sync -> sync.afterCommit());
+
+            verify(messaging).convertAndSend(
+                    eq("/topic/alerts/alice"),
+                    any(Object.class)
+            );
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager
+                    .setActualTransactionActive(false);
+        }
+    }
 
     @Test
     void createOutsideTransactionSendsRealtime() {
