@@ -65,7 +65,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // Legacy/raw-SQL endpoints are not used by the current frontend.
+                // Retired raw-SQL routes stay denied as a defense-in-depth guard.
                 .requestMatchers("/api/member/**", "/api/wallet/**").denyAll()
 
                 // Authentication and SockJS handshake.
