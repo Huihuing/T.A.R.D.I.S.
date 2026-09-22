@@ -27,6 +27,13 @@ import java.util.stream.Collectors;
 public class BoardController {
 
     private static final long MAX_IMAGE_SIZE = 5L * 1024L * 1024L;
+    private static final java.util.Set<String> ALLOWED_IMAGE_TYPES =
+            java.util.Set.of(
+                    "image/jpeg",
+                    "image/png",
+                    "image/gif",
+                    "image/webp"
+            );
     private static final int MAX_TITLE_LENGTH = 120;
     private static final int MAX_POST_LENGTH = 20_000;
     private static final int MAX_COMMENT_LENGTH = 3_000;
@@ -371,9 +378,15 @@ public class BoardController {
             }
 
             String contentType = image.getContentType();
-            if (contentType == null || !contentType.startsWith("image/")) {
+            if (contentType == null
+                    || !ALLOWED_IMAGE_TYPES.contains(
+                            contentType.toLowerCase(
+                                    java.util.Locale.ROOT))) {
                 return ResponseEntity.badRequest().body(
-                        Map.of("message", "이미지 파일만 업로드할 수 있습니다."));
+                        Map.of(
+                                "message",
+                                "JPEG, PNG, GIF, WebP 이미지만 업로드할 수 있습니다."
+                        ));
             }
 
             String url = "https://freeimage.host/api/1/upload";
@@ -407,20 +420,24 @@ public class BoardController {
             org.springframework.web.client.RestTemplate restTemplate =
                     new org.springframework.web.client.RestTemplate();
 
-            ResponseEntity<Map> response =
-                    restTemplate.postForEntity(url, requestEntity, Map.class);
+            ResponseEntity<Map<String, Object>> response =
+                    restTemplate.exchange(
+                            url,
+                            org.springframework.http.HttpMethod.POST,
+                            requestEntity,
+                            new org.springframework.core
+                                    .ParameterizedTypeReference<
+                                            Map<String, Object>>() {}
+                    );
 
             Map<String, Object> body = response.getBody();
             if (body != null
                     && body.get("status_code") instanceof Number status
-                    && status.intValue() == 200) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> imageMap =
-                        (Map<String, Object>) body.get("image");
-                if (imageMap != null && imageMap.get("url") != null) {
-                    return ResponseEntity.ok(
-                            Map.of("url", imageMap.get("url")));
-                }
+                    && status.intValue() == 200
+                    && body.get("image") instanceof Map<?, ?> imageMap
+                    && imageMap.get("url") != null) {
+                return ResponseEntity.ok(
+                        Map.of("url", imageMap.get("url")));
             }
             return ResponseEntity.status(502).body(
                     Map.of("message", "이미지 업로드에 실패했습니다."));
