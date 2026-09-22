@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class RequestRateLimitFilter extends OncePerRequestFilter {
@@ -52,9 +53,13 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private static final Policy NEWS_READ_POLICY = new Policy(60, 60);
     private static final Policy PROFILE_READ_POLICY = new Policy(60, 60);
     private static final Policy LEADERBOARD_READ_POLICY = new Policy(20, 60);
+    private static final int MAX_COUNTERS = 20_000;
+    private static final long MAX_COUNTER_AGE_SECONDS = 3_700;
+    private static final long CLEANUP_EVERY_REQUESTS = 512;
 
     private final ConcurrentHashMap<String, WindowCounter> counters =
             new ConcurrentHashMap<>();
+    private final AtomicLong rateLimitedRequestCount = new AtomicLong();
 
     @Override
     protected void doFilterInternal(
@@ -75,6 +80,19 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
                 + ":"
                 + clientIp;
         long now = Instant.now().getEpochSecond();
+
+        long requestNumber = rateLimitedRequestCount.incrementAndGet();
+        if (requestNumber % CLEANUP_EVERY_REQUESTS == 0) {
+            cleanupExpired(now);
+        }
+
+        if (!counters.containsKey(key) && counters.size() >= MAX_COUNTERS) {
+            cleanupExpired(now);
+            if (counters.size() >= MAX_COUNTERS) {
+                writeRateLimitResponse(response, 60);
+                return;
+            }
+        }
 
         WindowCounter counter = counters.computeIfAbsent(
                 key,
@@ -97,18 +115,8 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             );
         }
 
-        if (counters.size() > 10_000) {
-            cleanupExpired(now);
-        }
-
         if (current > policy.maxRequests()) {
-            response.setStatus(429);
-            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.setHeader("Retry-After", Long.toString(retryAfter));
-            response.getWriter().write(
-                    "{\"message\":\"요청이 너무 많습니다. 잠시 후 다시 시도해주세요.\"}"
-            );
+            writeRateLimitResponse(response, retryAfter);
             return;
         }
 
@@ -164,7 +172,23 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
 
     private void cleanupExpired(long now) {
         counters.entrySet().removeIf(entry ->
-                now - entry.getValue().windowStart > 7200);
+                now - entry.getValue().windowStart
+                        > MAX_COUNTER_AGE_SECONDS);
+    }
+
+    private void writeRateLimitResponse(
+            HttpServletResponse response,
+            long retryAfter) throws IOException {
+        response.setStatus(429);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setHeader(
+                "Retry-After",
+                Long.toString(Math.max(1, retryAfter))
+        );
+        response.getWriter().write(
+                "{\"message\":\"요청이 너무 많습니다. 잠시 후 다시 시도해주세요.\"}"
+        );
     }
 
     private static final class WindowCounter {
