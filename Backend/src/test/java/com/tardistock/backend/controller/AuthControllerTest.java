@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -65,6 +66,14 @@ class AuthControllerTest {
                 googleIdentityService,
                 refreshTokenService
         );
+
+        lenient().when(refreshTokenService.issue(any(Member.class)))
+                .thenReturn("test-refresh-token");
+        lenient().when(refreshTokenService.buildCookie("test-refresh-token"))
+                .thenReturn(ResponseCookie.from(
+                        RefreshTokenService.COOKIE_NAME,
+                        "test-refresh-token"
+                ).httpOnly(true).path("/api/auth").build());
     }
 
     @Test
@@ -192,6 +201,16 @@ class AuthControllerTest {
 
         when(members.findByUsernameForUpdate("alice")).thenReturn(Optional.of(member));
 
+        RefreshTokenService refreshService =
+                mock(RefreshTokenService.class);
+        when(refreshService.issue(any(Member.class)))
+                .thenReturn("integration-refresh-token");
+        when(refreshService.buildCookie("integration-refresh-token"))
+                .thenReturn(ResponseCookie.from(
+                        RefreshTokenService.COOKIE_NAME,
+                        "integration-refresh-token"
+                ).httpOnly(true).path("/api/auth").build());
+
         AuthController controller = new AuthController(
                 members,
                 wallets,
@@ -200,7 +219,7 @@ class AuthControllerTest {
                 mock(LedgerService.class),
                 mock(EmailVerificationService.class),
                 mock(GoogleIdentityService.class),
-                mock(RefreshTokenService.class)
+                refreshService
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
