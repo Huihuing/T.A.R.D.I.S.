@@ -29,15 +29,6 @@ public class ApiExceptionHandler {
         ));
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<?> handleIllegalState(
-            IllegalStateException e) {
-        return ResponseEntity.status(409).body(Map.of(
-                "message",
-                safeMessage(e.getMessage(), "현재 상태에서는 처리할 수 없습니다.")
-        ));
-    }
-
     @ExceptionHandler({
             MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class
