@@ -423,9 +423,10 @@ class AuthControllerTest {
                 authController.refresh("stale-refresh");
 
         assertEquals(401, response.getStatusCode().value());
-        assertFalse(
-                response.getHeaders()
-                        .containsKey(org.springframework.http.HttpHeaders.SET_COOKIE)
+        assertNull(
+                response.getHeaders().getFirst(
+                        org.springframework.http.HttpHeaders.SET_COOKIE
+                )
         );
         verify(refreshTokenService, never()).clearCookie();
     }
