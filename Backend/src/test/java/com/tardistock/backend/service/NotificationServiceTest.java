@@ -11,10 +11,91 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 class NotificationServiceTest {
+
+    @Test
+    void createOutsideTransactionSendsRealtime() {
+        NotificationRepository notifications =
+                mock(NotificationRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        SimpMessagingTemplate messaging =
+                mock(SimpMessagingTemplate.class);
+
+        Member member = new Member(
+                "alice",
+                "pw",
+                "Alice",
+                "alice@example.test",
+                "pin"
+        );
+        Notification saved = mock(Notification.class);
+        when(saved.getId()).thenReturn(1L);
+        when(saved.getMember()).thenReturn(member);
+        when(saved.getType()).thenReturn("GENERAL");
+        when(saved.getMessage()).thenReturn("hello");
+        when(saved.getCreatedAt()).thenReturn(
+                LocalDateTime.of(2026, 9, 22, 15, 0)
+        );
+        when(notifications.save(any(Notification.class)))
+                .thenReturn(saved);
+
+        NotificationService service = new NotificationService(
+                notifications,
+                members,
+                messaging
+        );
+
+        service.create(member, "GENERAL", "hello");
+
+        verify(messaging).convertAndSend(
+                eq("/topic/alerts/alice"),
+                any(Object.class)
+        );
+    }
+
+    @Test
+    void realtimeFailureDoesNotFailNotificationCreate() {
+        NotificationRepository notifications =
+                mock(NotificationRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        SimpMessagingTemplate messaging =
+                mock(SimpMessagingTemplate.class);
+
+        Member member = new Member(
+                "alice",
+                "pw",
+                "Alice",
+                "alice@example.test",
+                "pin"
+        );
+        Notification saved = mock(Notification.class);
+        when(saved.getId()).thenReturn(1L);
+        when(saved.getMember()).thenReturn(member);
+        when(saved.getType()).thenReturn("GENERAL");
+        when(saved.getMessage()).thenReturn("hello");
+        when(saved.getCreatedAt()).thenReturn(
+                LocalDateTime.of(2026, 9, 22, 15, 0)
+        );
+        when(notifications.save(any(Notification.class)))
+                .thenReturn(saved);
+        doThrow(new RuntimeException("broker unavailable"))
+                .when(messaging)
+                .convertAndSend(anyString(), any(Object.class));
+
+        NotificationService service = new NotificationService(
+                notifications,
+                members,
+                messaging
+        );
+
+        assertDoesNotThrow(
+                () -> service.create(member, "GENERAL", "hello")
+        );
+    }
 
     @Test
     void markAllReadUsesBulkUpdate() {
