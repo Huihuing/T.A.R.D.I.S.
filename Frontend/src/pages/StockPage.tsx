@@ -12,7 +12,7 @@ const ALL_SYMBOLS = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'A
 const BATCH_SIZE = 4;
 
 export default function StockPage() {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
     const [stocks, setStocks] = useState<any[]>([]);
     const [loadedCount, setLoadedCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -155,10 +155,6 @@ export default function StockPage() {
         setSearchQuery('');
         setIsDropdownOpen(false);
         setIsSearching(true);
-        setSearchParams(
-            { symbol: targetSymbol.toUpperCase() },
-            { replace: true }
-        );
         try {
             const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${targetSymbol}`);
             if (quoteRes.status === 429) {
