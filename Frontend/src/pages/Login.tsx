@@ -1,5 +1,6 @@
 import { API_URL } from '../config';
 import { storeAccessToken } from '../auth';
+import { notify } from '../uiFeedback';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
@@ -45,8 +46,9 @@ export default function Login() {
         );
 
         if (data.dailyReward) {
-            alert(
-                '🎉 일일 출석 체크 완료!\n시드머니 $500이 추가로 지급되었습니다.'
+            notify(
+                '일일 출석 체크 완료! 시드머니 $500이 추가로 지급되었습니다.',
+                'success'
             );
         }
 
@@ -64,7 +66,7 @@ export default function Login() {
         response: GoogleCredentialResponse
     ) => {
         if (!response.credential) {
-            alert('Google 로그인 정보를 받지 못했습니다.');
+            notify('Google 로그인 정보를 받지 못했습니다.', 'error');
             return;
         }
 
@@ -80,12 +82,12 @@ export default function Login() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || !data.token) {
-                alert(data.message || 'Google 로그인에 실패했습니다.');
+                notify(data.message || 'Google 로그인에 실패했습니다.', 'error');
                 return;
             }
             finishLogin(data);
         } catch {
-            alert('Google 로그인 중 서버 오류가 발생했습니다.');
+            notify('Google 로그인 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsGoogleLoading(false);
         }
@@ -153,10 +155,10 @@ export default function Login() {
             if (res.ok && data.token) {
                 finishLogin(data);
             } else {
-                alert(data.message || '로그인 실패');
+                notify(data.message || '로그인에 실패했습니다.', 'error');
             }
         } catch {
-            alert('서버 오류가 발생했습니다.');
+            notify('서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsLoading(false);
         }
