@@ -295,6 +295,46 @@ public class BoardController {
         return ResponseEntity.ok(Map.of("status", "SUCCESS"));
     }
 
+    @PutMapping("/comments/{id}")
+    public ResponseEntity<?> updateComment(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> request,
+            Authentication authentication) {
+
+        Optional<Comment> commentOpt = commentRepository.findById(id);
+        if (commentOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(
+                    Map.of("message", "댓글이 없습니다."));
+        }
+
+        Comment comment = commentOpt.get();
+        ResponseEntity<?> authorization =
+                authorizeCommentMutation(
+                        comment,
+                        request.get("guestPassword"),
+                        authentication
+                );
+        if (authorization != null) return authorization;
+
+        String content = normalize(request.get("content"));
+        if (content == null) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", "댓글 내용을 입력해주세요."));
+        }
+        if (content.length() > MAX_COMMENT_LENGTH) {
+            return ResponseEntity.badRequest().body(
+                    Map.of(
+                            "message",
+                            "댓글은 " + MAX_COMMENT_LENGTH
+                                    + "자 이하로 작성해주세요."
+                    ));
+        }
+
+        comment.setContent(content);
+        commentRepository.save(comment);
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
+    }
+
     @DeleteMapping("/comments/{id}")
     public ResponseEntity<?> deleteComment(
             @PathVariable Long id,
@@ -430,7 +470,7 @@ public class BoardController {
                     || !comment.getMember().getUsername()
                     .equals(authentication.getName())) {
                 return ResponseEntity.status(403).body(
-                        Map.of("message", "댓글 삭제 권한이 없습니다."));
+                        Map.of("message", "댓글 수정/삭제 권한이 없습니다."));
             }
             return null;
         }
@@ -438,7 +478,7 @@ public class BoardController {
         if (comment.getGuestPasswordHash() == null) {
             return ResponseEntity.status(403).body(Map.of(
                     "message",
-                    "비밀번호 기능 도입 이전의 게스트 댓글은 삭제할 수 없습니다."
+                    "비밀번호 기능 도입 이전의 게스트 댓글은 수정/삭제할 수 없습니다."
             ));
         }
         if (guestPassword == null

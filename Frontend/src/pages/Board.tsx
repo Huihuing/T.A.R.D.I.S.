@@ -238,6 +238,50 @@ export default function Board() {
         }
     };
 
+    const editComment = async (comment: any) => {
+        const nextContent = window.prompt(
+            '수정할 댓글 내용을 입력하세요.',
+            comment.content
+        );
+        if (nextContent === null) return;
+        if (!nextContent.trim()) {
+            alert('댓글 내용을 입력해주세요.');
+            return;
+        }
+
+        let password = '';
+        if (comment.isGuest) {
+            password = window.prompt(
+                '댓글 작성 비밀번호를 입력하세요.'
+            ) || '';
+            if (!password) return;
+        }
+
+        try {
+            const res = await fetch(
+                `${API_URL}/api/board/comments/${comment.id}`,
+                {
+                    method: 'PUT',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        content: nextContent.trim(),
+                        ...(comment.isGuest
+                            ? { guestPassword: password }
+                            : {})
+                    })
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '댓글 수정에 실패했습니다.');
+                return;
+            }
+            viewPostDetail(selectedPost.id);
+        } catch {
+            alert('댓글 수정 중 오류가 발생했습니다.');
+        }
+    };
+
     const deleteComment = async (comment: any) => {
         let password = '';
         if (comment.isGuest) {
@@ -526,13 +570,22 @@ export default function Board() {
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span>
                                                 {(c.author === currentUser || c.isGuest) && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => deleteComment(c)}
-                                                        className="text-xs text-rose-400 hover:text-rose-300"
-                                                    >
-                                                        삭제
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => editComment(c)}
+                                                            className="text-xs text-sky-400 hover:text-sky-300"
+                                                        >
+                                                            수정
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => deleteComment(c)}
+                                                            className="text-xs text-rose-400 hover:text-rose-300"
+                                                        >
+                                                            삭제
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </div>

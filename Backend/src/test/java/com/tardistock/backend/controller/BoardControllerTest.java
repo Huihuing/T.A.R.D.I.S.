@@ -232,6 +232,70 @@ class BoardControllerTest {
         verify(postRepository, never()).delete(any());
     }
     @Test
+    void guestCanUpdateCommentWithCorrectPassword() {
+        Post post = new Post("203.0.*.*", "제목", "본문");
+        Comment comment = new Comment(
+                post,
+                "198.51.*.*",
+                "댓글손님",
+                "encoded-comment-pass",
+                "기존 댓글"
+        );
+
+        when(commentRepository.findById(1L))
+                .thenReturn(Optional.of(comment));
+        when(passwordEncoder.matches(
+                "comment-pass",
+                "encoded-comment-pass"
+        )).thenReturn(true);
+
+        ResponseEntity<?> response = controller.updateComment(
+                1L,
+                Map.of(
+                        "content", "수정된 댓글",
+                        "guestPassword", "comment-pass"
+                ),
+                null
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("수정된 댓글", comment.getContent());
+        verify(commentRepository).save(comment);
+    }
+
+    @Test
+    void guestCannotUpdateCommentWithWrongPassword() {
+        Post post = new Post("203.0.*.*", "제목", "본문");
+        Comment comment = new Comment(
+                post,
+                "198.51.*.*",
+                "댓글손님",
+                "encoded-comment-pass",
+                "기존 댓글"
+        );
+
+        when(commentRepository.findById(1L))
+                .thenReturn(Optional.of(comment));
+        when(passwordEncoder.matches(
+                "wrong",
+                "encoded-comment-pass"
+        )).thenReturn(false);
+
+        ResponseEntity<?> response = controller.updateComment(
+                1L,
+                Map.of(
+                        "content", "수정 시도",
+                        "guestPassword", "wrong"
+                ),
+                null
+        );
+
+        assertEquals(403, response.getStatusCode().value());
+        assertEquals("기존 댓글", comment.getContent());
+        verify(commentRepository, never()).save(any(Comment.class));
+    }
+
+    @Test
     void guestCannotDeleteCommentWithWrongPassword() {
         Post post = new Post("203.0.*.*", "제목", "본문");
         Comment comment = new Comment(
