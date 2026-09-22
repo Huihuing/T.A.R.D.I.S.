@@ -100,7 +100,7 @@ class EconomyServiceTest {
         assertEquals(true, tradeQuest.get("completed"));
         assertEquals(true, communityQuest.get("completed"));
 
-        verify(trades, never()).findByMember(any());
+        verify(trades, never()).findTop500ByMemberOrderByTradeTimeDesc(any());
         verify(posts, never()).findByMember(any());
         verify(comments, never()).findByMember(any());
     }
