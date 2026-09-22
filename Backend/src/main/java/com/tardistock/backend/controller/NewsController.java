@@ -1,15 +1,15 @@
 package com.tardistock.backend.controller;
 
+import com.tardistock.backend.config.ExternalApiHttpClient;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -36,10 +36,7 @@ public class NewsController {
     private String finnhubToken;
 
     private final RestTemplate restTemplate =
-            new RestTemplateBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
-                    .readTimeout(Duration.ofSeconds(10))
-                    .build();
+            ExternalApiHttpClient.create();
 
     @GetMapping("/global")
     public ResponseEntity<?> getGlobalNews(
