@@ -1,13 +1,13 @@
 package com.tardistock.backend.service;
 
+import com.tardistock.backend.config.ExternalApiHttpClient;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Locale;
@@ -30,10 +30,7 @@ public class FinnhubPriceService {
     private String apiKey;
 
     private final RestTemplate restTemplate =
-            new RestTemplateBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
-                    .readTimeout(Duration.ofSeconds(10))
-                    .build();
+            ExternalApiHttpClient.create();
 
     // 캐시: symbol -> CachedPrice(price, cachedAt)
     private final ConcurrentHashMap<String, CachedPrice> cache = new ConcurrentHashMap<>();
