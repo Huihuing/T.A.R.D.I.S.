@@ -189,3 +189,29 @@ GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 - 수동 deployment를 만든 뒤 `READY` 상태와 실제 페이지를 확인하고 다음 프론트 묶음으로 이동
 
 이 정책의 목적은 Vercel `build-rate-limit`을 피하면서 GitHub 커밋을 개발 기록으로 자유롭게 유지하는 것입니다.
+
+
+### CSP Report-Only 운영 게이트
+
+운영 프론트의 CSP는 즉시 차단 모드로 전환하지 않고 먼저 `Content-Security-Policy-Report-Only`로 관찰합니다.
+
+현재 정책에서 의도적으로 허용하는 외부 출처:
+
+- Google Identity Services: `https://accounts.google.com`
+- TradingView 차트 iframe: `https://s.tradingview.com`
+- Render API/WebSocket: `https://t-a-r-d-i-s.onrender.com`, `wss://t-a-r-d-i-s.onrender.com`
+- 뉴스 썸네일은 여러 외부 제공처를 사용하므로 `img-src https:`를 유지
+
+CSP 위반 보고는 same-origin `/api/security/csp-report`로 보내고 Vercel rewrite가 Render API로 전달합니다.
+백엔드는 legacy `csp-report` payload와 최신 Reporting API 형태를 모두 처리하며 URI의 query/fragment는 로그에 남기지 않습니다.
+
+강제 정책으로 전환하기 전 확인 순서:
+
+1. 프론트 작업 묶음을 수동 Production deployment
+2. 로그인/Google 로그인, Dashboard TradingView, 뉴스 이미지, WebSocket 알림, 게시판 주요 화면 확인
+3. Render 로그에서 CSP 위반을 확인하고 필요한 출처만 최소 추가
+4. 정상 트래픽에서 의미 있는 위반이 없을 때 `Content-Security-Policy-Report-Only`를 `Content-Security-Policy`로 전환
+
+Vite가 생성한 `/assets/*` 해시 파일은 파일명이 변경될 때 URL도 바뀌므로
+`Cache-Control: public, max-age=31536000, immutable`을 적용합니다.
+HTML과 비해시 파일은 Vercel의 재검증 정책을 유지합니다.
