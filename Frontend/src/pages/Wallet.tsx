@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
 import { authFetch, getAuthHeaders } from '../auth';
+import { notify } from '../uiFeedback';
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
@@ -55,9 +56,9 @@ export default function Wallet() {
 
     const handleTransfer = async () => {
         if (isTransferring) return;
-        if (!amount || amount <= 0) return alert('올바른 금액을 입력하세요.');
-        if (!accountPassword) return alert('계좌 비밀번호를 입력해 주세요.');
-        if (!targetUser) return alert('송금 대상 유저명을 입력하세요.');
+        if (!amount || amount <= 0) { notify('올바른 금액을 입력하세요.', 'warning'); return; }
+        if (!accountPassword) { notify('계좌 PIN을 입력해 주세요.', 'warning'); return; }
+        if (!targetUser) { notify('송금 대상 유저명을 입력하세요.', 'warning'); return; }
 
         setIsTransferring(true);
         try {
@@ -73,16 +74,20 @@ export default function Wallet() {
             const data = await res.json();
             if (res.ok && data.status === 'SUCCESS') {
                 setLastReceipt(data);
+                notify(
+                    `${data.toUser}님에게 ${Number(data.amount || 0).toFixed(2)} 송금했습니다.`,
+                    'success'
+                );
                 setAmount('');
                 setTargetUser('');
                 setAccountPassword('');
                 fetchBalance();
                 fetchLedger();
             } else {
-                alert(`오류: ${data.message || '송금에 실패했습니다.'}`);
+                notify(data.message || '송금에 실패했습니다.', 'error');
             }
         } catch {
-            alert('서버와 통신 오류가 발생했습니다.');
+            notify('서버와 통신 오류가 발생했습니다.', 'error');
         } finally {
             setIsTransferring(false);
         }
