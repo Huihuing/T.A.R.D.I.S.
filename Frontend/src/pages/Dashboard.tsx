@@ -1,8 +1,6 @@
-import { API_URL, WS_URL } from '../config';
+import { API_URL } from '../config';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Client } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
 import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -56,29 +54,46 @@ export default function Dashboard() {
     const [isLoadingNews, setIsLoadingNews] = useState(false);
 
     useEffect(() => {
-        const username = localStorage.getItem('username');
-        if (!username) return;
-        const stompClient = new Client({
-            webSocketFactory: () => new SockJS(`${WS_URL}/ws-stomp`),
-            reconnectDelay: 5000,
-            beforeConnect: () => {
-                const token = getStoredToken();
-                stompClient.connectHeaders = token
-                    ? { Authorization: `Bearer ${token}` }
-                    : {};
-            },
-            onConnect: () => {
-                stompClient.subscribe(`/topic/alerts/${username}`, (message) => {
-                    const data = JSON.parse(message.body);
-                    const toastId = Date.now();
-                    setToasts(prev => [...prev, { id: toastId, type: data.type, customMessage: data.message }]);
-                    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== toastId)), 4000);
-                    fetchUserData();
-                });
-            }
-        });
-        stompClient.activate();
-        return () => { stompClient.deactivate(); };
+        const handleNotification = (event: Event) => {
+            const detail =
+                (event as CustomEvent<{
+                    type?: TradeToast['type'];
+                    message?: string;
+                }>).detail;
+
+            if (!detail) return;
+
+            const toastId = Date.now();
+            setToasts(prev => [
+                ...prev,
+                {
+                    id: toastId,
+                    type: detail.type || 'TRANSFER',
+                    customMessage:
+                        detail.message || '새 알림이 도착했습니다.'
+                }
+            ]);
+            window.setTimeout(
+                () =>
+                    setToasts(prev =>
+                        prev.filter(toast => toast.id !== toastId)
+                    ),
+                4000
+            );
+            fetchUserData();
+        };
+
+        window.addEventListener(
+            'tardis:notification',
+            handleNotification
+        );
+
+        return () => {
+            window.removeEventListener(
+                'tardis:notification',
+                handleNotification
+            );
+        };
     }, []);
 
     const showLocalToast = (type: 'BUY' | 'SELL', symbol: string, amount: number, price: number) => {
