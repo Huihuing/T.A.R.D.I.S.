@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { getStoredToken } from '../auth';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Gift, Coins, CheckCircle2, Sparkles, X, Flame, TrendingUp, MessageSquare, Award, LifeBuoy } from 'lucide-react';
@@ -38,7 +39,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
     const [message, setMessage] = useState<string | null>(null);
 
     const getAuthHeaders = () => {
-        const token = localStorage.getItem('token');
+        const token = getStoredToken();
         return {
             'Content-Type': 'application/json',
             ...(token && { 'Authorization': `Bearer ${token}` })
