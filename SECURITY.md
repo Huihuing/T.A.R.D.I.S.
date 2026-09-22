@@ -38,3 +38,17 @@
 
 보안 문제를 발견한 경우 공개 Issue에 비밀정보나 실제 공격 데이터를 게시하지 마세요.
 저장소 소유자에게 비공개 채널로 재현 조건과 영향 범위를 전달해 주세요.
+
+
+## 브라우저 보안 헤더
+
+운영 프론트는 HSTS, `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`, `Permissions-Policy`와 CSP를 적용합니다.
+
+CSP는 기능 호환성을 확인하는 동안 `Content-Security-Policy-Report-Only`로 운영하며,
+legacy `report-uri`와 최신 `Reporting-Endpoints` / `report-to`를 함께 사용합니다.
+위반 로그를 확인한 뒤 필요한 외부 출처만 허용하고, 정상 운영이 확인된 다음 강제 정책으로 전환합니다.
+
+Vite의 해시 기반 `/assets/*` 파일만 장기 immutable 캐시하고,
+백엔드 API 응답은 Spring Security의 `no-store` 정책을 유지해 인증·개인화 데이터가
+공유 CDN 캐시에 저장되지 않도록 합니다.
