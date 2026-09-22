@@ -72,10 +72,13 @@ export default function NotificationCenter() {
             const client = new Client({
                 webSocketFactory: () =>
                     new SockJS(`${WS_URL}/ws-stomp`) as any,
-                connectHeaders: {
-                    Authorization: `Bearer ${token}`
-                },
                 reconnectDelay: 5000,
+                beforeConnect: () => {
+                    const latestToken = getStoredToken();
+                    client.connectHeaders = latestToken
+                        ? { Authorization: `Bearer ${latestToken}` }
+                        : {};
+                },
                 debug: () => {},
                 onConnect: () => {
                     client.subscribe(
