@@ -214,7 +214,7 @@ export default function StockPage() {
 
     const formatKstDateTime = (value?: string | null) => {
         if (!value) return '';
-        const normalized = /[zZ]|[+-]\\d{2}:\\d{2}$/.test(value)
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
             ? value
             : value + '+09:00';
         const date = new Date(normalized);
