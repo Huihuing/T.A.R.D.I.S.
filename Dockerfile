@@ -14,9 +14,9 @@ RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 # Download dependencies
 RUN ./gradlew dependencies --no-daemon || true
 
-# Copy source code and build jar without tests
+# Copy source code, run backend tests, then build the executable jar
 COPY Backend/src src
-RUN ./gradlew bootJar -x test --no-daemon
+RUN ./gradlew test bootJar --no-daemon
 
 # Prepare single app.jar ignoring plain jar
 RUN cp $(ls /app/build/libs/*.jar | grep -v 'plain') /app/app.jar
