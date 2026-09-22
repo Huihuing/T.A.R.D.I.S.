@@ -17,6 +17,48 @@ import static org.mockito.Mockito.*;
 class NotificationServiceTest {
 
     @Test
+    void markAllReadUsesBulkUpdate() {
+        NotificationRepository notifications =
+                mock(NotificationRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        SimpMessagingTemplate messaging =
+                mock(SimpMessagingTemplate.class);
+
+        Member member = new Member(
+                "alice",
+                "pw",
+                "Alice",
+                "alice@example.test",
+                "pin"
+        );
+
+        when(members.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(notifications.markAllReadByMember(
+                eq(member),
+                any(LocalDateTime.class)
+        )).thenReturn(17);
+
+        NotificationService service = new NotificationService(
+                notifications,
+                members,
+                messaging
+        );
+
+        int updated = service.markAllRead("alice");
+
+        assertEquals(17, updated);
+        verify(notifications).markAllReadByMember(
+                eq(member),
+                any(LocalDateTime.class)
+        );
+        verify(notifications, never())
+                .findByMemberAndReadAtIsNull(any());
+        verify(notifications, never())
+                .saveAll(any());
+    }
+
+    @Test
     void recentSecurityReturnsOnlySecurityEvents() {
         NotificationRepository notifications =
                 mock(NotificationRepository.class);
