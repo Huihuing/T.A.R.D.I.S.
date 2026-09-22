@@ -65,6 +65,34 @@ class RefreshCookieOriginFilterTest {
     }
 
     @Test
+    void rejectsUntrustedOriginForSessionRevocation() throws Exception {
+        RefreshCookieOriginFilter filter =
+                new RefreshCookieOriginFilter(
+                        "https://tardis-neon.vercel.app"
+                );
+
+        MockHttpServletRequest request =
+                new MockHttpServletRequest(
+                        "POST",
+                        "/api/auth/sessions/revoke-others"
+                );
+        request.addHeader(
+                "Origin",
+                "https://example.invalid"
+        );
+        MockHttpServletResponse response =
+                new MockHttpServletResponse();
+
+        filter.doFilter(
+                request,
+                response,
+                (req, res) -> {}
+        );
+
+        assertEquals(403, response.getStatus());
+    }
+
+    @Test
     void allowsNonBrowserRequestWithoutOrigin() throws Exception {
         RefreshCookieOriginFilter filter =
                 new RefreshCookieOriginFilter(
