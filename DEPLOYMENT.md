@@ -77,11 +77,11 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 운영 probe는 목적을 분리합니다.
 
 - `/actuator/health/liveness`: 애플리케이션 프로세스 자체의 생존 상태만 확인. DB 같은 외부 의존성은 포함하지 않음.
-- `/actuator/health/readiness`: `readinessState`와 `db`를 확인. 애플리케이션이 실제 요청을 처리할 준비가 됐고 Aiven MySQL 연결도 정상일 때만 준비 상태로 판단.
-- `/actuator/health`: 전체 health 조회용. Render 배포 게이트에는 더 명시적인 readiness endpoint를 사용.
+- `/actuator/health/readiness`: Spring의 `readinessState`만 확인. 애플리케이션 시작/종료 수명주기에 맞춰 실제 트래픽을 받을 수 있는 상태인지 판단.
+- `/actuator/health`: DB를 포함한 전체 health 조회용. Aiven 연결 상태를 함께 점검할 때 사용.
 
 현재 Render 서비스의 Health Check Path가 비어 있으면 Render는 HTTP 애플리케이션 상태가 아니라 TCP 포트 오픈 여부만 검사합니다.
-Render Dashboard의 **Settings → Health Checks → Health Check Path**를 다음 값으로 설정하는 것을 권장합니다.
+Render Dashboard의 **Settings → Health Checks → Health Check Path**는 다음 값으로 설정하는 것을 권장합니다.
 
 ```text
 /actuator/health/readiness
@@ -89,6 +89,11 @@ Render Dashboard의 **Settings → Health Checks → Health Check Path**를 다�
 
 현재 연결된 자동화 권한으로는 Render 서비스의 Health Check Path 자체를 변경할 수 없으므로,
 Dashboard에서 한 번 설정한 뒤 다음 배포에서 readiness가 2xx일 때만 새 인스턴스가 트래픽을 받는지 확인합니다.
+
+Render는 실행 중인 인스턴스가 HTTP health check에 계속 실패하면 트래픽 제외와 재시작도 수행하므로,
+공유 외부 시스템인 Aiven MySQL을 Render의 단일 Health Check Path에 직접 포함하지 않습니다.
+DB 상태는 `/actuator/health` 또는 `/actuator/health/db`로 별도 관찰하고,
+애플리케이션 요청 경로에서는 기존 예외 처리와 캐시/fallback 정책으로 외부 장애를 격리합니다.
 
 ## 3. Vercel 프론트엔드
 
