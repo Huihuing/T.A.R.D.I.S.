@@ -1,5 +1,7 @@
 package com.tardistock.backend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.stereotype.Service;
@@ -8,7 +10,9 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * Finnhub REST API를 통해 실시간 주식 시세를 조회하는 서비스.
@@ -16,6 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 public class FinnhubPriceService {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(FinnhubPriceService.class);
+    private static final Pattern SYMBOL_PATTERN =
+            Pattern.compile("^[A-Z0-9.-]{1,15}$");
 
     @Value("${finnhub.api.key}")
     private String apiKey;
@@ -39,7 +48,12 @@ public class FinnhubPriceService {
      * @return 현재가 (double), 조회 실패 시 0.0
      */
     public double getPrice(String symbol) {
-        CachedPrice cached = cache.get(symbol);
+        String normalized = normalizeSymbol(symbol);
+        if (normalized == null) {
+            return 0.0;
+        }
+
+        CachedPrice cached = cache.get(normalized);
 
         // 캐시가 유효한 경우 즉시 반환
         if (cached != null && cached.cachedAt.plusSeconds(CACHE_SECONDS).isAfter(LocalDateTime.now())) {
@@ -48,26 +62,42 @@ public class FinnhubPriceService {
 
         // Finnhub REST API 호출 (RestTemplate 사용)
         try {
-            String url = "https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + apiKey;
-            Map response = restTemplate.getForObject(url, Map.class);
+            String url = "https://finnhub.io/api/v1/quote?symbol=" + normalized + "&token=" + apiKey;
+            Map<?, ?> response = restTemplate.getForObject(url, Map.class);
 
             if (response != null && response.containsKey("c")) {
                 Object cVal = response.get("c");
                 double currentPrice = Double.parseDouble(cVal.toString());
 
                 if (currentPrice > 0) {
-                    cache.put(symbol, new CachedPrice(currentPrice, LocalDateTime.now()));
-                    System.out.printf("[FinnhubPriceService] %s 실시간 시세 조회 성공: $%.2f%n", symbol, currentPrice);
+                    cache.put(normalized, new CachedPrice(currentPrice, LocalDateTime.now()));
+                    log.debug(
+                            "Finnhub price refreshed for {}",
+                            normalized
+                    );
                     return currentPrice;
                 }
             }
 
         } catch (Exception e) {
-            System.err.printf("[FinnhubPriceService] %s 시세 조회 실패: %s%n", symbol, e.getMessage());
+            log.warn(
+                    "Finnhub price request failed for {}: {}",
+                    normalized,
+                    e.getClass().getSimpleName()
+            );
         }
 
         // API 호출 실패 시 만료된 캐시라도 반환 (없으면 0.0)
         return cached != null ? cached.price : 0.0;
+    }
+
+    private String normalizeSymbol(String symbol) {
+        if (symbol == null) return null;
+        String normalized =
+                symbol.trim().toUpperCase(Locale.ROOT);
+        return SYMBOL_PATTERN.matcher(normalized).matches()
+                ? normalized
+                : null;
     }
 
     /** 캐시 항목 */
