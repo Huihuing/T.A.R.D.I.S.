@@ -300,13 +300,10 @@ public class AuthController {
                             "needsPinSetup", !member.isPinConfigured()
                     ));
         } catch (IllegalArgumentException e) {
+            // Do not clear the cookie here. Another browser tab may have
+            // rotated the shared refresh cookie while this request was
+            // in flight. Logout remains responsible for explicit removal.
             return ResponseEntity.status(401)
-                    .header(
-                            HttpHeaders.SET_COOKIE,
-                            refreshTokenService
-                                    .clearCookie()
-                                    .toString()
-                    )
                     .body(Map.of("message", e.getMessage()));
         }
     }
