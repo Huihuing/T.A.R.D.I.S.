@@ -7,7 +7,8 @@ import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import EconomyModal from '../components/EconomyModal';
-import { getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { notify } from '../uiFeedback';
 
 interface TradeHistory { id: number; tradeType: string; symbol: string; amount: number; price: number; tradeTime: string; }
 interface PortfolioItem { symbol: string; amount: number; averagePrice: number; }
@@ -54,17 +55,18 @@ export default function Dashboard() {
     const [newsIndex, setNewsIndex] = useState(0);
     const [isLoadingNews, setIsLoadingNews] = useState(false);
 
-    const getAuthHeaders = () => {
-        const token = getStoredToken();
-        return { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) };
-    };
-
     useEffect(() => {
         const username = localStorage.getItem('username');
         if (!username) return;
         const stompClient = new Client({
             webSocketFactory: () => new SockJS(`${API_URL}/ws-stomp`),
             reconnectDelay: 5000,
+            beforeConnect: () => {
+                const token = getStoredToken();
+                stompClient.connectHeaders = token
+                    ? { Authorization: `Bearer ${token}` }
+                    : {};
+            },
             onConnect: () => {
                 stompClient.subscribe(`/topic/alerts/${username}`, (message) => {
                     const data = JSON.parse(message.body);
@@ -90,15 +92,15 @@ export default function Dashboard() {
         if (!username) return;
         try {
             const headers = getAuthHeaders();
-            const balRes = await fetch(`${API_URL}/api/trade/balance`, { headers });
+            const balRes = await authFetch(`${API_URL}/api/trade/balance`, { headers });
             setBalance(Number(await balRes.text()) || 0);
             
-            const histRes = await fetch(`${API_URL}/api/trade/history`, { headers });
+            const histRes = await authFetch(`${API_URL}/api/trade/history`, { headers });
             const histData: TradeHistory[] = await histRes.json();
             setHistory(histData);
             if (histData.length > 0) setBuyRatio(Math.round((histData.filter(h => h.tradeType === 'BUY').length / histData.length) * 100));
             
-            const portRes = await fetch(`${API_URL}/api/trade/portfolio`, { headers });
+            const portRes = await authFetch(`${API_URL}/api/trade/portfolio`, { headers });
             setPortfolio(await portRes.json());
         } catch (err) {}
     };
@@ -111,7 +113,7 @@ export default function Dashboard() {
         }
         setIsAssetHistoryLoading(true);
         try {
-            const res = await fetch(API_URL + '/api/portfolio-history?range=' + range, {
+            const res = await authFetch(API_URL + '/api/portfolio-history?range=' + range, {
                 headers: getAuthHeaders()
             });
             const data = await res.json().catch(() => []);
@@ -362,14 +364,14 @@ export default function Dashboard() {
                                     <button 
                                         onClick={async () => {
                                             try {
-                                                const res = await fetch(`${API_URL}/api/trade/relief`, {
+                                                const res = await authFetch(`${API_URL}/api/trade/relief`, {
                                                     method: 'POST',
                                                     headers: getAuthHeaders()
                                                 });
                                                 const data = await res.json();
-                                                alert(data.message);
+                                                notify(data.message);
                                                 if (data.status === 'SUCCESS') fetchUserData();
-                                            } catch(e) { alert('오류가 발생했습니다.'); }
+                                            } catch(e) { notify('오류가 발생했습니다.', 'error'); }
                                         }}
                                         className="bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow animate-pulse"
                                     >
@@ -549,21 +551,21 @@ export default function Dashboard() {
                             <button className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg"
                                 onClick={async () => {
                                     const username = localStorage.getItem('username');
-                                    if (!username) return alert("로그인이 필요합니다.");
+                                    if (!username) return notify('로그인이 필요합니다.', 'warning');
                                     const amt = getValidAmount();
-                                    const res = await fetch(`${API_URL}/api/trade/sell`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
+                                    const res = await authFetch(`${API_URL}/api/trade/sell`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
                                     const data = await res.json();
-                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('SELL', selectedSymbol, amt, currentPrice); } else alert(data.message);
+                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('SELL', selectedSymbol, amt, currentPrice); } else notify(data.message);
                                 }}
                             >SELL {selectedSymbol}</button>
                             <button className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg"
                                 onClick={async () => {
                                     const username = localStorage.getItem('username');
-                                    if (!username) return alert("로그인이 필요합니다.");
+                                    if (!username) return notify('로그인이 필요합니다.', 'warning');
                                     const amt = getValidAmount();
-                                    const res = await fetch(`${API_URL}/api/trade/buy`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
+                                    const res = await authFetch(`${API_URL}/api/trade/buy`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
                                     const data = await res.json();
-                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('BUY', selectedSymbol, amt, currentPrice); } else alert(data.message);
+                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('BUY', selectedSymbol, amt, currentPrice); } else notify(data.message);
                                 }}
                             >BUY {selectedSymbol}</button>
                         </div>
