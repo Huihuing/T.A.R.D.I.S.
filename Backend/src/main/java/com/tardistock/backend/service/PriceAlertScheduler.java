@@ -1,5 +1,8 @@
 package com.tardistock.backend.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.tardistock.backend.entity.PriceAlert;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -10,6 +13,9 @@ import java.util.Set;
 
 @Component
 public class PriceAlertScheduler {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(PriceAlertScheduler.class);
 
     private static final int MAX_SYMBOLS_PER_RUN = 40;
 
@@ -40,9 +46,17 @@ public class PriceAlertScheduler {
         }
 
         for (String symbol : symbols) {
-            double price = finnhubPriceService.getPrice(symbol);
-            if (price > 0) {
-                priceAlertService.triggerMatching(symbol, price);
+            try {
+                double price = finnhubPriceService.getPrice(symbol);
+                if (Double.isFinite(price) && price > 0) {
+                    priceAlertService.triggerMatching(symbol, price);
+                }
+            } catch (Exception e) {
+                log.warn(
+                        "Price-alert batch failed for {}: {}",
+                        symbol,
+                        e.getClass().getSimpleName()
+                );
             }
         }
     }
