@@ -7,6 +7,7 @@ import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import EconomyModal from '../components/EconomyModal';
+import { getStoredToken } from '../auth';
 
 interface TradeHistory { id: number; tradeType: string; symbol: string; amount: number; price: number; tradeTime: string; }
 interface PortfolioItem { symbol: string; amount: number; averagePrice: number; }
@@ -54,7 +55,7 @@ export default function Dashboard() {
     const [isLoadingNews, setIsLoadingNews] = useState(false);
 
     const getAuthHeaders = () => {
-        const token = localStorage.getItem('token');
+        const token = getStoredToken();
         return { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) };
     };
 
@@ -103,7 +104,7 @@ export default function Dashboard() {
     };
 
     const fetchAssetHistory = async (range: '1D' | '1W' | '1M' | 'ALL') => {
-        const token = localStorage.getItem('token');
+        const token = getStoredToken();
         if (!token) {
             setAssetHistory([]);
             return;
