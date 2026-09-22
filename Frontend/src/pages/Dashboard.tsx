@@ -59,7 +59,7 @@ export default function Dashboard() {
         const username = localStorage.getItem('username');
         if (!username) return;
         const stompClient = new Client({
-            webSocketFactory: () => new SockJS(`${API_URL}/ws-stomp`),
+            webSocketFactory: () => new SockJS(`${WS_URL}/ws-stomp`),
             reconnectDelay: 5000,
             beforeConnect: () => {
                 const token = getStoredToken();
