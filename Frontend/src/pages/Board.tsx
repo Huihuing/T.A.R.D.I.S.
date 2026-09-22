@@ -1,7 +1,7 @@
 import { API_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag } from 'lucide-react';
 import { getAuthHeaders } from '../auth';
 
 export default function Board() {
@@ -308,6 +308,61 @@ export default function Board() {
         }
     };
 
+    const reportContent = async (
+        targetType: 'POST' | 'COMMENT',
+        targetId: number
+    ) => {
+        const selectedReason = window.prompt(
+            '신고 사유를 선택해주세요.\n1. 스팸/도배\n2. 욕설/불쾌한 내용\n3. 괴롭힘/공격적 내용\n4. 허위·오해 소지가 있는 정보\n5. 기타',
+            '1'
+        );
+        if (selectedReason === null) return;
+
+        const reasons: Record<string, string> = {
+            '1': 'SPAM',
+            '2': 'ABUSE',
+            '3': 'HARASSMENT',
+            '4': 'MISINFORMATION',
+            '5': 'OTHER'
+        };
+        const reason = reasons[selectedReason.trim()];
+        if (!reason) {
+            alert('1~5 중 하나를 입력해주세요.');
+            return;
+        }
+
+        const detail = window.prompt(
+            '추가 설명이 있으면 입력해주세요. (선택, 최대 500자)',
+            ''
+        );
+        if (detail === null) return;
+        if (detail.length > 500) {
+            alert('추가 설명은 500자 이하로 입력해주세요.');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/api/board/reports`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    targetType,
+                    targetId,
+                    reason,
+                    detail: detail.trim()
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data?.message || '신고 접수에 실패했습니다.');
+                return;
+            }
+            alert('신고가 접수되었습니다. 관리자가 확인할 수 있습니다.');
+        } catch {
+            alert('신고 접수 중 오류가 발생했습니다.');
+        }
+    };
+
     // 💡 수익률 첨부 버튼 로직
     const appendROI = async () => {
         const username = localStorage.getItem('username');
@@ -542,12 +597,21 @@ export default function Board() {
                     <motion.div key="detail" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-slate-800/50 p-6 md:p-10 rounded-3xl border border-slate-700/50 shadow-lg">
                         <div className="flex justify-between items-center mb-6">
                             <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-400 hover:text-white font-bold"><ArrowLeft className="w-5 h-5" /> 목록으로</button>
-                            {(selectedPost.author === currentUser || selectedPost.isGuest) && (
-                                <div className="flex gap-2">
-                                    <button onClick={startEditPost} className="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-white font-bold transition-colors">수정</button>
-                                    <button onClick={deletePost} className="text-sm bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded-lg font-bold transition-colors">삭제</button>
-                                </div>
-                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => reportContent('POST', selectedPost.id)}
+                                    className="text-sm bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
+                                >
+                                    <Flag className="w-3.5 h-3.5" /> 신고
+                                </button>
+                                {(selectedPost.author === currentUser || selectedPost.isGuest) && (
+                                    <>
+                                        <button onClick={startEditPost} className="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-white font-bold transition-colors">수정</button>
+                                        <button onClick={deletePost} className="text-sm bg-red-600/20 hover:bg-red-600/40 text-red-400 px-3 py-1.5 rounded-lg font-bold transition-colors">삭제</button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         <h2 className="text-3xl font-black text-white mb-4">{selectedPost.title}</h2>
                         <div className="flex gap-4 text-sm text-sky-400 font-bold border-b border-slate-700 pb-6 mb-6">
@@ -569,6 +633,13 @@ export default function Board() {
                                             <span className="font-bold text-sky-400 text-sm">{c.author}</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => reportContent('COMMENT', c.id)}
+                                                    className="text-xs text-amber-300 hover:text-amber-200 flex items-center gap-1"
+                                                >
+                                                    <Flag className="w-3 h-3" /> 신고
+                                                </button>
                                                 {(c.author === currentUser || c.isGuest) && (
                                                     <>
                                                         <button
