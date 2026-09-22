@@ -58,7 +58,7 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `MAIL_PORT` | `587` | SMTP 포트 |
 | `JPA_SHOW_SQL` | `false` | SQL 로그 출력 여부 |
 | `JPA_DDL_AUTO` | `update` | Hibernate 스키마 정책. 마이그레이션 도입 후 `validate` 전환 권장 |
-| `JWT_EXPIRATION_MS` | `86400000` | JWT 유효시간(ms), 기본 24시간 |
+| `JWT_EXPIRATION_MS` | `900000` | access JWT 유효시간(ms), 기본 15분. refresh cookie로 로그인 유지 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
 
