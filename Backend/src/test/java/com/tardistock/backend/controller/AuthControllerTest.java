@@ -68,7 +68,8 @@ class AuthControllerTest {
                 emailVerificationService,
                 googleIdentityService,
                 refreshTokenService,
-                notificationService
+                notificationService,
+                "https://tardis-neon.vercel.app"
         );
 
         lenient().when(refreshTokenService.issue(any(Member.class)))
@@ -224,7 +225,8 @@ class AuthControllerTest {
                 mock(EmailVerificationService.class),
                 mock(GoogleIdentityService.class),
                 refreshService,
-                mock(NotificationService.class)
+                mock(NotificationService.class),
+                "https://tardis-neon.vercel.app"
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
@@ -419,8 +421,10 @@ class AuthControllerTest {
                         "유효하지 않은 refresh token입니다."
                 ));
 
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
         ResponseEntity<?> response =
-                authController.refresh("stale-refresh");
+                authController.refresh("stale-refresh", request);
 
         assertEquals(401, response.getStatusCode().value());
         assertNull(
@@ -429,6 +433,53 @@ class AuthControllerTest {
                 )
         );
         verify(refreshTokenService, never()).clearCookie();
+    }
+
+    @Test
+    void refreshRejectsUntrustedOrigin() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Origin", "https://evil.example");
+
+        ResponseEntity<?> response =
+                authController.refresh("some-refresh", request);
+
+        assertEquals(403, response.getStatusCode().value());
+        verify(refreshTokenService, never()).rotate(anyString());
+    }
+
+    @Test
+    void refreshAllowsConfiguredFrontendOrigin() {
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+        when(refreshTokenService.rotate("valid-refresh"))
+                .thenReturn(new RefreshTokenService.RotatedSession(
+                        member,
+                        "next-refresh"
+                ));
+        when(refreshTokenService.buildCookie("next-refresh"))
+                .thenReturn(ResponseCookie.from(
+                        RefreshTokenService.COOKIE_NAME,
+                        "next-refresh"
+                ).httpOnly(true).path("/api/auth").build());
+        when(jwtTokenProvider.createToken("alice"))
+                .thenReturn("next-access");
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(
+                "Origin",
+                "https://tardis-neon.vercel.app"
+        );
+
+        ResponseEntity<?> response =
+                authController.refresh("valid-refresh", request);
+
+        assertEquals(200, response.getStatusCode().value());
+        verify(refreshTokenService).rotate("valid-refresh");
     }
 
     @Test
