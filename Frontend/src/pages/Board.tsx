@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag, X, AlertTriangle } from 'lucide-react';
 import { authFetch, getAuthHeaders } from '../auth';
+import { notify } from '../uiFeedback';
 
 type ManageAction =
     | { type: 'DELETE_POST'; isGuest: boolean }
@@ -61,7 +62,7 @@ export default function Board() {
             );
             const data = await res.json();
             if (!res.ok) {
-                alert(data?.message || '게시글 목록을 불러오지 못했습니다.');
+                notify(data?.message || '게시글 목록을 불러오지 못했습니다.');
                 return;
             }
 
@@ -69,7 +70,7 @@ export default function Board() {
             setTotalPages(Number(data.totalPages) || 0);
             setTotalElements(Number(data.totalElements) || 0);
         } catch {
-            alert('게시글 목록을 불러오는 중 오류가 발생했습니다.');
+            notify('게시글 목록을 불러오는 중 오류가 발생했습니다.', 'error');
         } finally {
             setIsListLoading(false);
         }
@@ -96,13 +97,13 @@ export default function Board() {
             const res = await fetch(`${API_URL}/api/board/posts/${id}`);
             const data = await res.json();
             if (!res.ok) {
-                alert(data?.message || '게시글을 불러오지 못했습니다.');
+                notify(data?.message || '게시글을 불러오지 못했습니다.');
                 return;
             }
             setSelectedPost(data);
             setViewMode('detail');
         } catch {
-            alert('게시글을 불러오는 중 오류가 발생했습니다.');
+            notify('게시글을 불러오는 중 오류가 발생했습니다.', 'error');
         }
     };
 
@@ -110,7 +111,7 @@ export default function Board() {
         e.preventDefault();
         try {
             if (isGuest && (!guestPassword || (!editingPostId && !guestNickname.trim()))) {
-                alert(editingPostId
+                notify(editingPostId
                     ? '작성 비밀번호를 입력해주세요.'
                     : '비회원 닉네임과 작성 비밀번호를 입력해주세요.');
                 return;
@@ -134,7 +135,7 @@ export default function Board() {
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data?.message || '게시글 저장에 실패했습니다.');
+                notify(data?.message || '게시글 저장에 실패했습니다.');
                 return;
             }
 
@@ -145,7 +146,7 @@ export default function Board() {
             setEditingPostId(null);
             setViewMode('list');
         } catch {
-            alert('게시글 저장 중 오류가 발생했습니다.');
+            notify('게시글 저장 중 오류가 발생했습니다.', 'error');
         }
     };
 
@@ -155,7 +156,7 @@ export default function Board() {
 
         try {
             if (isGuest && (!commentGuestNickname.trim() || !commentGuestPassword)) {
-                alert('비회원 닉네임과 작성 비밀번호를 입력해주세요.');
+                notify('비회원 닉네임과 작성 비밀번호를 입력해주세요.', 'warning');
                 return;
             }
 
@@ -175,7 +176,7 @@ export default function Board() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data?.message || '댓글 등록에 실패했습니다.');
+                notify(data?.message || '댓글 등록에 실패했습니다.');
                 return;
             }
 
@@ -183,7 +184,7 @@ export default function Board() {
             setCommentGuestPassword('');
             viewPostDetail(selectedPost.id);
         } catch {
-            alert('댓글 등록 중 오류가 발생했습니다.');
+            notify('댓글 등록 중 오류가 발생했습니다.', 'error');
         }
     };
 
@@ -209,10 +210,10 @@ export default function Board() {
                 const imageUrl = data.url;
                 setContent(prev => prev + `\n![업로드된 이미지](${imageUrl})\n`);
             } else {
-                alert('이미지 업로드에 실패했습니다. (서버 응답 오류)');
+                notify('이미지 업로드에 실패했습니다. (서버 응답 오류)', 'error');
             }
         } catch (error) {
-            alert('이미지 업로드 중 오류가 발생했습니다.');
+            notify('이미지 업로드 중 오류가 발생했습니다.', 'error');
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -275,7 +276,7 @@ export default function Board() {
             : Boolean(manageAction.comment?.isGuest);
 
         if (guestOwned && !managePassword) {
-            alert('작성 비밀번호를 입력해주세요.');
+            notify('작성 비밀번호를 입력해주세요.', 'warning');
             return;
         }
 
@@ -283,7 +284,7 @@ export default function Board() {
             manageAction.type === 'EDIT_COMMENT'
             && !manageCommentContent.trim()
         ) {
-            alert('댓글 내용을 입력해주세요.');
+            notify('댓글 내용을 입력해주세요.', 'warning');
             return;
         }
 
@@ -304,7 +305,7 @@ export default function Board() {
                 );
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                    alert(
+                    notify(
                         data?.message
                         || '게시글 삭제에 실패했습니다.'
                     );
@@ -341,7 +342,7 @@ export default function Board() {
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(
+                notify(
                     data?.message
                     || (isEdit
                         ? '댓글 수정에 실패했습니다.'
@@ -353,7 +354,7 @@ export default function Board() {
             resetManageModal();
             await viewPostDetail(selectedPost.id);
         } catch {
-            alert('콘텐츠 처리 중 오류가 발생했습니다.');
+            notify('콘텐츠 처리 중 오류가 발생했습니다.', 'error');
         } finally {
             setManageSubmitting(false);
         }
@@ -394,16 +395,16 @@ export default function Board() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data?.message || '신고 접수에 실패했습니다.');
+                notify(data?.message || '신고 접수에 실패했습니다.');
                 return;
             }
 
             setReportTarget(null);
             setReportReason('SPAM');
             setReportDetail('');
-            alert('신고가 접수되었습니다. 관리자가 확인할 수 있습니다.');
+            notify('신고가 접수되었습니다. 관리자가 확인할 수 있습니다.', 'success');
         } catch {
-            alert('신고 접수 중 오류가 발생했습니다.');
+            notify('신고 접수 중 오류가 발생했습니다.', 'error');
         } finally {
             setReportSubmitting(false);
         }
@@ -411,10 +412,10 @@ export default function Board() {
     // 💡 수익률 첨부 버튼 로직
     const appendROI = async () => {
         const username = localStorage.getItem('username');
-        if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
+        if (!username || username === 'Guest') return notify('로그인이 필요합니다.', 'warning');
         try {
             const res = await authFetch(`${API_URL}/api/trade/portfolio`, { headers: getAuthHeaders(false) });
-            if (!res.ok) return alert('포트폴리오를 불러오려면 다시 로그인해 주세요.');
+            if (!res.ok) return notify('포트폴리오를 불러오려면 다시 로그인해 주세요.', 'warning');
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
                 ? portfolio.map((p: any) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n') 
