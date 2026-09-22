@@ -29,8 +29,10 @@ public class StockController {
     private static final long QUOTE_CACHE_MS = 10_000L;
     private static final long SYMBOL_CACHE_MS = 6 * 60 * 60 * 1000L;
     private static final long SEARCH_CACHE_MS = 60_000L;
+    private static final long CANDLES_CACHE_MS = 5 * 60 * 1000L;
     private static final int MAX_QUOTE_CACHE_ENTRIES = 1_000;
     private static final int MAX_SEARCH_CACHE_ENTRIES = 200;
+    private static final int MAX_CANDLES_CACHE_ENTRIES = 500;
 
     @Value("${finnhub.api.key}")
     private String finnhubToken;
@@ -40,6 +42,8 @@ public class StockController {
     private final ConcurrentHashMap<String, CacheEntry<Map<?, ?>>> quoteCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry<String>> searchCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CacheEntry<String>> candlesCache =
             new ConcurrentHashMap<>();
     private volatile CacheEntry<String> symbolsCache;
 
@@ -80,6 +84,9 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub quote rate limit reached for {}", normalized);
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(429).body(Map.of(
                     "message", "시세 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
             ));
@@ -89,6 +96,9 @@ public class StockController {
                     normalized,
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "주식 데이터를 일시적으로 불러오지 못했습니다."
             ));
@@ -110,6 +120,14 @@ public class StockController {
                 resolution == null
                         ? "D"
                         : resolution.trim().toUpperCase(Locale.ROOT);
+
+        String candlesCacheKey =
+                normalized + ":" + normalizedResolution;
+        CacheEntry<String> cached =
+                candlesCache.get(candlesCacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
 
         String interval;
         String range;
@@ -156,13 +174,29 @@ public class StockController {
                             String.class
                     );
 
-            return ResponseEntity.ok(response.getBody());
+            String body = response.getBody();
+            if (body != null && !body.isBlank()) {
+                putBounded(
+                        candlesCache,
+                        candlesCacheKey,
+                        new CacheEntry<>(
+                                body,
+                                System.currentTimeMillis()
+                                        + CANDLES_CACHE_MS
+                        ),
+                        MAX_CANDLES_CACHE_ENTRIES
+                );
+            }
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             log.warn(
                     "Yahoo chart request failed for {}: {}",
                     normalized,
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "차트 데이터를 일시적으로 불러오지 못했습니다."
             ));
@@ -194,6 +228,9 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub symbol-list rate limit reached");
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(429).body(Map.of(
                     "message", "종목 목록 제공사 호출 한도를 초과했습니다."
             ));
@@ -202,6 +239,9 @@ public class StockController {
                     "Finnhub symbol-list request failed: {}",
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "전체 종목 목록을 일시적으로 불러오지 못했습니다."
             ));
@@ -253,6 +293,9 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub search rate limit reached");
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(429).body(Map.of(
                     "message",
                     "종목 검색 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
@@ -262,6 +305,9 @@ public class StockController {
                     "Finnhub search request failed: {}",
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message",
                     "종목 검색을 일시적으로 사용할 수 없습니다."
