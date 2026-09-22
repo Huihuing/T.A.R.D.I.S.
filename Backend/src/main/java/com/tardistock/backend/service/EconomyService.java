@@ -177,7 +177,7 @@ public class EconomyService {
         economy.setLastCheckInDate(today);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(wallet.getBalance() + reward);
+        wallet.setBalance(roundMoney(wallet.getBalance() + reward));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
@@ -231,7 +231,7 @@ public class EconomyService {
         economy.setLastBankruptcyClaim(now);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(wallet.getBalance() + validReward);
+        wallet.setBalance(roundMoney(wallet.getBalance() + validReward));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
@@ -338,4 +338,8 @@ public class EconomyService {
                 + " 수령 완료!");
         return res;
     }
+    private double roundMoney(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
 }
