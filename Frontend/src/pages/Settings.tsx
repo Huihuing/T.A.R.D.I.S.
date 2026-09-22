@@ -18,6 +18,7 @@ import {
     getStoredToken,
     logoutSession
 } from '../auth';
+import { confirmAction, notify } from '../uiFeedback';
 
 type AccountSettings = {
     username: string;
@@ -106,11 +107,14 @@ export default function Settings() {
     };
 
     const revokeOtherSessions = async () => {
-        if (!window.confirm(
-            '현재 브라우저를 제외한 다른 로그인 세션을 모두 종료할까요?'
-        )) {
-            return;
-        }
+        const accepted = await confirmAction({
+            title: '다른 로그인 세션 종료',
+            message:
+                '현재 브라우저를 제외한 다른 로그인 세션을 모두 종료할까요?',
+            confirmLabel: '다른 세션 종료',
+            danger: true
+        });
+        if (!accepted) return;
 
         setSessionsRevoking(true);
         try {
@@ -124,14 +128,14 @@ export default function Settings() {
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '다른 로그인 세션 종료에 실패했습니다.');
+                notify(data.message || '다른 로그인 세션 종료에 실패했습니다.');
                 return;
             }
 
-            alert(data.message || '다른 로그인 세션을 종료했습니다.');
+            notify(data.message || '다른 로그인 세션을 종료했습니다.');
             await loadSessions();
         } catch {
-            alert('로그인 세션 정리 중 서버 오류가 발생했습니다.');
+            notify('로그인 세션 정리 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setSessionsRevoking(false);
         }
@@ -195,11 +199,11 @@ export default function Settings() {
         e.preventDefault();
 
         if (newPassword.length < 8 || newPassword.length > 64) {
-            alert('새 비밀번호는 8~64자로 입력해주세요.');
+            notify('새 비밀번호는 8~64자로 입력해주세요.', 'warning');
             return;
         }
         if (newPassword !== confirmPassword) {
-            alert('새 비밀번호 확인 값이 일치하지 않습니다.');
+            notify('새 비밀번호 확인 값이 일치하지 않습니다.', 'warning');
             return;
         }
 
@@ -219,18 +223,18 @@ export default function Settings() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                alert(data.message || '비밀번호 변경에 실패했습니다.');
+                notify(data.message || '비밀번호 변경에 실패했습니다.');
                 return;
             }
 
-            alert(
+            notify(
                 data.message
                 || '비밀번호가 변경되었습니다. 다시 로그인해주세요.'
             );
             await logoutSession();
             navigate('/login', { replace: true });
         } catch {
-            alert('비밀번호 변경 중 서버 오류가 발생했습니다.');
+            notify('비밀번호 변경 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setPasswordLoading(false);
         }
@@ -240,11 +244,11 @@ export default function Settings() {
         e.preventDefault();
 
         if (!/^\d{4}$/.test(newPin)) {
-            alert('새 PIN은 숫자 4자리로 입력해주세요.');
+            notify('새 PIN은 숫자 4자리로 입력해주세요.', 'warning');
             return;
         }
         if (newPin !== confirmPin) {
-            alert('새 PIN 확인 값이 일치하지 않습니다.');
+            notify('새 PIN 확인 값이 일치하지 않습니다.', 'warning');
             return;
         }
 
@@ -264,17 +268,17 @@ export default function Settings() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                alert(data.message || 'PIN 변경에 실패했습니다.');
+                notify(data.message || 'PIN 변경에 실패했습니다.');
                 return;
             }
 
-            alert(data.message || '송금 PIN이 변경되었습니다.');
+            notify(data.message || '송금 PIN이 변경되었습니다.');
             setCurrentPin('');
             setNewPin('');
             setConfirmPin('');
             await loadSettings();
         } catch {
-            alert('PIN 변경 중 서버 오류가 발생했습니다.');
+            notify('PIN 변경 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setPinLoading(false);
         }
@@ -292,12 +296,12 @@ export default function Settings() {
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '보안 인증번호 발송에 실패했습니다.');
+                notify(data.message || '보안 인증번호 발송에 실패했습니다.');
                 return;
             }
-            alert(data.message || '계정 이메일로 인증번호를 전송했습니다.');
+            notify(data.message || '계정 이메일로 인증번호를 전송했습니다.');
         } catch {
-            alert('보안 인증번호 발송 중 서버 오류가 발생했습니다.');
+            notify('보안 인증번호 발송 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setSecurityCodeSending(false);
         }
@@ -306,15 +310,15 @@ export default function Settings() {
     const handlePinReset = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!/^\d{6}$/.test(securityCode)) {
-            alert('이메일 인증번호 6자리를 입력해주세요.');
+            notify('이메일 인증번호 6자리를 입력해주세요.', 'warning');
             return;
         }
         if (!/^\d{4}$/.test(recoveryPin)) {
-            alert('새 PIN은 숫자 4자리로 입력해주세요.');
+            notify('새 PIN은 숫자 4자리로 입력해주세요.', 'warning');
             return;
         }
         if (recoveryPin !== confirmRecoveryPin) {
-            alert('새 PIN 확인 값이 일치하지 않습니다.');
+            notify('새 PIN 확인 값이 일치하지 않습니다.', 'warning');
             return;
         }
 
@@ -330,17 +334,17 @@ export default function Settings() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || 'PIN 재설정에 실패했습니다.');
+                notify(data.message || 'PIN 재설정에 실패했습니다.');
                 return;
             }
-            alert(data.message || '송금 PIN을 재설정했습니다.');
+            notify(data.message || '송금 PIN을 재설정했습니다.');
             setRecoveryMode(null);
             setSecurityCode('');
             setRecoveryPin('');
             setConfirmRecoveryPin('');
             await loadSettings();
         } catch {
-            alert('PIN 재설정 중 서버 오류가 발생했습니다.');
+            notify('PIN 재설정 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setRecoveryLoading(false);
         }
@@ -349,15 +353,15 @@ export default function Settings() {
     const handlePasswordEnable = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!/^\d{6}$/.test(securityCode)) {
-            alert('이메일 인증번호 6자리를 입력해주세요.');
+            notify('이메일 인증번호 6자리를 입력해주세요.', 'warning');
             return;
         }
         if (recoveryPassword.length < 8 || recoveryPassword.length > 64) {
-            alert('새 비밀번호는 8~64자로 입력해주세요.');
+            notify('새 비밀번호는 8~64자로 입력해주세요.', 'warning');
             return;
         }
         if (recoveryPassword !== confirmRecoveryPassword) {
-            alert('새 비밀번호 확인 값이 일치하지 않습니다.');
+            notify('새 비밀번호 확인 값이 일치하지 않습니다.', 'warning');
             return;
         }
 
@@ -373,17 +377,17 @@ export default function Settings() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '일반 비밀번호 추가에 실패했습니다.');
+                notify(data.message || '일반 비밀번호 추가에 실패했습니다.');
                 return;
             }
-            alert(data.message || '일반 비밀번호 로그인이 추가되었습니다.');
+            notify(data.message || '일반 비밀번호 로그인이 추가되었습니다.');
             setRecoveryMode(null);
             setSecurityCode('');
             setRecoveryPassword('');
             setConfirmRecoveryPassword('');
             await loadSettings();
         } catch {
-            alert('일반 비밀번호 추가 중 서버 오류가 발생했습니다.');
+            notify('일반 비밀번호 추가 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setRecoveryLoading(false);
         }
@@ -392,7 +396,7 @@ export default function Settings() {
         response: GoogleCredentialResponse
     ) => {
         if (!response.credential) {
-            alert('Google 계정 정보를 받지 못했습니다.');
+            notify('Google 계정 정보를 받지 못했습니다.', 'error');
             return;
         }
 
@@ -411,14 +415,14 @@ export default function Settings() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                alert(data.message || 'Google 연결에 실패했습니다.');
+                notify(data.message || 'Google 연결에 실패했습니다.');
                 return;
             }
 
-            alert(data.message || 'Google 계정이 연결되었습니다.');
+            notify(data.message || 'Google 계정이 연결되었습니다.');
             await loadSettings();
         } catch {
-            alert('Google 연결 중 서버 오류가 발생했습니다.');
+            notify('Google 연결 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setGoogleLoading(false);
         }
@@ -488,11 +492,14 @@ export default function Settings() {
     }, [settings?.googleConnected, googleClientId]);
 
     const unlinkGoogle = async () => {
-        if (!window.confirm(
-            'Google 계정 연결을 해제할까요? 일반 비밀번호 로그인은 계속 사용할 수 있습니다.'
-        )) {
-            return;
-        }
+        const accepted = await confirmAction({
+            title: 'Google 로그인 연결 해제',
+            message:
+                'Google 계정 연결을 해제할까요? 일반 비밀번호 로그인은 계속 사용할 수 있습니다.',
+            confirmLabel: '연결 해제',
+            danger: true
+        });
+        if (!accepted) return;
 
         setGoogleLoading(true);
         try {
@@ -506,14 +513,14 @@ export default function Settings() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                alert(data.message || 'Google 연결 해제에 실패했습니다.');
+                notify(data.message || 'Google 연결 해제에 실패했습니다.');
                 return;
             }
 
-            alert(data.message || 'Google 연결을 해제했습니다.');
+            notify(data.message || 'Google 연결을 해제했습니다.');
             await loadSettings();
         } catch {
-            alert('Google 연결 해제 중 서버 오류가 발생했습니다.');
+            notify('Google 연결 해제 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setGoogleLoading(false);
         }
