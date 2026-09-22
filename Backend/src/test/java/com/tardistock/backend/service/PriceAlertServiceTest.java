@@ -47,6 +47,22 @@ class PriceAlertServiceTest {
     }
 
     @Test
+    void listUsesBoundedHistoryQuery() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(priceAlertRepository
+                .findTop200ByMemberOrderByCreatedAtDesc(member))
+                .thenReturn(List.of());
+
+        service.list("alice");
+
+        verify(priceAlertRepository)
+                .findTop200ByMemberOrderByCreatedAtDesc(member);
+        verify(priceAlertRepository, never())
+                .findAll();
+    }
+
+    @Test
     void createsNormalizedAlert() {
         when(memberRepository.findByUsername("alice"))
                 .thenReturn(Optional.of(member));
