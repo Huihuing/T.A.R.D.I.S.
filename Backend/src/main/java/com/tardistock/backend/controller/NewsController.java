@@ -28,7 +28,7 @@ public class NewsController {
     private static final int MAX_QUERY_LENGTH = 120;
     private static final long NEWS_CACHE_MS = 5 * 60 * 1000L;
     private static final long NEWS_STALE_MS = 60 * 60 * 1000L;
-    private static final int MAX_NEWS_CACHE_ENTRIES = 100;
+    private static final int MAX_NEWS_CACHE_ENTRIES = 50;
 
     @Value("${naver.api.client-id}")
     private String naverClientId;
