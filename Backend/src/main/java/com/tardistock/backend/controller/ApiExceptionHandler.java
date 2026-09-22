@@ -4,7 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -34,6 +38,17 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler({
+            MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class
+    })
+    public ResponseEntity<?> handleRequestBinding(Exception e) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "message",
+                "요청 파라미터가 올바르지 않습니다."
+        ));
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<?> handleUnreadableBody(
             HttpMessageNotReadableException e) {
@@ -49,6 +64,24 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(413).body(Map.of(
                 "message",
                 "업로드 파일은 5MB 이하만 허용됩니다."
+        ));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<?> handleNotFound(
+            NoResourceFoundException e) {
+        return ResponseEntity.status(404).body(Map.of(
+                "message",
+                "요청한 경로를 찾을 수 없습니다."
+        ));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<?> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(405).body(Map.of(
+                "message",
+                "지원하지 않는 요청 방식입니다."
         ));
     }
 
