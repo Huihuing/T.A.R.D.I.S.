@@ -10,7 +10,7 @@ import java.util.Optional;
 public interface PriceAlertRepository
         extends JpaRepository<PriceAlert, Long> {
 
-    List<PriceAlert> findByMemberOrderByCreatedAtDesc(Member member);
+    List<PriceAlert> findTop200ByMemberOrderByCreatedAtDesc(Member member);
 
     Optional<PriceAlert> findByIdAndMember(Long id, Member member);
 
