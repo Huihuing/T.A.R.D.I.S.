@@ -239,6 +239,38 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsRepeatedCspReports() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 30; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "POST",
+                            "/api/security/csp-report"
+                    );
+            request.setRemoteAddr("203.0.113.60");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "POST",
+                        "/api/security/csp-report"
+                );
+        blocked.setRemoteAddr("203.0.113.60");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
     void countersAreSeparatedByClientIp() throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter();
 
