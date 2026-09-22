@@ -30,6 +30,19 @@ public class NotificationController {
         }
     }
 
+    @GetMapping("/security")
+    public ResponseEntity<?> recentSecurity(
+            Authentication authentication) {
+        try {
+            return ResponseEntity.ok(
+                    notificationService.recentSecurity(
+                            requireUsername(authentication)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/unread-count")
     public ResponseEntity<?> unreadCount(
             Authentication authentication) {
