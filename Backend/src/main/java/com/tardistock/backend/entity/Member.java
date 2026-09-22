@@ -35,6 +35,9 @@ public class Member {
     private String pin;
 
     @JsonIgnore
+    private Boolean emailVerified;
+
+    @JsonIgnore
     private String socialProvider;
 
     @JsonIgnore
@@ -57,6 +60,7 @@ public class Member {
         this.name = name;
         this.email = email;
         this.pin = pin;
+        this.emailVerified = false;
         this.pinConfigured = true;
         this.passwordLoginEnabled = true;
     }
@@ -76,6 +80,14 @@ public class Member {
 
     public String getPin() { return pin; }
     public void setPin(String pin) { this.pin = pin; }
+
+    public boolean isEmailVerified() {
+        return Boolean.TRUE.equals(emailVerified);
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
 
     public String getSocialProvider() { return socialProvider; }
     public void setSocialProvider(String socialProvider) { this.socialProvider = socialProvider; }
