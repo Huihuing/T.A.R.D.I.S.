@@ -10,7 +10,7 @@ import java.util.List;
 public interface TradeHistoryRepository
         extends JpaRepository<TradeHistory, Long> {
 
-    List<TradeHistory> findByMember(Member member);
+    List<TradeHistory> findTop500ByMemberOrderByTradeTimeDesc(Member member);
 
     long countByMember(Member member);
 
