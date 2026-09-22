@@ -84,7 +84,7 @@ export function getAuthHeaders(
     return headers;
 }
 
-export async function refreshAccessToken(): Promise<boolean> {
+async function performAccessTokenRefresh(): Promise<boolean> {
     try {
         const res = await fetch(`${API_URL}/api/auth/refresh`, {
             method: 'POST',
@@ -92,24 +92,43 @@ export async function refreshAccessToken(): Promise<boolean> {
         });
         const data = await res.json().catch(() => ({}));
 
-        if (!res.ok || !data.token || !data.username) {
+        if (res.ok && data.token && data.username) {
+            storeAccessToken(data.token);
+            localStorage.setItem('username', data.username);
+
+            if (data.needsPinSetup) {
+                localStorage.setItem('needsPinSetup', 'true');
+            } else {
+                localStorage.removeItem('needsPinSetup');
+            }
+
+            return true;
+        }
+
+        // A transient server/rate-limit failure must not sign the user out.
+        // Only an authentication failure means the refresh session is unusable.
+        if (res.status === 401) {
             clearAuth();
-            return false;
         }
-
-        storeAccessToken(data.token);
-        localStorage.setItem('username', data.username);
-
-        if (data.needsPinSetup) {
-            localStorage.setItem('needsPinSetup', 'true');
-        } else {
-            localStorage.removeItem('needsPinSetup');
-        }
-
-        return true;
+        return false;
     } catch {
         return false;
     }
+}
+
+export async function refreshAccessToken(): Promise<boolean> {
+    // The refresh cookie is shared by tabs while access tokens live in
+    // per-tab sessionStorage. Serialize cookie rotation across tabs so one
+    // stale request cannot race another tab's successful rotation.
+    if ('locks' in navigator && navigator.locks) {
+        return navigator.locks.request(
+            'tardis-refresh-token',
+            { mode: 'exclusive' },
+            () => performAccessTokenRefresh()
+        );
+    }
+
+    return performAccessTokenRefresh();
 }
 
 export async function logoutSession(): Promise<void> {
