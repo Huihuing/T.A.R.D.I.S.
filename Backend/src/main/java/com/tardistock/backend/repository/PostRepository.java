@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
@@ -17,6 +18,12 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findByMember(Member member);
 
     long countByMember(Member member);
+
+    boolean existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            Member member,
+            LocalDateTime start,
+            LocalDateTime end
+    );
 
     @Query("""
             select p
