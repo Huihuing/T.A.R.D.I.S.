@@ -2,7 +2,7 @@ import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star, Bell, Trash2 } from 'lucide-react';
-import { getAuthHeaders } from '../auth';
+import { getAuthHeaders, getStoredToken } from '../auth';
 
 export default function Watchlist() {
     const [stocks, setStocks] = useState<any[]>([]);
@@ -51,7 +51,7 @@ export default function Watchlist() {
     };
 
     const fetchAlerts = async () => {
-        const token = localStorage.getItem('token');
+        const token = getStoredToken();
         if (!token) {
             setAlerts([]);
             return;
