@@ -1,6 +1,7 @@
 import { API_URL } from './config';
 
 export function clearAuth(): void {
+    sessionStorage.removeItem('token');
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     localStorage.removeItem('needsPinSetup');
@@ -36,14 +37,31 @@ export function isTokenExpired(
     return payload.exp * 1000 <= nowMs;
 }
 
+export function storeAccessToken(token: string): void {
+    sessionStorage.setItem('token', token);
+    localStorage.removeItem('token');
+}
+
 export function getStoredToken(): string | null {
-    const token = localStorage.getItem('token');
+    let token = sessionStorage.getItem('token');
+
+    // One-time migration for users who logged in before access tokens
+    // were moved out of persistent localStorage.
+    if (!token) {
+        const legacyToken = localStorage.getItem('token');
+        if (legacyToken) {
+            token = legacyToken;
+            sessionStorage.setItem('token', legacyToken);
+            localStorage.removeItem('token');
+        }
+    }
+
     if (!token) {
         return null;
     }
 
     if (isTokenExpired(token)) {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         return null;
     }
 
@@ -79,7 +97,7 @@ export async function refreshAccessToken(): Promise<boolean> {
             return false;
         }
 
-        localStorage.setItem('token', data.token);
+        storeAccessToken(data.token);
         localStorage.setItem('username', data.username);
 
         if (data.needsPinSetup) {
