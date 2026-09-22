@@ -2,6 +2,7 @@ package com.tardistock.backend.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -69,11 +70,12 @@ class JwtTokenProviderTest {
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, lifetimeMs);
 
         String token = provider.createToken("alice");
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(SECRET.getBytes(StandardCharsets.UTF_8))
+        Claims claims = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(
+                        SECRET.getBytes(StandardCharsets.UTF_8)))
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
 
         assertEquals(
                 lifetimeMs,
