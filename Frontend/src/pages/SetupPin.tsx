@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { API_URL } from '../config';
-import { getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { notify } from '../uiFeedback';
 import { Home } from 'lucide-react';
 
 export default function SetupPin() {
@@ -20,17 +21,17 @@ export default function SetupPin() {
         e.preventDefault();
 
         if (!/^\d{4}$/.test(pin)) {
-            alert('계좌 PIN은 숫자 4자리로 입력해주세요.');
+            notify('계좌 PIN은 숫자 4자리로 입력해주세요.', 'warning');
             return;
         }
         if (pin !== confirmPin) {
-            alert('PIN 확인 값이 일치하지 않습니다.');
+            notify('PIN 확인 값이 일치하지 않습니다.', 'warning');
             return;
         }
 
         setIsLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/pin/setup`,
                 {
                     method: 'POST',
@@ -41,15 +42,15 @@ export default function SetupPin() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                alert(data.message || 'PIN 설정에 실패했습니다.');
+                notify(data.message || 'PIN 설정에 실패했습니다.', 'error');
                 return;
             }
 
             localStorage.removeItem('needsPinSetup');
-            alert('송금용 계좌 PIN 설정이 완료되었습니다.');
+            notify('송금용 계좌 PIN 설정이 완료되었습니다.', 'success');
             navigate('/dashboard', { replace: true });
         } catch {
-            alert('PIN 설정 중 서버 오류가 발생했습니다.');
+            notify('PIN 설정 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsLoading(false);
         }
