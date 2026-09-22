@@ -1,96 +1,176 @@
 package com.tardistock.backend.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/api/stock")
 public class StockController {
 
-    // 🚨 application-api.yml에 적어두신 핀허브 토큰 변수명을 맞춰주세요! (예: finnhub.api.token)
-    @Value("${finnhub.api.key}") 
+    private static final Logger log =
+            LoggerFactory.getLogger(StockController.class);
+    private static final Pattern SYMBOL_PATTERN =
+            Pattern.compile("^[A-Z0-9.-]{1,15}$");
+
+    @Value("${finnhub.api.key}")
     private String finnhubToken;
 
-    // 📈 실시간 주가 가져오기
-@GetMapping("/quote")
+    @GetMapping("/quote")
     public ResponseEntity<?> getStockQuote(@RequestParam String symbol) {
+        String normalized = normalizeSymbol(symbol);
+        if (normalized == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "올바른 종목 심볼을 입력해주세요."
+            ));
+        }
+
         try {
-            // 💡 1. restTemplate 객체 생성
             RestTemplate restTemplate = new RestTemplate();
-            
-            // 💡 2. 변수명을 21번째 줄에 있는 finnhubToken으로 통일
-            String url = "https://finnhub.io/api/v1/quote?symbol=" + symbol + "&token=" + finnhubToken;
-            
-            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            String url = "https://finnhub.io/api/v1/quote?symbol="
+                    + normalized
+                    + "&token="
+                    + finnhubToken;
+
+            ResponseEntity<Map> response =
+                    restTemplate.getForEntity(url, Map.class);
             return ResponseEntity.ok(response.getBody());
-            
         } catch (HttpClientErrorException.TooManyRequests e) {
-            System.out.println("Finnhub API 호출 한도 초과: 잠시 후 다시 시도하세요.");
-            return ResponseEntity.status(429).body(Map.of("message", "API 호출 한도 초과 (잠시 후 새로고침 해주세요)"));
+            log.warn("Finnhub quote rate limit reached for {}", normalized);
+            return ResponseEntity.status(429).body(Map.of(
+                    "message", "시세 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            ));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("message", "주식 데이터를 불러오지 못했습니다."));
+            log.warn(
+                    "Finnhub quote request failed for {}: {}",
+                    normalized,
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "주식 데이터를 일시적으로 불러오지 못했습니다."
+            ));
         }
     }
-   // 📊 과거 주가 캔들 데이터 가져오기 (야후 파이낸스로 우회!)
+
     @GetMapping("/candles")
     public ResponseEntity<?> getStockCandles(
             @RequestParam(defaultValue = "AAPL") String symbol,
             @RequestParam(defaultValue = "D") String resolution) {
-        try {
-            // 사용자가 누른 버튼(일/주/월)에 맞춰 야후 파이낸스 규격(1d, 1wk, 1mo)으로 변환
-            String interval = "1d";
-            String range = "6mo"; // 일봉은 최근 6개월치
-            
-            if ("W".equals(resolution)) { 
-                interval = "1wk"; 
-                range = "2y";     // 주봉은 최근 2년치
-            } else if ("M".equals(resolution)) { 
-                interval = "1mo"; 
-                range = "5y";     // 월봉은 최근 5년치
-            }
+        String normalized = normalizeSymbol(symbol);
+        if (normalized == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "올바른 종목 심볼을 입력해주세요."
+            ));
+        }
 
-            String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol 
-                       + "?interval=" + interval + "&range=" + range;
-            
+        String normalizedResolution =
+                resolution == null
+                        ? "D"
+                        : resolution.trim().toUpperCase(Locale.ROOT);
+
+        String interval;
+        String range;
+        switch (normalizedResolution) {
+            case "D" -> {
+                interval = "1d";
+                range = "6mo";
+            }
+            case "W" -> {
+                interval = "1wk";
+                range = "2y";
+            }
+            case "M" -> {
+                interval = "1mo";
+                range = "5y";
+            }
+            default -> {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "resolution은 D, W, M 중 하나여야 합니다."
+                ));
+            }
+        }
+
+        try {
+            String url =
+                    "https://query1.finance.yahoo.com/v8/finance/chart/"
+                            + normalized
+                            + "?interval="
+                            + interval
+                            + "&range="
+                            + range;
+
             RestTemplate restTemplate = new RestTemplate();
-            
-            // 🚨 야후 서버가 차단하지 못하도록 브라우저인 척 위장(User-Agent)합니다.
             HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            headers.set(
+                    HttpHeaders.USER_AGENT,
+                    "Mozilla/5.0 (compatible; TARDISStock/1.0)"
+            );
             HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            
+
+            ResponseEntity<String> response =
+                    restTemplate.exchange(
+                            url,
+                            HttpMethod.GET,
+                            entity,
+                            String.class
+                    );
+
             return ResponseEntity.ok(response.getBody());
         } catch (Exception e) {
-            System.out.println("====== 야후 차트 API 에러 ======");
-            System.out.println(e.getMessage());
-            return ResponseEntity.status(500).body("{\"error\": \"차트 데이터 로딩 실패\"}");
+            log.warn(
+                    "Yahoo chart request failed for {}: {}",
+                    normalized,
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "차트 데이터를 일시적으로 불러오지 못했습니다."
+            ));
         }
     }
-// 🌐 핀허브 지원 미국 전체 주식 심볼 리스트 가져오기
+
     @GetMapping("/symbols")
     public ResponseEntity<?> getAllSymbols() {
         try {
-            String url = "https://finnhub.io/api/v1/stock/symbol?exchange=US&token=" + finnhubToken;
-            
+            String url =
+                    "https://finnhub.io/api/v1/stock/symbol"
+                            + "?exchange=US&token="
+                            + finnhubToken;
+
             RestTemplate restTemplate = new RestTemplate();
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            
+            ResponseEntity<String> response =
+                    restTemplate.getForEntity(url, String.class);
+
             return ResponseEntity.ok(response.getBody());
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("Finnhub symbol-list rate limit reached");
+            return ResponseEntity.status(429).body(Map.of(
+                    "message", "종목 목록 제공사 호출 한도를 초과했습니다."
+            ));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body("{\"error\": \"전체 종목 로딩 실패\"}");
+            log.warn(
+                    "Finnhub symbol-list request failed: {}",
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "전체 종목 목록을 일시적으로 불러오지 못했습니다."
+            ));
         }
+    }
+
+    private String normalizeSymbol(String symbol) {
+        if (symbol == null) return null;
+        String normalized =
+                symbol.trim().toUpperCase(Locale.ROOT);
+        return SYMBOL_PATTERN.matcher(normalized).matches()
+                ? normalized
+                : null;
     }
 }
