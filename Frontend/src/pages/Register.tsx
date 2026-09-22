@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { notify } from '../uiFeedback';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Home } from 'lucide-react'; // 💡 아이콘 추가
@@ -17,7 +18,7 @@ export default function Register() {
     const navigate = useNavigate();
 
     const handleSendCode = async () => {
-        if (!email.trim()) return alert('이메일을 입력해주세요.');
+        if (!email.trim()) { notify('이메일을 입력해주세요.', 'warning'); return; }
         setIsSendingCode(true);
         try {
             const res = await fetch(`${API_URL}/api/auth/email/send`, {
@@ -27,15 +28,15 @@ export default function Register() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '인증번호 발송에 실패했습니다.');
+                notify(data.message || '인증번호 발송에 실패했습니다.', 'error');
                 return;
             }
             setEmailSent(true);
             setEmailVerified(false);
             setVerificationCode('');
-            alert('인증번호를 전송했습니다. 메일함을 확인해주세요.');
+            notify('인증번호를 전송했습니다. 메일함을 확인해주세요.', 'success');
         } catch {
-            alert('인증번호 발송 중 서버 오류가 발생했습니다.');
+            notify('인증번호 발송 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsSendingCode(false);
         }
@@ -43,7 +44,8 @@ export default function Register() {
 
     const handleVerifyCode = async () => {
         if (!verificationCode.trim()) {
-            return alert('인증번호를 입력해주세요.');
+            notify('인증번호를 입력해주세요.', 'warning');
+            return;
         }
         try {
             const res = await fetch(`${API_URL}/api/auth/email/verify`, {
@@ -56,20 +58,20 @@ export default function Register() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '이메일 인증에 실패했습니다.');
+                notify(data.message || '이메일 인증에 실패했습니다.', 'error');
                 return;
             }
             setEmailVerified(true);
-            alert('이메일 인증이 완료되었습니다.');
+            notify('이메일 인증이 완료되었습니다.', 'success');
         } catch {
-            alert('이메일 인증 중 서버 오류가 발생했습니다.');
+            notify('이메일 인증 중 서버 오류가 발생했습니다.', 'error');
         }
     };
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!emailVerified) {
-            alert('이메일 인증을 먼저 완료해주세요.');
+            notify('이메일 인증을 먼저 완료해주세요.', 'warning');
             return;
         }
         setIsLoading(true);
@@ -81,13 +83,13 @@ export default function Register() {
             });
             const data = await res.json();
             if (res.ok) {
-                alert('회원가입 성공! 로그인해 주세요.');
+                notify('회원가입이 완료되었습니다. 로그인해 주세요.', 'success');
                 navigate('/login');
             } else {
-                alert(`회원가입 실패: ${data.message || '오류가 발생했습니다.'}`);
+                notify(data.message || '회원가입에 실패했습니다.', 'error');
             }
         } catch (err) {
-            alert('서버 오류가 발생했습니다.');
+            notify('서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsLoading(false);
         }
