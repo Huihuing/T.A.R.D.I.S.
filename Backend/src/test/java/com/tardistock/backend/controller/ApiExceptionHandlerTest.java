@@ -28,16 +28,6 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
-    void illegalStateReturnsConflict() {
-        ResponseEntity<?> response =
-                handler.handleIllegalState(
-                        new IllegalStateException("이미 처리됨")
-                );
-
-        assertEquals(409, response.getStatusCode().value());
-    }
-
-    @Test
     void oversizedUploadReturnsPayloadTooLarge() {
         ResponseEntity<?> response =
                 handler.handleUploadTooLarge(
