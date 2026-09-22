@@ -103,7 +103,7 @@ public class TradeController {
         }
 
         Wallet wallet = walletRepository.findForUpdateByMember(member).orElse(null);
-        double totalCost = price * amount;
+        double totalCost = roundMoney(price * amount);
         if (!Double.isFinite(totalCost) || wallet == null || wallet.getBalance() < totalCost) {
             return fail(response, "잔액이 부족합니다!");
         }
@@ -111,7 +111,7 @@ public class TradeController {
         Portfolio portfolio = portfolioRepository.findForUpdateByMemberAndSymbol(member, symbol)
                 .orElse(new Portfolio(member, symbol, 0, 0.0));
 
-        wallet.setBalance(wallet.getBalance() - totalCost);
+        wallet.setBalance(roundMoney(wallet.getBalance() - totalCost));
         walletRepository.save(wallet);
 
         double newTotalValue =
@@ -191,8 +191,8 @@ public class TradeController {
             portfolioRepository.save(portfolio);
         }
 
-        double proceeds = price * amount;
-        wallet.setBalance(wallet.getBalance() + proceeds);
+        double proceeds = roundMoney(price * amount);
+        wallet.setBalance(roundMoney(wallet.getBalance() + proceeds));
         walletRepository.save(wallet);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -257,6 +257,10 @@ public class TradeController {
         } catch (NumberFormatException e) {
             return -1;
         }
+    }
+
+    private double roundMoney(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     private Map<String, String> fail(Map<String, String> response, String message) {
