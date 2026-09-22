@@ -25,3 +25,39 @@
 
 현재 연결된 관리 도구에서는 운영 MySQL의 실제 DDL을 안전하게 읽어 baseline과 비교할 수 없습니다.
 따라서 스키마를 추측해 migration을 작성하는 것보다 기존 데이터를 보존하는 것이 우선입니다.
+
+
+## 코드 준비 상태
+
+Flyway 전환을 위해 애플리케이션 의존성과 설정 골격은 추가되어 있습니다.
+기본값은 운영 호환성을 위해 다음과 같이 유지합니다.
+
+```text
+FLYWAY_ENABLED=false
+JPA_DDL_AUTO=update
+```
+
+따라서 현재 배포에서는 Flyway가 스키마를 변경하지 않습니다.
+운영 DB의 schema-only dump를 확보하고 baseline SQL을 검증한 뒤에만 아래처럼 전환합니다.
+
+```text
+FLYWAY_ENABLED=true
+JPA_DDL_AUTO=validate
+```
+
+### 전환 체크리스트
+
+- 현재 Aiven MySQL schema-only dump 확보
+- 테이블/인덱스/FK/unique/default/charset/collation 비교
+- 개발용 복제 DB에 baseline 적용
+- 애플리케이션을 `ddl-auto=validate`로 기동
+- 전체 백엔드 테스트 통과 확인
+- 운영 DB 백업 확인
+- Render 환경변수 전환
+- 이후 스키마 변경은 버전 migration만 사용
+
+### 금지 사항
+
+- 운영 DB 스키마를 추측해서 `V1__baseline.sql`을 작성하지 않습니다.
+- 실제 dump 확인 전 `FLYWAY_ENABLED=true`로 전환하지 않습니다.
+- Flyway와 Hibernate `ddl-auto=update`를 동시에 스키마 변경 도구로 사용하지 않습니다.
