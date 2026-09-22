@@ -10,6 +10,7 @@ export default function Wallet() {
     const [accountPassword, setAccountPassword] = useState<string>('');
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
     const [ledger, setLedger] = useState<any[]>([]);
+    const [lastReceipt, setLastReceipt] = useState<any | null>(null);
 
     const getAuthHeaders = () => {
         const token = localStorage.getItem('token');
@@ -72,7 +73,7 @@ export default function Wallet() {
             });
             const data = await res.json();
             if (res.ok && data.status === 'SUCCESS') {
-                alert(data.message);
+                setLastReceipt(data);
                 setAmount('');
                 setTargetUser('');
                 setAccountPassword('');
@@ -177,6 +178,32 @@ export default function Wallet() {
                 </div>
             </div>
 
+            {lastReceipt && (
+                <div className="mt-8 max-w-4xl bg-emerald-500/10 p-6 rounded-3xl border border-emerald-500/30 shadow-xl">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300 font-black">Transfer Receipt</p>
+                            <h2 className="text-xl font-extrabold text-white mt-1">송금 완료</h2>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setLastReceipt(null)}
+                            className="text-xs text-slate-400 hover:text-white"
+                        >
+                            닫기
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <ReceiptRow label="거래번호" value={`#${lastReceipt.transactionId}`} />
+                        <ReceiptRow label="처리시각" value={formatKstDateTime(lastReceipt.transferredAt)} />
+                        <ReceiptRow label="보내는 사람" value={lastReceipt.fromUser} />
+                        <ReceiptRow label="받는 사람" value={lastReceipt.toUser} />
+                        <ReceiptRow label="송금액" value={`${Number(lastReceipt.amount || 0).toFixed(2)}`} />
+                        <ReceiptRow label="송금 후 잔액" value={`${Number(lastReceipt.newBalance || 0).toFixed(2)}`} />
+                    </div>
+                </div>
+            )}
+
             <div className="mt-8 max-w-4xl bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 shadow-xl">
                 <div className="flex items-center gap-2 mb-5">
                     <History className="w-5 h-5 text-sky-400" />
@@ -217,6 +244,16 @@ export default function Wallet() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+
+function ReceiptRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="bg-slate-950/40 border border-slate-700/50 rounded-xl px-4 py-3">
+            <p className="text-xs text-slate-500 font-bold">{label}</p>
+            <p className="text-sm text-slate-100 font-mono font-bold mt-1 break-all">{value}</p>
         </div>
     );
 }
