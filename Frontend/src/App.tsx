@@ -17,6 +17,7 @@ import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 import ForgotPassword from './pages/ForgotPassword';
 import Admin from './pages/Admin';
+import Settings from './pages/Settings';
 import { getStoredToken, refreshAccessToken } from './auth';
 
 export default function App() {
@@ -97,6 +98,7 @@ export default function App() {
                     path="/profile/:username"
                     element={<Profile />}
                   />
+                  <Route path="/settings" element={<Settings />} />
                   <Route path="/admin" element={<Admin />} />
                 </Routes>
                 <NotificationCenter />

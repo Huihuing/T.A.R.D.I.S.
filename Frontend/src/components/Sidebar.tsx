@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy, ShieldCheck } from 'lucide-react';
+import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy, ShieldCheck, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAuthHeaders, logoutSession } from '../auth';
 import { API_URL } from '../config';
@@ -42,6 +42,9 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
         { path: '/wallet', label: 'Wallet', icon: Wallet },
         { path: '/news', label: 'News', icon: Newspaper },
         { path: '/stock', label: 'Stock & Fund', icon: TrendingUp },
+        ...(isGuest
+            ? []
+            : [{ path: '/settings', label: 'Settings', icon: SettingsIcon }]),
         ...(isAdmin
             ? [{ path: '/admin', label: 'Admin', icon: ShieldCheck }]
             : []),
