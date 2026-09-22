@@ -1,5 +1,7 @@
 package com.tardistock.backend.controller;
 
+import com.tardistock.backend.config.ExternalApiHttpClient;
+
 import com.tardistock.backend.entity.Comment;
 import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Post;
@@ -7,6 +9,8 @@ import com.tardistock.backend.repository.CommentRepository;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.PostRepository;
 import com.tardistock.backend.service.NotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -15,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +30,9 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/board")
 public class BoardController {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(BoardController.class);
 
     private static final long MAX_IMAGE_SIZE = 5L * 1024L * 1024L;
     private static final java.util.Set<String> ALLOWED_IMAGE_TYPES =
@@ -47,6 +55,8 @@ public class BoardController {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
+    private final RestTemplate externalApiHttp =
+            ExternalApiHttpClient.create();
 
     @Value("${freeimage.api.key:}")
     private String freeimageApiKey;
@@ -417,11 +427,8 @@ public class BoardController {
                     requestEntity =
                     new org.springframework.http.HttpEntity<>(map, headers);
 
-            org.springframework.web.client.RestTemplate restTemplate =
-                    new org.springframework.web.client.RestTemplate();
-
             ResponseEntity<Map<String, Object>> response =
-                    restTemplate.exchange(
+                    externalApiHttp.exchange(
                             url,
                             org.springframework.http.HttpMethod.POST,
                             requestEntity,
@@ -442,8 +449,12 @@ public class BoardController {
             return ResponseEntity.status(502).body(
                     Map.of("message", "이미지 업로드에 실패했습니다."));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(
-                    Map.of("message", "이미지 업로드 중 서버 오류가 발생했습니다."));
+            log.warn(
+                    "Image upload provider request failed: {}",
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(
+                    Map.of("message", "이미지 업로드 서비스를 일시적으로 사용할 수 없습니다."));
         }
     }
 
