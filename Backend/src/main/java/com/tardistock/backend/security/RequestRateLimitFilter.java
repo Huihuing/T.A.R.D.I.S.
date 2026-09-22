@@ -50,6 +50,8 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
 
     private static final Policy STOCK_READ_POLICY = new Policy(120, 60);
     private static final Policy NEWS_READ_POLICY = new Policy(60, 60);
+    private static final Policy PROFILE_READ_POLICY = new Policy(60, 60);
+    private static final Policy LEADERBOARD_READ_POLICY = new Policy(20, 60);
 
     private final ConcurrentHashMap<String, WindowCounter> counters =
             new ConcurrentHashMap<>();
@@ -121,6 +123,12 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         }
         if ("GET".equals(method) && uri.startsWith("/api/news/")) {
             return NEWS_READ_POLICY;
+        }
+        if ("GET".equals(method) && uri.startsWith("/api/profile/")) {
+            return PROFILE_READ_POLICY;
+        }
+        if ("GET".equals(method) && "/api/leaderboard".equals(uri)) {
+            return LEADERBOARD_READ_POLICY;
         }
         return null;
     }
