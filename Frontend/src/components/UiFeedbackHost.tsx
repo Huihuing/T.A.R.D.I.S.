@@ -5,10 +5,10 @@ import {
     Info,
     XCircle
 } from 'lucide-react';
-import {
+import { subscribeUiFeedback } from '../uiFeedback';
+import type {
     ConfirmFeedback,
     FeedbackTone,
-    subscribeUiFeedback,
     ToastFeedback
 } from '../uiFeedback';
 
