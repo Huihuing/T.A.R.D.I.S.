@@ -52,7 +52,7 @@ export default function App() {
 
     restoreIfNeeded();
 
-    const interval = window.setInterval(async () => {
+    const refreshForSignedInUser = async () => {
       const username = localStorage.getItem('username');
       if (!username || username === 'Guest') return;
 
@@ -60,11 +60,23 @@ export default function App() {
       if (active && refreshed) {
         setSessionRevision(prev => prev + 1);
       }
-    }, 10 * 60 * 1000);
+    };
+
+    const interval = window.setInterval(
+      refreshForSignedInUser,
+      10 * 60 * 1000
+    );
+
+    const refreshOnFocus = () => {
+      refreshForSignedInUser();
+    };
+
+    window.addEventListener('focus', refreshOnFocus);
 
     return () => {
       active = false;
       window.clearInterval(interval);
+      window.removeEventListener('focus', refreshOnFocus);
     };
   }, []);
 
