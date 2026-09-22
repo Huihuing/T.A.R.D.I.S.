@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { notify } from '../uiFeedback';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, KeyRound, Mail } from 'lucide-react';
@@ -14,7 +15,7 @@ export default function ForgotPassword() {
 
     const sendCode = async () => {
         if (!email.trim()) {
-            alert('이메일을 입력해주세요.');
+            notify('이메일을 입력해주세요.', 'warning');
             return;
         }
 
@@ -27,17 +28,18 @@ export default function ForgotPassword() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '인증번호 요청에 실패했습니다.');
+                notify(data.message || '인증번호 요청에 실패했습니다.', 'error');
                 return;
             }
 
             setSent(true);
-            alert(
+            notify(
                 data.message
-                || '재설정 가능한 계정이 있다면 인증번호를 전송했습니다.'
+                || '재설정 가능한 계정이 있다면 인증번호를 전송했습니다.',
+                'success'
             );
         } catch {
-            alert('인증번호 요청 중 서버 오류가 발생했습니다.');
+            notify('인증번호 요청 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsSending(false);
         }
@@ -47,11 +49,11 @@ export default function ForgotPassword() {
         e.preventDefault();
 
         if (!/^\d{6}$/.test(code.trim())) {
-            alert('6자리 인증번호를 입력해주세요.');
+            notify('6자리 인증번호를 입력해주세요.', 'warning');
             return;
         }
         if (newPassword.length < 8 || newPassword.length > 64) {
-            alert('새 비밀번호는 8~64자로 입력해주세요.');
+            notify('새 비밀번호는 8~64자로 입력해주세요.', 'warning');
             return;
         }
 
@@ -69,14 +71,14 @@ export default function ForgotPassword() {
 
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '비밀번호 재설정에 실패했습니다.');
+                notify(data.message || '비밀번호 재설정에 실패했습니다.', 'error');
                 return;
             }
 
-            alert(data.message || '비밀번호가 변경되었습니다.');
+            notify(data.message || '비밀번호가 변경되었습니다.', 'success');
             navigate('/login');
         } catch {
-            alert('비밀번호 재설정 중 서버 오류가 발생했습니다.');
+            notify('비밀번호 재설정 중 서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsResetting(false);
         }
