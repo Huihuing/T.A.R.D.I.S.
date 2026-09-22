@@ -165,6 +165,7 @@ public class AuthController {
                 normalizedEmail,
                 passwordEncoder.encode(pin)
         );
+        member.setEmailVerified(true);
         memberRepository.save(member);
         Wallet wallet = new Wallet(member, 10000.0);
         walletRepository.save(wallet);
@@ -248,6 +249,7 @@ public class AuthController {
                 }
                 member.setSocialProvider(GOOGLE);
                 member.setSocialSubject(identity.subject());
+                member.setEmailVerified(true);
                 memberRepository.save(member);
             }
 
@@ -340,6 +342,7 @@ public class AuthController {
         );
         member.setSocialProvider(GOOGLE);
         member.setSocialSubject(identity.subject());
+        member.setEmailVerified(true);
         member.setPinConfigured(false);
         member.setPasswordLoginEnabled(false);
         memberRepository.save(member);
