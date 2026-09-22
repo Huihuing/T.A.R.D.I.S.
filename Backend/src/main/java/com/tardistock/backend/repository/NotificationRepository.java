@@ -13,6 +13,11 @@ public interface NotificationRepository
     List<Notification> findTop50ByMemberOrderByCreatedAtDesc(
             Member member);
 
+    List<Notification> findTop20ByMemberAndTypeOrderByCreatedAtDesc(
+            Member member,
+            String type
+    );
+
     long countByMemberAndReadAtIsNull(Member member);
 
     Optional<Notification> findByIdAndMember(
