@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { authFetch, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Gift, Coins, CheckCircle2, Sparkles, X, Flame, TrendingUp, MessageSquare, Award, LifeBuoy } from 'lucide-react';
