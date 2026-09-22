@@ -207,6 +207,38 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsRepeatedSessionRevocationRequests() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "POST",
+                            "/api/auth/sessions/revoke-others"
+                    );
+            request.setRemoteAddr("203.0.113.52");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "POST",
+                        "/api/auth/sessions/revoke-others"
+                );
+        blocked.setRemoteAddr("203.0.113.52");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
     void countersAreSeparatedByClientIp() throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter();
 
