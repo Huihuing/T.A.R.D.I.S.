@@ -38,14 +38,6 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
     const [loading, setLoading] = useState<boolean>(false);
     const [message, setMessage] = useState<string | null>(null);
 
-    const getAuthHeaders = () => {
-        const token = getStoredToken();
-        return {
-            'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` })
-        };
-    };
-
     const fetchStatus = async () => {
         try {
             const res = await authFetch(`${API_URL}/api/economy/status`, { headers: getAuthHeaders() });
