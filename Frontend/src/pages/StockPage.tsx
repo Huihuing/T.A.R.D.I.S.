@@ -2,7 +2,7 @@ import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Search, Star, ClipboardList, Trash2 } from 'lucide-react';
-import { getAuthHeaders } from '../auth';
+import { getAuthHeaders, getStoredToken } from '../auth';
 
 interface StockSymbol { symbol: string; description: string; displaySymbol: string; }
 
@@ -70,7 +70,7 @@ export default function StockPage() {
     };
 
     const fetchLimitOrders = async () => {
-        const token = localStorage.getItem('token');
+        const token = getStoredToken();
         if (!token) {
             setLimitOrders([]);
             return;
@@ -346,7 +346,7 @@ export default function StockPage() {
                 </div>
             )}
 
-            {localStorage.getItem("token") && (
+            {getStoredToken() && (
                 <div className="mt-8 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5">
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                         <div className="flex items-center gap-2">
