@@ -18,7 +18,7 @@ import static org.mockito.Mockito.*;
 class RefreshTokenServiceTest {
 
     @Test
-    void secureProductionCookieUsesSameSiteNone() {
+    void secureProductionCookieUsesSameSiteLax() {
         RefreshTokenRepository repository =
                 mock(RefreshTokenRepository.class);
         RefreshTokenService service =
@@ -30,7 +30,7 @@ class RefreshTokenServiceTest {
         String value = cookie.toString();
         assertTrue(value.contains("HttpOnly"));
         assertTrue(value.contains("Secure"));
-        assertTrue(value.contains("SameSite=None"));
+        assertTrue(value.contains("SameSite=Lax"));
         assertTrue(value.contains("Path=/api/auth"));
     }
 
@@ -52,7 +52,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void clearCookieMatchesCrossSitePolicy() {
+    void clearCookieMatchesSameSitePolicy() {
         RefreshTokenRepository repository =
                 mock(RefreshTokenRepository.class);
         RefreshTokenService service =
