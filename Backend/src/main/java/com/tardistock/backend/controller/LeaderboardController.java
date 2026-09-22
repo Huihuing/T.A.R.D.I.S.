@@ -25,11 +25,13 @@ import java.util.stream.Collectors;
 public class LeaderboardController {
 
     private static final double INITIAL_BALANCE = 10_000.0;
+    private static final long LEADERBOARD_CACHE_MS = 30_000L;
 
     private final MemberRepository memberRepository;
     private final WalletRepository walletRepository;
     private final PortfolioRepository portfolioRepository;
     private final FinnhubPriceService finnhubPriceService;
+    private volatile CacheEntry leaderboardCache;
 
     public LeaderboardController(
             MemberRepository memberRepository,
@@ -45,6 +47,12 @@ public class LeaderboardController {
     @GetMapping
     @Transactional(readOnly = true)
     public ResponseEntity<?> getLeaderboard() {
+        CacheEntry cached = leaderboardCache;
+        if (cached != null
+                && cached.expiresAt() > System.currentTimeMillis()) {
+            return ResponseEntity.ok(cached.value());
+        }
+
         List<Member> members = memberRepository.findAll();
 
         Map<Long, Wallet> walletsByMemberId =
@@ -123,6 +131,15 @@ public class LeaderboardController {
             ));
         }
 
+        leaderboardCache = new CacheEntry(
+                List.copyOf(result),
+                System.currentTimeMillis() + LEADERBOARD_CACHE_MS
+        );
+
         return ResponseEntity.ok(result);
     }
+
+    private record CacheEntry(
+            List<Map<String, Object>> value,
+            long expiresAt) {}
 }
