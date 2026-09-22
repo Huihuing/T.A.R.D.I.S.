@@ -68,20 +68,16 @@ export default function StockPage() {
             setLimitOrders([]);
             return;
         }
-
         try {
             const res = await fetch(API_URL + '/api/limit-orders', {
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => []);
-            if (res.ok && Array.isArray(data)) {
-                setLimitOrders(data);
-            }
+            setLimitOrders(res.ok && Array.isArray(data) ? data : []);
         } catch {
             setLimitOrders([]);
         }
     };
-
     useEffect(() => { 
         fetchBookmarks();
         fetchLimitOrders();
@@ -151,15 +147,8 @@ export default function StockPage() {
 
     const createLimitOrder = async () => {
         if (!selectedStock?.symbol) return;
-        if (!orderAmount || orderAmount <= 0) {
-            alert('주문 수량을 올바르게 입력해주세요.');
-            return;
-        }
-        if (!orderPrice || orderPrice <= 0) {
-            alert('지정가를 올바르게 입력해주세요.');
-            return;
-        }
-
+        if (!orderAmount || orderAmount <= 0) return alert('주문 수량을 올바르게 입력해주세요.');
+        if (!orderPrice || orderPrice <= 0) return alert('지정가를 올바르게 입력해주세요.');
         setIsOrderSaving(true);
         try {
             const res = await fetch(API_URL + '/api/limit-orders', {
@@ -173,17 +162,8 @@ export default function StockPage() {
                 })
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(data.message || '지정가 주문 등록에 실패했습니다.');
-                return;
-            }
-
-            alert(
-                selectedStock.symbol + ' '
-                + Number(orderAmount) + '주 '
-                + (orderSide === 'BUY' ? '매수' : '매도')
-                + ' 지정가 주문을 등록했습니다.'
-            );
+            if (!res.ok) return alert(data.message || '지정가 주문 등록에 실패했습니다.');
+            alert(selectedStock.symbol + ' ' + Number(orderAmount) + '주 ' + (orderSide === 'BUY' ? '매수' : '매도') + ' 지정가 주문을 등록했습니다.');
             setOrderAmount('');
             setOrderPrice('');
             await fetchLimitOrders();
@@ -201,16 +181,12 @@ export default function StockPage() {
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(data.message || '주문 취소에 실패했습니다.');
-                return;
-            }
+            if (!res.ok) return alert(data.message || '주문 취소에 실패했습니다.');
             await fetchLimitOrders();
         } catch {
             alert('주문 취소 중 오류가 발생했습니다.');
         }
     };
-
     return (
         <div className="p-4 sm:p-6 md:p-8 min-h-screen text-slate-200 bg-[#0b1120] relative">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
@@ -283,58 +259,30 @@ export default function StockPage() {
                 </div>
             )}
 
-            {localStorage.getItem('token') && (
+            {localStorage.getItem("token") && (
                 <div className="mt-8 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5">
                     <div className="flex items-center gap-2 mb-4">
                         <ClipboardList className="w-5 h-5 text-sky-400" />
                         <h2 className="font-extrabold text-white">지정가 주문 내역</h2>
-                        <span className="text-xs text-slate-500">
-                            대기 {limitOrders.filter(order => order.status === 'PENDING').length}건
-                        </span>
+                        <span className="text-xs text-slate-500">대기 {limitOrders.filter(order => order.status === 'PENDING').length}건</span>
                     </div>
-
                     {limitOrders.length === 0 ? (
-                        <p className="text-sm text-slate-500">
-                            아직 등록된 지정가 주문이 없습니다.
-                        </p>
+                        <p className="text-sm text-slate-500">아직 등록된 지정가 주문이 없습니다.</p>
                     ) : (
                         <div className="flex flex-col gap-2">
                             {limitOrders.map(order => (
-                                <div
-                                    key={order.id}
-                                    className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3"
-                                >
+                                <div key={order.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3">
                                     <div>
-                                        <p className="font-bold text-white">
-                                            {order.symbol} · {order.amount}주 · {order.side === 'BUY' ? '매수' : '매도'}
-                                        </p>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            지정가 ${Number(order.limitPrice).toFixed(2)}
-                                            {order.fillPrice
-                                                ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2)
-                                                : ''}
-                                        </p>
+                                        <p className="font-bold text-white">{order.symbol} · {order.amount}주 · {order.side === 'BUY' ? '매수' : '매도'}</p>
+                                        <p className="text-xs text-slate-500 mt-1">지정가 ${Number(order.limitPrice).toFixed(2)}{order.fillPrice ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2) : ''}</p>
                                     </div>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${order.status === 'PENDING'
-                                        ? 'bg-amber-500/15 text-amber-400'
-                                        : order.status === 'FILLED'
-                                            ? 'bg-emerald-500/15 text-emerald-400'
-                                            : 'bg-slate-700 text-slate-400'}`}>
-                                        {order.status}
-                                    </span>
+                                    <span className={'text-xs font-bold px-2 py-1 rounded-lg ' + (order.status === 'PENDING' ? 'bg-amber-500/15 text-amber-400' : order.status === 'FILLED' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700 text-slate-400')}>{order.status}</span>
                                     {order.status === 'PENDING' ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => cancelLimitOrder(order.id)}
-                                            className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg"
-                                            aria-label="지정가 주문 취소"
-                                        >
+                                        <button type="button" onClick={() => cancelLimitOrder(order.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg" aria-label="지정가 주문 취소">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     ) : (
-                                        <span className="text-xs text-slate-500 md:text-right">
-                                            {order.resultMessage || ''}
-                                        </span>
+                                        <span className="text-xs text-slate-500 md:text-right">{order.resultMessage || ''}</span>
                                     )}
                                 </div>
                             ))}
@@ -342,7 +290,6 @@ export default function StockPage() {
                     )}
                 </div>
             )}
-
             <AnimatePresence>
                 {selectedStock && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
@@ -382,60 +329,18 @@ export default function StockPage() {
                                         <ClipboardList className="w-4 h-4 text-sky-400" />
                                         <h3 className="font-bold text-white text-sm">지정가 주문</h3>
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setOrderSide('BUY')}
-                                            className={`py-2 rounded-lg font-bold text-sm ${orderSide === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
-                                        >
-                                            지정가 매수
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setOrderSide('SELL')}
-                                            className={`py-2 rounded-lg font-bold text-sm ${orderSide === 'SELL' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400'}`}
-                                        >
-                                            지정가 매도
-                                        </button>
+                                        <button type="button" onClick={() => setOrderSide('BUY')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매수</button>
+                                        <button type="button" onClick={() => setOrderSide('SELL')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'SELL' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매도</button>
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            step="1"
-                                            value={orderAmount}
-                                            onChange={e => setOrderAmount(
-                                                e.target.value === '' ? '' : Number(e.target.value)
-                                            )}
-                                            placeholder="수량"
-                                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none"
-                                        />
-                                        <input
-                                            type="number"
-                                            min="0.01"
-                                            step="0.01"
-                                            value={orderPrice}
-                                            onChange={e => setOrderPrice(
-                                                e.target.value === '' ? '' : Number(e.target.value)
-                                            )}
-                                            placeholder="지정가"
-                                            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none"
-                                        />
+                                        <input type="number" min="1" step="1" value={orderAmount} onChange={e => setOrderAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder="수량" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
+                                        <input type="number" min="0.01" step="0.01" value={orderPrice} onChange={e => setOrderPrice(e.target.value === "" ? "" : Number(e.target.value))} placeholder="지정가" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
                                     </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={createLimitOrder}
-                                        disabled={isOrderSaving}
-                                        className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50"
-                                    >
+                                    <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
                                         {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
                                     </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-                                        매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.
-                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -444,3 +349,4 @@ export default function StockPage() {
             </AnimatePresence>
         </div>
     );
+}
