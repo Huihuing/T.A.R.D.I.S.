@@ -31,6 +31,40 @@ class SecurityReportControllerTest {
     }
 
     @Test
+    void acceptsReportingApiPayload() {
+        String body = """
+                [
+                  {
+                    "age": 12,
+                    "type": "csp-violation",
+                    "url": "https://tardis-neon.vercel.app/dashboard",
+                    "body": {
+                      "effectiveDirective": "frame-src",
+                      "blockedURL": "https://example.invalid/frame?token=secret#x",
+                      "sourceFile": "https://tardis-neon.vercel.app/assets/index.js?build=1",
+                      "lineNumber": 44
+                    }
+                  }
+                ]
+                """;
+
+        ResponseEntity<Void> response =
+                controller.cspReport(body);
+
+        assertEquals(204, response.getStatusCode().value());
+    }
+
+    @Test
+    void ignoresOversizedPayloadWithoutFailingReporter() {
+        String body = "x".repeat(16_385);
+
+        ResponseEntity<Void> response =
+                controller.cspReport(body);
+
+        assertEquals(204, response.getStatusCode().value());
+    }
+
+    @Test
     void acceptsMalformedPayloadWithoutFailingReporter() {
         ResponseEntity<Void> response =
                 controller.cspReport("{not-json");
