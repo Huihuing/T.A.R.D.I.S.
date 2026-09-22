@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { API_URL } from '../config';
+import { API_URL, WS_URL } from '../config';
 import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
 
 type NotificationItem = {
@@ -71,7 +71,7 @@ export default function NotificationCenter() {
         if (!isGuest && token) {
             const client = new Client({
                 webSocketFactory: () =>
-                    new SockJS(`${API_URL}/ws-stomp`) as any,
+                    new SockJS(`${WS_URL}/ws-stomp`) as any,
                 connectHeaders: {
                     Authorization: `Bearer ${token}`
                 },
