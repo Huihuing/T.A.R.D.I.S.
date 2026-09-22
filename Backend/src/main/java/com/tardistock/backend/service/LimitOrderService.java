@@ -189,7 +189,7 @@ public class LimitOrderService {
             Wallet wallet,
             double marketPrice) {
 
-        double totalCost = marketPrice * order.getAmount();
+        double totalCost = roundMoney(marketPrice * order.getAmount());
         if (!Double.isFinite(totalCost)
                 || wallet.getBalance() < totalCost) {
             reject(order, "체결 시점의 잔액이 부족하여 주문이 취소되었습니다.");
@@ -208,7 +208,7 @@ public class LimitOrderService {
                         0.0
                 ));
 
-        wallet.setBalance(wallet.getBalance() - totalCost);
+        wallet.setBalance(roundMoney(wallet.getBalance() - totalCost));
         walletRepository.save(wallet);
 
         double newTotalValue =
@@ -260,8 +260,8 @@ public class LimitOrderService {
             portfolioRepository.save(portfolio);
         }
 
-        double proceeds = marketPrice * order.getAmount();
-        wallet.setBalance(wallet.getBalance() + proceeds);
+        double proceeds = roundMoney(marketPrice * order.getAmount());
+        wallet.setBalance(roundMoney(wallet.getBalance() + proceeds));
         walletRepository.save(wallet);
 
         recordFill(
