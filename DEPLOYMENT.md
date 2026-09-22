@@ -135,9 +135,10 @@ GitHub Actions 사용량을 줄이기 위해 일반 push/PR에서는 Actions CI�
 
 1. GitHub `main`에 커밋
 2. Vercel이 `Frontend`를 빌드하고 Production 배포
-3. Render가 루트 `Dockerfile`로 백엔드를 빌드·기동
-4. Vercel이 `READY`, Render가 `live`인지 확인
-5. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
+3. Render가 루트 `Dockerfile`에서 `./gradlew test bootJar --no-daemon`을 실행
+4. 백엔드 테스트가 모두 통과한 경우에만 Render 이미지 빌드·기동 진행
+5. Vercel이 `READY`, Render가 `live`인지 확인
+6. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
 
 GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 필요할 때만 `workflow_dispatch`로 수동 실행합니다.
