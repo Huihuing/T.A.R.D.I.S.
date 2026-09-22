@@ -5,8 +5,10 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
+import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
+import com.tardistock.backend.service.RefreshTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -15,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -29,6 +32,8 @@ class AccountControllerTest {
         PasswordEncoder encoder = mock(PasswordEncoder.class);
         NotificationService notifications = mock(NotificationService.class);
         LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
 
         Member sender = new Member(
                 "alice",
@@ -73,7 +78,9 @@ class AccountControllerTest {
                 members,
                 encoder,
                 notifications,
-                ledger
+                ledger,
+                refreshTokens,
+                google
         );
 
         ResponseEntity<?> response = controller.transfer(
@@ -82,11 +89,7 @@ class AccountControllerTest {
                         "amount", 750.0,
                         "accountPassword", "1234"
                 ),
-                new UsernamePasswordAuthenticationToken(
-                        "alice",
-                        null,
-                        List.of()
-                )
+                auth("alice")
         );
 
         assertEquals(200, response.getStatusCode().value());
@@ -111,6 +114,248 @@ class AccountControllerTest {
                 eq(receiver),
                 eq("TRANSFER"),
                 contains("$750.00")
+        );
+    }
+
+    @Test
+    void settingsReturnsCredentialState() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+        member.setEmailVerified(true);
+        member.setSocialProvider("GOOGLE");
+        member.setSocialSubject("google-subject");
+
+        when(members.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google
+        );
+
+        ResponseEntity<?> response = controller.settings(auth("alice"));
+
+        assertEquals(200, response.getStatusCode().value());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body =
+                (Map<String, Object>) response.getBody();
+        assertEquals("alice", body.get("username"));
+        assertEquals("alice@example.test", body.get("email"));
+        assertEquals(true, body.get("emailVerified"));
+        assertEquals(true, body.get("pinConfigured"));
+        assertEquals(true, body.get("passwordLoginEnabled"));
+        assertEquals(true, body.get("googleConnected"));
+    }
+
+    @Test
+    void changePasswordRevokesRefreshSessions() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-old",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(encoder.matches("old-password", "encoded-old"))
+                .thenReturn(true);
+        when(encoder.matches("new-password", "encoded-old"))
+                .thenReturn(false);
+        when(encoder.encode("new-password"))
+                .thenReturn("encoded-new");
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google
+        );
+
+        ResponseEntity<?> response = controller.changePassword(
+                Map.of(
+                        "currentPassword", "old-password",
+                        "newPassword", "new-password"
+                ),
+                auth("alice")
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("encoded-new", member.getPassword());
+        verify(members).save(member);
+        verify(refreshTokens).revokeAll(member);
+    }
+
+    @Test
+    void changePinRejectsWrongCurrentPin() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(encoder.matches("0000", "encoded-pin"))
+                .thenReturn(false);
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google
+        );
+
+        ResponseEntity<?> response = controller.changePin(
+                Map.of(
+                        "currentPin", "0000",
+                        "newPin", "5678"
+                ),
+                auth("alice")
+        );
+
+        assertEquals(401, response.getStatusCode().value());
+        verify(members, never()).save(any(Member.class));
+    }
+
+    @Test
+    void googleLinkRejectsDifferentEmail() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(google.verify("credential"))
+                .thenReturn(new GoogleIdentityService.GoogleIdentity(
+                        "google-subject",
+                        "other@example.test",
+                        "Other"
+                ));
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google
+        );
+
+        ResponseEntity<?> response = controller.linkGoogle(
+                Map.of("credential", "credential"),
+                auth("alice")
+        );
+
+        assertEquals(409, response.getStatusCode().value());
+        verify(members, never()).save(any(Member.class));
+    }
+
+    @Test
+    void googleOnlyAccountCannotUnlinkGoogle() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+
+        Member member = new Member(
+                "g_alice",
+                "random-password",
+                "Alice",
+                "alice@example.test",
+                "random-pin"
+        );
+        member.setSocialProvider("GOOGLE");
+        member.setSocialSubject("google-subject");
+        member.setPasswordLoginEnabled(false);
+
+        when(members.findByUsernameForUpdate("g_alice"))
+                .thenReturn(Optional.of(member));
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google
+        );
+
+        ResponseEntity<?> response = controller.unlinkGoogle(
+                auth("g_alice")
+        );
+
+        assertEquals(409, response.getStatusCode().value());
+        assertEquals("GOOGLE", member.getSocialProvider());
+        verify(members, never()).save(any(Member.class));
+    }
+
+    private static UsernamePasswordAuthenticationToken auth(
+            String username) {
+        return new UsernamePasswordAuthenticationToken(
+                username,
+                null,
+                List.of()
         );
     }
 }
