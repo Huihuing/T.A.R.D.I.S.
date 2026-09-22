@@ -69,7 +69,11 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         }
 
         String clientIp = getClientIp(request);
-        String key = request.getMethod() + ":" + request.getRequestURI() + ":" + clientIp;
+        String key = request.getMethod()
+                + ":"
+                + rateLimitBucket(request)
+                + ":"
+                + clientIp;
         long now = Instant.now().getEpochSecond();
 
         WindowCounter counter = counters.computeIfAbsent(
@@ -131,6 +135,22 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             return LEADERBOARD_READ_POLICY;
         }
         return null;
+    }
+
+    private String rateLimitBucket(HttpServletRequest request) {
+        String method = request.getMethod();
+        String uri = request.getRequestURI();
+
+        if ("GET".equals(method) && uri.startsWith("/api/stock/")) {
+            return "/api/stock/*";
+        }
+        if ("GET".equals(method) && uri.startsWith("/api/news/")) {
+            return "/api/news/*";
+        }
+        if ("GET".equals(method) && uri.startsWith("/api/profile/")) {
+            return "/api/profile/*";
+        }
+        return uri;
     }
 
     private String getClientIp(HttpServletRequest request) {
