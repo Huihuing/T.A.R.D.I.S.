@@ -75,6 +75,13 @@ public class WebSocketConfig
                             authorizeSubscription(accessor);
                         }
 
+                        if (StompCommand.SEND.equals(
+                                accessor.getCommand())) {
+                            throw new MessagingException(
+                                    "Client WebSocket messages are not supported"
+                            );
+                        }
+
                         return message;
                     }
                 }
@@ -117,7 +124,9 @@ public class WebSocketConfig
         if (destination == null
                 || !destination.startsWith(
                         "/topic/alerts/")) {
-            return;
+            throw new MessagingException(
+                    "Unsupported WebSocket subscription destination"
+            );
         }
 
         if (accessor.getUser() == null) {
