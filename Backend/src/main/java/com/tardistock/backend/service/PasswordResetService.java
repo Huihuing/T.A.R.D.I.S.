@@ -82,7 +82,7 @@ public class PasswordResetService {
         );
 
         reset.setEmail(email);
-        reset.setCodeHash(passwordEncoder.encode(code));
+        reset.setCodeHash(passwordEncoder.encode(code + ":PASSWORD_RESET"));
         reset.setExpiresAt(now.plusMinutes(10));
         reset.setLastSentAt(now);
         reset.setAttempts(0);
@@ -189,7 +189,9 @@ public class PasswordResetService {
         }
 
         reset.setAttempts(reset.getAttempts() + 1);
-        if (!passwordEncoder.matches(code, reset.getCodeHash())) {
+        if (!passwordEncoder.matches(
+                code + ":ACCOUNT_SECURITY",
+                reset.getCodeHash())) {
             resetRepository.save(reset);
             throw invalidRequest();
         }
@@ -240,7 +242,9 @@ public class PasswordResetService {
         }
 
         reset.setAttempts(reset.getAttempts() + 1);
-        if (!passwordEncoder.matches(code, reset.getCodeHash())) {
+        if (!passwordEncoder.matches(
+                code + ":PASSWORD_RESET",
+                reset.getCodeHash())) {
             resetRepository.save(reset);
             throw invalidRequest();
         }
