@@ -4,6 +4,7 @@ import com.tardistock.backend.entity.EmailVerification;
 import com.tardistock.backend.repository.EmailVerificationRepository;
 import com.tardistock.backend.repository.MemberRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -89,7 +90,13 @@ public class EmailVerificationService {
                         + "인증번호는 10분 동안 유효합니다.\n"
                         + "본인이 요청하지 않았다면 이 메일을 무시해주세요."
         );
-        mailSender.send(message);
+        try {
+            mailSender.send(message);
+        } catch (MailException e) {
+            throw new IllegalStateException(
+                    "이메일 발송 서비스를 일시적으로 사용할 수 없습니다."
+            );
+        }
     }
 
     @Transactional
