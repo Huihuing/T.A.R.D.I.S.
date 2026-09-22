@@ -1,13 +1,7 @@
-name: CI
+name: CI (Manual Fallback)
 
 on:
-  push:
-    branches:
-      - main
-      - "maintenance/**"
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
