@@ -42,6 +42,12 @@ T.A.R.D.I.S.는 **실시간 시장 데이터 기반 모의투자, 가상 자산 
 - **External APIs**: Finnhub, Naver Open API, FreeImage, Google Identity Services, TradingView
 - **Deployment**: Vercel + Render + Aiven
 
+## CI / 배포 검증
+
+- **Vercel**: Frontend 프로덕션 빌드/배포 검증
+- **Render**: Spring Boot Docker 빌드/기동 검증
+- **GitHub Actions**: 자동 실행하지 않고 필요할 때만 수동 fallback으로 사용
+
 ## 라이브 서비스
 
 - Frontend: https://tardis-neon.vercel.app
