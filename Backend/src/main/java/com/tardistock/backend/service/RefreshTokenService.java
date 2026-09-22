@@ -106,7 +106,7 @@ public class RefreshTokenService {
         return ResponseCookie.from(COOKIE_NAME, rawToken)
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("Lax")
+                .sameSite(cookieSecure ? "None" : "Lax")
                 .path("/api/auth")
                 .maxAge(Duration.ofDays(ttlDays))
                 .build();
@@ -116,7 +116,7 @@ public class RefreshTokenService {
         return ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("Lax")
+                .sameSite(cookieSecure ? "None" : "Lax")
                 .path("/api/auth")
                 .maxAge(Duration.ZERO)
                 .build();
