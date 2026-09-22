@@ -30,6 +30,10 @@ public class StockController {
     private static final long SYMBOL_CACHE_MS = 6 * 60 * 60 * 1000L;
     private static final long SEARCH_CACHE_MS = 60_000L;
     private static final long CANDLES_CACHE_MS = 5 * 60 * 1000L;
+    private static final long QUOTE_STALE_MS = 5 * 60 * 1000L;
+    private static final long SEARCH_STALE_MS = 10 * 60 * 1000L;
+    private static final long CANDLES_STALE_MS = 60 * 60 * 1000L;
+    private static final long SYMBOL_STALE_MS = 24 * 60 * 60 * 1000L;
     private static final int MAX_QUOTE_CACHE_ENTRIES = 1_000;
     private static final int MAX_SEARCH_CACHE_ENTRIES = 200;
     private static final int MAX_CANDLES_CACHE_ENTRIES = 500;
@@ -84,7 +88,7 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub quote rate limit reached for {}", normalized);
-            if (cached != null) {
+            if (isUsableStale(cached, QUOTE_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(429).body(Map.of(
@@ -96,7 +100,7 @@ public class StockController {
                     normalized,
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached, QUOTE_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -194,7 +198,7 @@ public class StockController {
                     normalized,
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached, CANDLES_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -228,7 +232,7 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub symbol-list rate limit reached");
-            if (cached != null) {
+            if (isUsableStale(cached, SYMBOL_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(429).body(Map.of(
@@ -239,7 +243,7 @@ public class StockController {
                     "Finnhub symbol-list request failed: {}",
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached, SYMBOL_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -293,7 +297,7 @@ public class StockController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub search rate limit reached");
-            if (cached != null) {
+            if (isUsableStale(cached, SEARCH_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(429).body(Map.of(
@@ -305,7 +309,7 @@ public class StockController {
                     "Finnhub search request failed: {}",
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached, SEARCH_STALE_MS)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -337,6 +341,14 @@ public class StockController {
     private boolean isFresh(CacheEntry<?> entry) {
         return entry != null
                 && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private boolean isUsableStale(
+            CacheEntry<?> entry,
+            long staleAllowanceMs) {
+        return entry != null
+                && entry.expiresAt() + staleAllowanceMs
+                > System.currentTimeMillis();
     }
 
     private <T> void putBounded(
