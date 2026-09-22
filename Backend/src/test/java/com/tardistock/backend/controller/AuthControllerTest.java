@@ -8,6 +8,7 @@ import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.EmailVerificationService;
 import com.tardistock.backend.service.GoogleIdentityService;
+import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,8 @@ class AuthControllerTest {
     private GoogleIdentityService googleIdentityService;
     @Mock
     private RefreshTokenService refreshTokenService;
+    @Mock
+    private NotificationService notificationService;
 
     private AuthController authController;
 
@@ -64,7 +67,8 @@ class AuthControllerTest {
                 ledgerService,
                 emailVerificationService,
                 googleIdentityService,
-                refreshTokenService
+                refreshTokenService,
+                notificationService
         );
 
         lenient().when(refreshTokenService.issue(any(Member.class)))
@@ -219,7 +223,8 @@ class AuthControllerTest {
                 mock(LedgerService.class),
                 mock(EmailVerificationService.class),
                 mock(GoogleIdentityService.class),
-                refreshService
+                refreshService,
+                mock(NotificationService.class)
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
@@ -405,6 +410,45 @@ class AuthControllerTest {
         assertFalse(created.get().isPinConfigured());
         verifyNoInteractions(emailVerificationService);
         verify(walletRepository, times(2)).save(any(Wallet.class));
+    }
+
+    @Test
+    void revokeOtherSessionsCreatesSecurityNotification() {
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(memberRepository.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(refreshTokenService.revokeOtherSessions(
+                member,
+                "current-refresh"
+        )).thenReturn(2L);
+
+        var authentication =
+                new org.springframework.security.authentication
+                        .UsernamePasswordAuthenticationToken(
+                                "alice",
+                                null,
+                                java.util.List.of()
+                        );
+
+        ResponseEntity<?> response =
+                authController.revokeOtherSessions(
+                        "current-refresh",
+                        authentication
+                );
+
+        assertEquals(200, response.getStatusCode().value());
+        verify(notificationService).create(
+                member,
+                "SECURITY",
+                "다른 로그인 세션 2개가 종료되었습니다."
+        );
     }
 
 }
