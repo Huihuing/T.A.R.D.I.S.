@@ -8,6 +8,7 @@ import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.EmailVerificationService;
 import com.tardistock.backend.service.GoogleIdentityService;
+import com.tardistock.backend.service.RefreshTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,8 @@ class AuthControllerTest {
     private EmailVerificationService emailVerificationService;
     @Mock
     private GoogleIdentityService googleIdentityService;
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     private AuthController authController;
 
@@ -59,7 +62,8 @@ class AuthControllerTest {
                 jwtTokenProvider,
                 ledgerService,
                 emailVerificationService,
-                googleIdentityService
+                googleIdentityService,
+                refreshTokenService
         );
     }
 
@@ -195,7 +199,8 @@ class AuthControllerTest {
                 provider,
                 mock(LedgerService.class),
                 mock(EmailVerificationService.class),
-                mock(GoogleIdentityService.class)
+                mock(GoogleIdentityService.class),
+                mock(RefreshTokenService.class)
         );
 
         ResponseEntity<?> loginResponse = controller.login(Map.of(
