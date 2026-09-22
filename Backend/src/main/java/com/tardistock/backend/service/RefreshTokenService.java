@@ -184,7 +184,7 @@ public class RefreshTokenService {
         return ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite(cookieSecure ? "None" : "Lax")
+                .sameSite("Lax")
                 .path("/api/auth")
                 .maxAge(Duration.ZERO)
                 .build();
