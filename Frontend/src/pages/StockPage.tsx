@@ -1,8 +1,10 @@
 import { API_URL, WS_URL } from '../config';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Search, Star, ClipboardList, Trash2 } from 'lucide-react';
-import { getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { confirmAction, notify } from '../uiFeedback';
 
 interface StockSymbol { symbol: string; description: string; displaySymbol: string; }
 
@@ -10,6 +12,7 @@ const ALL_SYMBOLS = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'A
 const BATCH_SIZE = 4;
 
 export default function StockPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [stocks, setStocks] = useState<any[]>([]);
     const [loadedCount, setLoadedCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +40,10 @@ export default function StockPage() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return;
         try {
-            const res = await fetch(`${API_URL}/api/bookmark`, { headers: getAuthHeaders(false) });
+            const res = await authFetch(
+                `${API_URL}/api/bookmark`,
+                { headers: getAuthHeaders(false) }
+            );
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) setBookmarks(data);
@@ -76,9 +82,10 @@ export default function StockPage() {
             return;
         }
         try {
-            const res = await fetch(API_URL + '/api/limit-orders', {
-                headers: getAuthHeaders(false)
-            });
+            const res = await authFetch(
+                API_URL + '/api/limit-orders',
+                { headers: getAuthHeaders(false) }
+            );
             const data = await res.json().catch(() => []);
             setLimitOrders(res.ok && Array.isArray(data) ? data : []);
         } catch {
@@ -99,19 +106,75 @@ export default function StockPage() {
         fetchAllSymbols();
     }, []);
 
+    useEffect(() => {
+        const symbol = searchParams.get('symbol')?.trim().toUpperCase();
+        if (!symbol) return;
+
+        let active = true;
+        const openRequestedSymbol = async () => {
+            setIsSearching(true);
+            try {
+                const quoteRes = await fetch(
+                    `${API_URL}/api/stock/quote?symbol=${encodeURIComponent(symbol)}`
+                );
+                if (quoteRes.status === 429) {
+                    notify('API 호출 한도를 초과했습니다.', 'warning');
+                    return;
+                }
+                const quoteData = await quoteRes.json();
+                if (!active) return;
+                if (quoteData.c === 0 && quoteData.h === 0) {
+                    notify('시세 데이터를 제공하지 않는 종목입니다.', 'warning');
+                    return;
+                }
+                setSelectedStock({
+                    symbol,
+                    description: '',
+                    ...quoteData
+                });
+            } catch {
+                if (active) {
+                    notify('종목 정보를 불러오는 중 오류가 발생했습니다.', 'error');
+                }
+            } finally {
+                if (active) setIsSearching(false);
+            }
+        };
+
+        openRequestedSymbol();
+        return () => {
+            active = false;
+        };
+    }, [searchParams]);
+
     const handleLoadMore = () => fetchStockBatch(loadedCount, loadedCount + BATCH_SIZE);
 
     const filteredSymbols = allSymbols.filter(s => s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || s.description.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
 
     const executeSearch = async (targetSymbol: string) => {
-        setSearchQuery(''); setIsDropdownOpen(false); setIsSearching(true);
+        setSearchQuery('');
+        setIsDropdownOpen(false);
+        setIsSearching(true);
+        setSearchParams(
+            { symbol: targetSymbol.toUpperCase() },
+            { replace: true }
+        );
         try {
             const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${targetSymbol}`);
-            if (quoteRes.status === 429) return alert("API 호출 한도를 초과했습니다.");
+            if (quoteRes.status === 429) {
+                notify('API 호출 한도를 초과했습니다.', 'warning');
+                return;
+            }
             const quoteData = await quoteRes.json();
-            if (quoteData.c === 0 && quoteData.h === 0) alert("시세 데이터를 제공하지 않는 종목입니다.");
+            if (quoteData.c === 0 && quoteData.h === 0) {
+                notify('시세 데이터를 제공하지 않는 종목입니다.', 'warning');
+            }
             else setSelectedStock({ symbol: targetSymbol, description: allSymbols.find(s => s.symbol === targetSymbol)?.description || '', ...quoteData });
-        } catch (error) { alert("검색 중 오류가 발생했습니다."); } finally { setIsSearching(false); }
+        } catch {
+            notify('검색 중 오류가 발생했습니다.', 'error');
+        } finally {
+            setIsSearching(false);
+        }
     };
 
     const handleFormSearch = async (e: React.FormEvent) => {
@@ -124,8 +187,12 @@ export default function StockPage() {
                 const searchRes = await fetch(`${API_URL}/api/stock/search?query=${searchQuery.trim()}`);
                 const searchData = await searchRes.json();
                 if (searchData.result && searchData.result.length > 0) executeSearch(searchData.result[0].symbol);
-                else alert("결과가 없습니다.");
-            } catch (err) { alert("서버 오류"); } finally { setIsSearching(false); }
+                else notify('검색 결과가 없습니다.', 'info');
+            } catch {
+                notify('검색 중 서버 오류가 발생했습니다.', 'error');
+            } finally {
+                setIsSearching(false);
+            }
         }
     };
 
@@ -133,10 +200,13 @@ export default function StockPage() {
     const toggleBookmark = async (e: React.MouseEvent, symbol: string, price: number) => {
         e.stopPropagation(); // 카드 클릭(모달 오픈) 방지
         const username = localStorage.getItem('username');
-        if (!username || username === 'Guest') return alert("로그인이 필요합니다.");
+        if (!username || username === 'Guest') {
+            notify('로그인이 필요합니다.', 'warning');
+            return;
+        }
         
         try {
-            const res = await fetch(`${API_URL}/api/bookmark/toggle`, {
+            const res = await authFetch(`${API_URL}/api/bookmark/toggle`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({ symbol, price: price || 0 })
@@ -154,11 +224,17 @@ export default function StockPage() {
 
     const createLimitOrder = async () => {
         if (!selectedStock?.symbol) return;
-        if (!orderAmount || orderAmount <= 0) return alert('주문 수량을 올바르게 입력해주세요.');
-        if (!orderPrice || orderPrice <= 0) return alert('지정가를 올바르게 입력해주세요.');
+        if (!orderAmount || orderAmount <= 0) {
+            notify('주문 수량을 올바르게 입력해주세요.', 'warning');
+            return;
+        }
+        if (!orderPrice || orderPrice <= 0) {
+            notify('지정가를 올바르게 입력해주세요.', 'warning');
+            return;
+        }
         setIsOrderSaving(true);
         try {
-            const res = await fetch(API_URL + '/api/limit-orders', {
+            const res = await authFetch(API_URL + '/api/limit-orders', {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -169,13 +245,21 @@ export default function StockPage() {
                 })
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) return alert(data.message || '지정가 주문 등록에 실패했습니다.');
-            alert(selectedStock.symbol + ' ' + Number(orderAmount) + '주 ' + (orderSide === 'BUY' ? '매수' : '매도') + ' 지정가 주문을 등록했습니다.');
+            if (!res.ok) {
+                notify(data.message || '지정가 주문 등록에 실패했습니다.', 'error');
+                return;
+            }
+            notify(
+                selectedStock.symbol + ' ' + Number(orderAmount) + '주 '
+                + (orderSide === 'BUY' ? '매수' : '매도')
+                + ' 지정가 주문을 등록했습니다.',
+                'success'
+            );
             setOrderAmount('');
             setOrderPrice('');
             await fetchLimitOrders();
         } catch {
-            alert('지정가 주문 등록 중 오류가 발생했습니다.');
+            notify('지정가 주문 등록 중 오류가 발생했습니다.', 'error');
         } finally {
             setIsOrderSaving(false);
         }
@@ -186,27 +270,31 @@ export default function StockPage() {
         if (!order || order.status !== 'PENDING') return;
 
         const sideLabel = order.side === 'BUY' ? '매수' : '매도';
-        if (!window.confirm(
-            order.symbol + ' ' + order.amount + '주 '
-            + sideLabel + ' 지정가 주문을 취소할까요?'
-        )) {
-            return;
-        }
+        const accepted = await confirmAction({
+            title: '지정가 주문 취소',
+            message:
+                order.symbol + ' ' + order.amount + '주 '
+                + sideLabel + ' 지정가 주문을 취소할까요?',
+            confirmLabel: '주문 취소',
+            danger: true
+        });
+        if (!accepted) return;
 
         setCancelingOrderId(id);
         try {
-            const res = await fetch(API_URL + '/api/limit-orders/' + id, {
+            const res = await authFetch(API_URL + '/api/limit-orders/' + id, {
                 method: 'DELETE',
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data.message || '주문 취소에 실패했습니다.');
+                notify(data.message || '주문 취소에 실패했습니다.', 'error');
                 return;
             }
+            notify('지정가 주문을 취소했습니다.', 'success');
             await fetchLimitOrders();
         } catch {
-            alert('주문 취소 중 오류가 발생했습니다.');
+            notify('주문 취소 중 오류가 발생했습니다.', 'error');
         } finally {
             setCancelingOrderId(null);
         }
