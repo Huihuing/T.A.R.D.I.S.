@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @RestController
@@ -25,6 +26,7 @@ public class NewsController {
     private static final Pattern SYMBOL_PATTERN =
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int MAX_QUERY_LENGTH = 120;
+    private static final long NEWS_CACHE_MS = 60_000L;
 
     @Value("${naver.api.client-id}")
     private String naverClientId;
@@ -37,6 +39,10 @@ public class NewsController {
 
     private final RestTemplate restTemplate =
             ExternalApiHttpClient.create();
+    private final ConcurrentHashMap<String, CacheEntry> globalCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CacheEntry> koreaCache =
+            new ConcurrentHashMap<>();
 
     @GetMapping("/global")
     public ResponseEntity<?> getGlobalNews(
@@ -46,6 +52,11 @@ public class NewsController {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "올바른 종목 심볼을 입력해주세요."
             ));
+        }
+
+        CacheEntry cached = globalCache.get(normalized);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
         }
 
         try {
@@ -66,12 +77,25 @@ public class NewsController {
             ResponseEntity<String> response =
                     restTemplate.getForEntity(url, String.class);
 
-            return ResponseEntity.ok(response.getBody());
+            String body = response.getBody();
+            if (body != null && !body.isBlank()) {
+                globalCache.put(
+                        normalized,
+                        new CacheEntry(
+                                body,
+                                System.currentTimeMillis() + NEWS_CACHE_MS
+                        )
+                );
+            }
+            return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn(
                     "Finnhub news rate limit reached for {}",
                     normalized
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(429).body(Map.of(
                     "message", "뉴스 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
             ));
@@ -81,6 +105,9 @@ public class NewsController {
                     normalized,
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "해외 뉴스를 일시적으로 불러오지 못했습니다."
             ));
@@ -97,6 +124,13 @@ public class NewsController {
             return ResponseEntity.badRequest().body(Map.of(
                     "message", "검색어는 1~120자로 입력해주세요."
             ));
+        }
+
+        String cacheKey =
+                normalizedQuery.toLowerCase(Locale.ROOT);
+        CacheEntry cached = koreaCache.get(cacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
         }
 
         try {
@@ -124,9 +158,22 @@ public class NewsController {
                             normalizedQuery
                     );
 
-            return ResponseEntity.ok(response.getBody());
+            String body = response.getBody();
+            if (body != null && !body.isBlank()) {
+                koreaCache.put(
+                        cacheKey,
+                        new CacheEntry(
+                                body,
+                                System.currentTimeMillis() + NEWS_CACHE_MS
+                        )
+                );
+            }
+            return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Naver news rate limit reached");
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(429).body(Map.of(
                     "message", "뉴스 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
             ));
@@ -135,6 +182,9 @@ public class NewsController {
                     "Naver news request failed: {}",
                     e.getClass().getSimpleName()
             );
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "국내 뉴스를 일시적으로 불러오지 못했습니다."
             ));
@@ -159,4 +209,13 @@ public class NewsController {
         }
         return normalized;
     }
+
+    private boolean isFresh(CacheEntry entry) {
+        return entry != null
+                && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private record CacheEntry(
+            String value,
+            long expiresAt) {}
 }
