@@ -10,8 +10,6 @@ import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.RefreshTokenService;
-import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -50,7 +48,6 @@ public class AuthController {
     private final GoogleIdentityService googleIdentityService;
     private final RefreshTokenService refreshTokenService;
     private final NotificationService notificationService;
-    private final String frontendUrl;
 
     public AuthController(
             MemberRepository memberRepository,
@@ -61,8 +58,7 @@ public class AuthController {
             EmailVerificationService emailVerificationService,
             GoogleIdentityService googleIdentityService,
             RefreshTokenService refreshTokenService,
-            NotificationService notificationService,
-            @Value("${app.frontend-url:https://tardis-neon.vercel.app}") String frontendUrl) {
+            NotificationService notificationService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
@@ -72,7 +68,6 @@ public class AuthController {
         this.googleIdentityService = googleIdentityService;
         this.refreshTokenService = refreshTokenService;
         this.notificationService = notificationService;
-        this.frontendUrl = frontendUrl;
     }
 
     @PostMapping("/email/send")
@@ -282,13 +277,7 @@ public class AuthController {
             @CookieValue(
                     name = RefreshTokenService.COOKIE_NAME,
                     required = false
-            ) String refreshToken,
-            HttpServletRequest request) {
-        if (!isTrustedBrowserOrigin(request)) {
-            return ResponseEntity.status(403).body(
-                    Map.of("message", "허용되지 않은 요청 Origin입니다.")
-            );
-        }
+            ) String refreshToken) {
         try {
             RefreshTokenService.RotatedSession session =
                     refreshTokenService.rotate(refreshToken);
@@ -324,13 +313,7 @@ public class AuthController {
             @CookieValue(
                     name = RefreshTokenService.COOKIE_NAME,
                     required = false
-            ) String refreshToken,
-            HttpServletRequest request) {
-        if (!isTrustedBrowserOrigin(request)) {
-            return ResponseEntity.status(403).body(
-                    Map.of("message", "허용되지 않은 요청 Origin입니다.")
-            );
-        }
+            ) String refreshToken) {
         refreshTokenService.revoke(refreshToken);
 
         return ResponseEntity.ok()
@@ -523,17 +506,6 @@ public class AuthController {
                     "로그인이 필요합니다.");
         }
         return authentication.getName();
-    }
-
-    private boolean isTrustedBrowserOrigin(HttpServletRequest request) {
-        String origin = request.getHeader("Origin");
-        if (origin == null || origin.isBlank()) {
-            return true;
-        }
-
-        return origin.equals(frontendUrl)
-                || origin.equals("http://localhost:5173")
-                || origin.equals("http://127.0.0.1:5173");
     }
 
     private String normalize(String value) {
