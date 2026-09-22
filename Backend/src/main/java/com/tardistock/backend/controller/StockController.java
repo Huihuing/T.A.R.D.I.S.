@@ -34,9 +34,9 @@ public class StockController {
     private static final long SEARCH_STALE_MS = 10 * 60 * 1000L;
     private static final long CANDLES_STALE_MS = 60 * 60 * 1000L;
     private static final long SYMBOL_STALE_MS = 24 * 60 * 60 * 1000L;
-    private static final int MAX_QUOTE_CACHE_ENTRIES = 1_000;
-    private static final int MAX_SEARCH_CACHE_ENTRIES = 200;
-    private static final int MAX_CANDLES_CACHE_ENTRIES = 500;
+    private static final int MAX_QUOTE_CACHE_ENTRIES = 500;
+    private static final int MAX_SEARCH_CACHE_ENTRIES = 100;
+    private static final int MAX_CANDLES_CACHE_ENTRIES = 100;
 
     @Value("${finnhub.api.key}")
     private String finnhubToken;
