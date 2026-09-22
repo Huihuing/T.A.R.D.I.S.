@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../config';
 import {
+    authFetch,
     getAuthHeaders,
     getStoredToken,
     logoutSession
@@ -86,7 +87,7 @@ export default function Settings() {
     const loadSessions = async () => {
         setSessionsLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/auth/sessions`,
                 {
                     headers: getAuthHeaders(false),
@@ -113,7 +114,7 @@ export default function Settings() {
 
         setSessionsRevoking(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/auth/sessions/revoke-others`,
                 {
                     method: 'POST',
@@ -139,7 +140,7 @@ export default function Settings() {
     const loadSecurityActivity = async () => {
         setSecurityActivityLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/notifications/security`,
                 { headers: getAuthHeaders(false) }
             );
@@ -153,7 +154,7 @@ export default function Settings() {
 
     const loadSettings = async () => {
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/settings`,
                 { headers: getAuthHeaders(false) }
             );
@@ -204,7 +205,7 @@ export default function Settings() {
 
         setPasswordLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/password/change`,
                 {
                     method: 'POST',
@@ -249,7 +250,7 @@ export default function Settings() {
 
         setPinLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/pin/change`,
                 {
                     method: 'POST',
@@ -282,7 +283,7 @@ export default function Settings() {
     const sendSecurityCode = async () => {
         setSecurityCodeSending(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/security-code/send`,
                 {
                     method: 'POST',
@@ -319,7 +320,7 @@ export default function Settings() {
 
         setRecoveryLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/account/pin/reset`, {
+            const res = await authFetch(`${API_URL}/api/account/pin/reset`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -362,7 +363,7 @@ export default function Settings() {
 
         setRecoveryLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/account/password/enable`, {
+            const res = await authFetch(`${API_URL}/api/account/password/enable`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
@@ -397,7 +398,7 @@ export default function Settings() {
 
         setGoogleLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/google/link`,
                 {
                     method: 'POST',
@@ -495,7 +496,7 @@ export default function Settings() {
 
         setGoogleLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/account/google/link`,
                 {
                     method: 'DELETE',
