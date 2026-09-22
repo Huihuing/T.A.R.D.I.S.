@@ -25,6 +25,7 @@ spring:
       minimum-idle: ${DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:10000}
       validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:5000}
+      initialization-fail-timeout: ${DB_INITIALIZATION_FAIL_TIMEOUT_MS:60000}
       idle-timeout: ${DB_IDLE_TIMEOUT_MS:300000}
       max-lifetime: ${DB_MAX_LIFETIME_MS:1500000}
       keepalive-time: ${DB_KEEPALIVE_TIME_MS:120000}
