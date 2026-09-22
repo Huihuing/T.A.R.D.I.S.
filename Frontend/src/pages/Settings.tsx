@@ -32,6 +32,12 @@ type GoogleCredentialResponse = {
     credential?: string;
 };
 
+type SecurityActivity = {
+    id: number;
+    message: string;
+    createdAt: string;
+};
+
 export default function Settings() {
     const navigate = useNavigate();
     const googleButtonRef = useRef<HTMLDivElement>(null);
@@ -61,6 +67,25 @@ export default function Settings() {
     const [confirmRecoveryPassword, setConfirmRecoveryPassword] = useState('');
     const [securityCodeSending, setSecurityCodeSending] = useState(false);
     const [recoveryLoading, setRecoveryLoading] = useState(false);
+    const [securityActivity, setSecurityActivity] =
+        useState<SecurityActivity[]>([]);
+    const [securityActivityLoading, setSecurityActivityLoading] =
+        useState(false);
+
+    const loadSecurityActivity = async () => {
+        setSecurityActivityLoading(true);
+        try {
+            const res = await fetch(
+                `${API_URL}/api/notifications/security`,
+                { headers: getAuthHeaders(false) }
+            );
+            if (!res.ok) return;
+            const data = await res.json().catch(() => ([]));
+            setSecurityActivity(Array.isArray(data) ? data : []);
+        } finally {
+            setSecurityActivityLoading(false);
+        }
+    };
 
     const loadSettings = async () => {
         try {
@@ -84,6 +109,7 @@ export default function Settings() {
 
             setSettings(data);
             setError('');
+            loadSecurityActivity();
         } catch {
             setError('계정 설정을 불러오는 중 오류가 발생했습니다.');
         } finally {
@@ -427,6 +453,23 @@ export default function Settings() {
         }
     };
 
+    const formatSecurityTime = (value: string) => {
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+            ? value
+            : `${value}+09:00`;
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-[#0b1120] text-slate-400 flex items-center justify-center">
@@ -721,6 +764,54 @@ export default function Settings() {
                                 )}
                             </section>
                         </div>
+
+                        <section className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-6">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="text-xl font-black text-white flex items-center gap-2">
+                                        <ShieldCheck className="w-5 h-5 text-rose-300" />
+                                        최근 보안 활동
+                                    </h2>
+                                    <p className="text-sm text-slate-400 mt-1">
+                                        비밀번호, PIN, 로그인 방식 변경 기록을 최근 순서로 표시합니다.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={loadSecurityActivity}
+                                    disabled={securityActivityLoading}
+                                    className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-xs font-bold text-slate-400 hover:text-white disabled:opacity-50"
+                                >
+                                    {securityActivityLoading ? '갱신 중...' : '새로고침'}
+                                </button>
+                            </div>
+
+                            <div className="mt-5 space-y-2">
+                                {securityActivityLoading && securityActivity.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-500">
+                                        보안 활동을 불러오는 중...
+                                    </div>
+                                ) : securityActivity.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-500">
+                                        아직 기록된 보안 활동이 없습니다.
+                                    </div>
+                                ) : (
+                                    securityActivity.map(item => (
+                                        <div
+                                            key={item.id}
+                                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3"
+                                        >
+                                            <div className="text-sm text-slate-200">
+                                                {item.message}
+                                            </div>
+                                            <div className="text-xs text-slate-500 shrink-0">
+                                                {formatSecurityTime(item.createdAt)}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </section>
 
                         <section className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-6">
                             <h2 className="text-xl font-black text-white flex items-center gap-2">
