@@ -13,7 +13,7 @@ import java.util.Date;
 
 @Component
 public class JwtTokenProvider {
-    private static final long DEFAULT_TOKEN_VALID_TIME_MS = 1000L * 60 * 60 * 24;
+    private static final long DEFAULT_TOKEN_VALID_TIME_MS = 1000L * 60 * 15;
 
     private final SecretKey key;
     private final JwtParser parser;
