@@ -9,9 +9,12 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 @RestController
@@ -22,12 +25,21 @@ public class StockController {
             LoggerFactory.getLogger(StockController.class);
     private static final Pattern SYMBOL_PATTERN =
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
+    private static final int MAX_SEARCH_QUERY_LENGTH = 100;
+    private static final long QUOTE_CACHE_MS = 10_000L;
+    private static final long SYMBOL_CACHE_MS = 6 * 60 * 60 * 1000L;
+    private static final long SEARCH_CACHE_MS = 60_000L;
 
     @Value("${finnhub.api.key}")
     private String finnhubToken;
 
     private final RestTemplate restTemplate =
             ExternalApiHttpClient.create();
+    private final ConcurrentHashMap<String, CacheEntry<Map<?, ?>>> quoteCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CacheEntry<String>> searchCache =
+            new ConcurrentHashMap<>();
+    private volatile CacheEntry<String> symbolsCache;
 
     @GetMapping("/quote")
     public ResponseEntity<?> getStockQuote(@RequestParam String symbol) {
@@ -38,6 +50,11 @@ public class StockController {
             ));
         }
 
+        CacheEntry<Map<?, ?>> cached = quoteCache.get(normalized);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
         try {
             String url = "https://finnhub.io/api/v1/quote?symbol="
                     + normalized
@@ -46,7 +63,17 @@ public class StockController {
 
             ResponseEntity<Map> response =
                     restTemplate.getForEntity(url, Map.class);
-            return ResponseEntity.ok(response.getBody());
+            Map<?, ?> body = response.getBody();
+            if (body != null) {
+                quoteCache.put(
+                        normalized,
+                        new CacheEntry<>(
+                                body,
+                                System.currentTimeMillis() + QUOTE_CACHE_MS
+                        )
+                );
+            }
+            return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub quote rate limit reached for {}", normalized);
             return ResponseEntity.status(429).body(Map.of(
@@ -140,6 +167,11 @@ public class StockController {
 
     @GetMapping("/symbols")
     public ResponseEntity<?> getAllSymbols() {
+        CacheEntry<String> cached = symbolsCache;
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
         try {
             String url =
                     "https://finnhub.io/api/v1/stock/symbol"
@@ -148,7 +180,14 @@ public class StockController {
             ResponseEntity<String> response =
                     restTemplate.getForEntity(url, String.class);
 
-            return ResponseEntity.ok(response.getBody());
+            String body = response.getBody();
+            if (body != null && !body.isBlank()) {
+                symbolsCache = new CacheEntry<>(
+                        body,
+                        System.currentTimeMillis() + SYMBOL_CACHE_MS
+                );
+            }
+            return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Finnhub symbol-list rate limit reached");
             return ResponseEntity.status(429).body(Map.of(
@@ -165,6 +204,65 @@ public class StockController {
         }
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<?> searchStocks(
+            @RequestParam String query) {
+        String normalized = normalizeQuery(query);
+        if (normalized == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message",
+                    "검색어는 1~" + MAX_SEARCH_QUERY_LENGTH
+                            + "자로 입력해주세요."
+            ));
+        }
+
+        String cacheKey = normalized.toLowerCase(Locale.ROOT);
+        CacheEntry<String> cached = searchCache.get(cacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        try {
+            URI uri = UriComponentsBuilder
+                    .fromUriString("https://finnhub.io/api/v1/search")
+                    .queryParam("q", normalized)
+                    .queryParam("token", finnhubToken)
+                    .build()
+                    .encode()
+                    .toUri();
+
+            ResponseEntity<String> response =
+                    restTemplate.getForEntity(uri, String.class);
+
+            String body = response.getBody();
+            if (body != null && !body.isBlank()) {
+                searchCache.put(
+                        cacheKey,
+                        new CacheEntry<>(
+                                body,
+                                System.currentTimeMillis() + SEARCH_CACHE_MS
+                        )
+                );
+            }
+            return ResponseEntity.ok(body);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("Finnhub search rate limit reached");
+            return ResponseEntity.status(429).body(Map.of(
+                    "message",
+                    "종목 검색 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+            ));
+        } catch (Exception e) {
+            log.warn(
+                    "Finnhub search request failed: {}",
+                    e.getClass().getSimpleName()
+            );
+            return ResponseEntity.status(502).body(Map.of(
+                    "message",
+                    "종목 검색을 일시적으로 사용할 수 없습니다."
+            ));
+        }
+    }
+
     private String normalizeSymbol(String symbol) {
         if (symbol == null) return null;
         String normalized =
@@ -173,4 +271,23 @@ public class StockController {
                 ? normalized
                 : null;
     }
+
+    private String normalizeQuery(String query) {
+        if (query == null) return null;
+        String normalized = query.trim();
+        if (normalized.isEmpty()
+                || normalized.length() > MAX_SEARCH_QUERY_LENGTH) {
+            return null;
+        }
+        return normalized;
+    }
+
+    private boolean isFresh(CacheEntry<?> entry) {
+        return entry != null
+                && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private record CacheEntry<T>(
+            T value,
+            long expiresAt) {}
 }

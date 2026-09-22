@@ -28,6 +28,26 @@ class MarketDataControllerTest {
     }
 
     @Test
+    void stockSearchRejectsBlankQuery() {
+        StockController controller = new StockController();
+
+        ResponseEntity<?> response =
+                controller.searchStocks("   ");
+
+        assertEquals(400, response.getStatusCode().value());
+    }
+
+    @Test
+    void stockSearchRejectsOverlongQuery() {
+        StockController controller = new StockController();
+
+        ResponseEntity<?> response =
+                controller.searchStocks("a".repeat(101));
+
+        assertEquals(400, response.getStatusCode().value());
+    }
+
+    @Test
     void globalNewsRejectsInvalidSymbolBeforeUpstreamCall() {
         NewsController controller = new NewsController();
 
