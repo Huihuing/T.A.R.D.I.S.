@@ -3,11 +3,13 @@ package com.tardistock.backend.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -32,6 +34,12 @@ public class NewsController {
 
     @Value("${finnhub.api.key}")
     private String finnhubToken;
+
+    private final RestTemplate restTemplate =
+            new RestTemplateBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .readTimeout(Duration.ofSeconds(10))
+                    .build();
 
     @GetMapping("/global")
     public ResponseEntity<?> getGlobalNews(
@@ -58,8 +66,6 @@ public class NewsController {
                             + today.format(formatter)
                             + "&token="
                             + finnhubToken;
-
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<String> response =
                     restTemplate.getForEntity(url, String.class);
 
@@ -100,8 +106,6 @@ public class NewsController {
             String url =
                     "https://naverapihub.apigw.ntruss.com/search/v1/news"
                             + "?query={query}&display=100&sort=date";
-
-            RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.set(
                     "X-NCP-APIGW-API-KEY-ID",
