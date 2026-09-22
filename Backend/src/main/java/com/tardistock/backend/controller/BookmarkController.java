@@ -44,10 +44,19 @@ public class BookmarkController {
     @Transactional
     public ResponseEntity<?> toggleBookmark(@RequestBody Map<String, Object> request, Authentication authentication) {
         try {
-            Optional<Member> memberOpt = authenticatedMember(authentication);
-            if (memberOpt.isEmpty()) {
-                return ResponseEntity.status(401).body(Map.of("message", "로그인이 필요합니다."));
+            String username = authenticatedUsername(authentication);
+            if (username == null) {
+                return ResponseEntity.status(401).body(
+                        Map.of("message", "로그인이 필요합니다.")
+                );
             }
+
+            Member member = memberRepository
+                    .findByUsernameForUpdate(username)
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."
+                            ));
 
             String symbol = request.get("symbol") == null ? null : request.get("symbol").toString().trim().toUpperCase();
             double price = request.containsKey("price") && request.get("price") != null
@@ -58,8 +67,11 @@ public class BookmarkController {
                 return ResponseEntity.badRequest().body(Map.of("message", "잘못된 종목 코드입니다."));
             }
 
-            Member member = memberOpt.get();
-            Optional<Bookmark> bookmarkOpt = bookmarkRepository.findByMemberAndSymbol(member, symbol);
+            Optional<Bookmark> bookmarkOpt =
+                    bookmarkRepository.findByMemberAndSymbol(
+                            member,
+                            symbol
+                    );
 
             if (bookmarkOpt.isPresent()) {
                 bookmarkRepository.delete(bookmarkOpt.get());
@@ -73,10 +85,21 @@ public class BookmarkController {
         }
     }
 
-    private Optional<Member> authenticatedMember(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null || "anonymousUser".equals(authentication.getName())) {
-            return Optional.empty();
+    private Optional<Member> authenticatedMember(
+            Authentication authentication) {
+        String username = authenticatedUsername(authentication);
+        return username == null
+                ? Optional.empty()
+                : memberRepository.findByUsername(username);
+    }
+
+    private String authenticatedUsername(
+            Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
+                || "anonymousUser".equals(authentication.getName())) {
+            return null;
         }
-        return memberRepository.findByUsername(authentication.getName());
+        return authentication.getName();
     }
 }
