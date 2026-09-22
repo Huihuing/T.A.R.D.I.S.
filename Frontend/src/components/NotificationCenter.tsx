@@ -14,7 +14,7 @@ import {
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { API_URL } from '../config';
-import { getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
 
 type NotificationItem = {
     id: number;
@@ -40,10 +40,10 @@ export default function NotificationCenter() {
 
         try {
             const [itemsRes, countRes] = await Promise.all([
-                fetch(`${API_URL}/api/notifications`, {
+                authFetch(`${API_URL}/api/notifications`, {
                     headers: getAuthHeaders(false)
                 }),
-                fetch(
+                authFetch(
                     `${API_URL}/api/notifications/unread-count`,
                     { headers: getAuthHeaders(false) }
                 )
@@ -116,7 +116,7 @@ export default function NotificationCenter() {
     const markRead = async (item: NotificationItem) => {
         if (item.readAt || item.read) return;
 
-        const res = await fetch(
+        const res = await authFetch(
             `${API_URL}/api/notifications/${item.id}/read`,
             {
                 method: 'PATCH',
@@ -142,7 +142,7 @@ export default function NotificationCenter() {
     };
 
     const markAllRead = async () => {
-        const res = await fetch(
+        const res = await authFetch(
             `${API_URL}/api/notifications/read-all`,
             {
                 method: 'POST',
