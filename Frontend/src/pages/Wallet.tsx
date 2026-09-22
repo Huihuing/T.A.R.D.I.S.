@@ -2,6 +2,7 @@ import { API_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
+import { getAuthHeaders } from '../auth';
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
@@ -11,11 +12,6 @@ export default function Wallet() {
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
     const [ledger, setLedger] = useState<any[]>([]);
     const [lastReceipt, setLastReceipt] = useState<any | null>(null);
-
-    const getAuthHeaders = () => {
-        const token = localStorage.getItem('token');
-        return { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) };
-    };
 
     const fetchBalance = () => {
         fetch(`${API_URL}/api/trade/balance`, { headers: getAuthHeaders() })
