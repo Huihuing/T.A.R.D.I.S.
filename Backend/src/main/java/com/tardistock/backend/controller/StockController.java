@@ -3,11 +3,13 @@ package com.tardistock.backend.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -24,6 +26,12 @@ public class StockController {
     @Value("${finnhub.api.key}")
     private String finnhubToken;
 
+    private final RestTemplate restTemplate =
+            new RestTemplateBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .readTimeout(Duration.ofSeconds(10))
+                    .build();
+
     @GetMapping("/quote")
     public ResponseEntity<?> getStockQuote(@RequestParam String symbol) {
         String normalized = normalizeSymbol(symbol);
@@ -34,7 +42,6 @@ public class StockController {
         }
 
         try {
-            RestTemplate restTemplate = new RestTemplate();
             String url = "https://finnhub.io/api/v1/quote?symbol="
                     + normalized
                     + "&token="
@@ -106,8 +113,6 @@ public class StockController {
                             + interval
                             + "&range="
                             + range;
-
-            RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.set(
                     HttpHeaders.USER_AGENT,
@@ -143,8 +148,6 @@ public class StockController {
                     "https://finnhub.io/api/v1/stock/symbol"
                             + "?exchange=US&token="
                             + finnhubToken;
-
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<String> response =
                     restTemplate.getForEntity(url, String.class);
 
