@@ -7,6 +7,7 @@ import {
     ClipboardCheck,
     Info,
     MessageCircle,
+    ShieldCheck,
     Target,
     X
 } from 'lucide-react';
@@ -206,6 +207,12 @@ export default function NotificationCenter() {
                     label: '지정가 주문',
                     icon: ClipboardCheck,
                     className: 'text-indigo-300 bg-indigo-500/10'
+                };
+            case 'SECURITY':
+                return {
+                    label: '보안',
+                    icon: ShieldCheck,
+                    className: 'text-rose-300 bg-rose-500/10'
                 };
             default:
                 return {
