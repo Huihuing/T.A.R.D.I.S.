@@ -24,7 +24,7 @@ class EmailVerificationServiceTest {
         PasswordEncoder encoder = mock(PasswordEncoder.class);
         JavaMailSender sender = mock(JavaMailSender.class);
 
-        when(repository.findByEmailIgnoreCase("alice@example.com"))
+        when(repository.findByEmailForUpdate("alice@example.com"))
                 .thenReturn(Optional.empty());
         when(encoder.encode(anyString())).thenReturn("hashed-code");
 
@@ -55,7 +55,7 @@ class EmailVerificationServiceTest {
         PasswordEncoder encoder = mock(PasswordEncoder.class);
         JavaMailSender sender = mock(JavaMailSender.class);
 
-        when(repository.findByEmailIgnoreCase("alice@example.com"))
+        when(repository.findByEmailForUpdate("alice@example.com"))
                 .thenReturn(Optional.empty());
 
         EmailVerificationService service =
