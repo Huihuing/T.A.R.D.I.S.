@@ -14,7 +14,7 @@ interface PortfolioSnapshot { id: number; cashBalance: number; investedValue: nu
 interface StockSymbol { symbol: string; description: string; displaySymbol: string; }
 interface NewsItem { id: number; headline: string; summary: string; url: string; image: string; }
 interface NaverNewsItem { title: string; link: string; description: string; pubDate: string; }
-interface TradeToast { id: number; type: 'BUY' | 'SELL' | 'TRANSFER'; symbol?: string; amount?: number; price?: number; customMessage?: string; }
+interface TradeToast { id: number; type: string; symbol?: string; amount?: number; price?: number; customMessage?: string; }
 
 const DASHBOARD_SYMBOLS = ['AAPL', 'TSLA', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'AMD', 'COIN', 'NFLX', 'INTC', 'DIS'];
 const BATCH_SIZE = 4;
@@ -80,7 +80,12 @@ export default function Dashboard() {
                     ),
                 4000
             );
-            fetchUserData();
+            if (
+                detail.type === 'TRANSFER'
+                || detail.type === 'LIMIT_ORDER'
+            ) {
+                fetchUserData();
+            }
         };
 
         window.addEventListener(
@@ -95,6 +100,59 @@ export default function Dashboard() {
             );
         };
     }, []);
+
+    const realtimeToastMeta = (type: string) => {
+        switch (type) {
+            case 'TRANSFER':
+                return {
+                    title: '송금 알림',
+                    icon: '💸',
+                    className: 'bg-indigo-500/20 text-indigo-400'
+                };
+            case 'COMMENT':
+                return {
+                    title: '댓글 알림',
+                    icon: '💬',
+                    className: 'bg-sky-500/20 text-sky-400'
+                };
+            case 'PRICE_ALERT':
+                return {
+                    title: '가격 알림',
+                    icon: '🎯',
+                    className: 'bg-amber-500/20 text-amber-400'
+                };
+            case 'LIMIT_ORDER':
+                return {
+                    title: '지정가 주문',
+                    icon: '📋',
+                    className: 'bg-violet-500/20 text-violet-400'
+                };
+            case 'SECURITY':
+                return {
+                    title: '보안 알림',
+                    icon: '🛡️',
+                    className: 'bg-rose-500/20 text-rose-400'
+                };
+            case 'BUY':
+                return {
+                    title: '주식 매수 체결',
+                    icon: '📥',
+                    className: 'bg-emerald-500/20 text-emerald-400'
+                };
+            case 'SELL':
+                return {
+                    title: '주식 매도 체결',
+                    icon: '📤',
+                    className: 'bg-rose-500/20 text-rose-400'
+                };
+            default:
+                return {
+                    title: '새 알림',
+                    icon: '🔔',
+                    className: 'bg-slate-500/20 text-slate-300'
+                };
+        }
+    };
 
     const showLocalToast = (type: 'BUY' | 'SELL', symbol: string, amount: number, price: number) => {
         const id = Date.now();
@@ -249,17 +307,20 @@ export default function Dashboard() {
         <div className="min-h-screen bg-[#0b1120] text-slate-200 p-4 sm:p-6 md:p-8 font-sans flex flex-col relative">
             <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3 pointer-events-none">
                 <AnimatePresence>
-                    {toasts.map(toast => (
-                        <motion.div key={toast.id} initial={{ opacity: 0, x: 50, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 20, scale: 0.9 }} className="bg-slate-800/90 backdrop-blur-md border border-slate-600 shadow-2xl rounded-2xl p-4 flex items-center gap-4 min-w-[280px]">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${toast.type === 'TRANSFER' ? 'bg-indigo-500/20 text-indigo-400' : toast.type === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                                {toast.type === 'TRANSFER' ? '💸' : toast.type === 'BUY' ? '📥' : '📤'}
-                            </div>
-                            <div>
-                                <div className="text-sm font-extrabold text-slate-200">{toast.type === 'TRANSFER' ? '입금 알림' : `주식 ${toast.type === 'BUY' ? '매수' : '매도'} 체결`}</div>
-                                <div className="text-xs text-slate-400 mt-1">{toast.customMessage ? <span>{toast.customMessage}</span> : <><span className="font-bold text-sky-400">{toast.symbol}</span> {toast.amount}주 @ ${toast.price?.toFixed(2)}</>}</div>
-                            </div>
-                        </motion.div>
-                    ))}
+                    {toasts.map(toast => {
+                        const meta = realtimeToastMeta(toast.type);
+                        return (
+                            <motion.div key={toast.id} initial={{ opacity: 0, x: 50, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 20, scale: 0.9 }} className="bg-slate-800/90 backdrop-blur-md border border-slate-600 shadow-2xl rounded-2xl p-4 flex items-center gap-4 min-w-[280px]">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${meta.className}`}>
+                                    {meta.icon}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-extrabold text-slate-200">{meta.title}</div>
+                                    <div className="text-xs text-slate-400 mt-1">{toast.customMessage ? <span>{toast.customMessage}</span> : <><span className="font-bold text-sky-400">{toast.symbol}</span> {toast.amount}주 @ ${toast.price?.toFixed(2)}</>}</div>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
                 </AnimatePresence>
             </div>
 
