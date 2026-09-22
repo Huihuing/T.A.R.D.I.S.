@@ -1,9 +1,11 @@
 package com.tardistock.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.restclient.RestTemplateBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +20,11 @@ public class FinnhubPriceService {
     @Value("${finnhub.api.key}")
     private String apiKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate =
+            new RestTemplateBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .readTimeout(Duration.ofSeconds(10))
+                    .build();
 
     // 캐시: symbol -> CachedPrice(price, cachedAt)
     private final ConcurrentHashMap<String, CachedPrice> cache = new ConcurrentHashMap<>();
