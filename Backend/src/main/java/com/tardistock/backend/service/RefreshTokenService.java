@@ -63,7 +63,7 @@ public class RefreshTokenService {
 
         String tokenHash = hash(rawToken);
         RefreshToken stored = refreshTokenRepository
-                .findByTokenHash(tokenHash)
+                .findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "유효하지 않은 refresh token입니다."
                 ));
@@ -149,7 +149,7 @@ public class RefreshTokenService {
 
         String currentHash = hash(currentRawToken);
         RefreshToken current = refreshTokenRepository
-                .findByTokenHash(currentHash)
+                .findByTokenHashForUpdate(currentHash)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "현재 로그인 세션이 유효하지 않습니다."
                 ));
