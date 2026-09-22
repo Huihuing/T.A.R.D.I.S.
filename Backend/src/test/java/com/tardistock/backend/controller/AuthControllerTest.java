@@ -292,6 +292,7 @@ class AuthControllerTest {
         assertEquals("alice", saved.getUsername());
         assertEquals("alice@example.com", saved.getEmail());
         assertEquals("Alice", saved.getName());
+        assertTrue(saved.isEmailVerified());
         verify(walletRepository).save(any(Wallet.class));
         verify(emailVerificationService)
                 .consumeVerified("alice@example.com");
@@ -400,6 +401,7 @@ class AuthControllerTest {
                 "google-subject-123",
                 created.get().getSocialSubject()
         );
+        assertTrue(created.get().isEmailVerified());
         assertFalse(created.get().isPinConfigured());
         verifyNoInteractions(emailVerificationService);
         verify(walletRepository, times(2)).save(any(Wallet.class));
