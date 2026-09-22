@@ -46,37 +46,44 @@ public class GoogleIdentityService {
                     .retrieve()
                     .body(Map.class);
 
-            if (payload == null) {
-                throw invalidToken();
-            }
-
-            String audience = stringValue(payload.get("aud"));
-            String issuer = stringValue(payload.get("iss"));
-            String subject = stringValue(payload.get("sub"));
-            String email = stringValue(payload.get("email"));
-            String name = stringValue(payload.get("name"));
-            String emailVerified =
-                    stringValue(payload.get("email_verified"));
-            long expiresAt = parseLong(payload.get("exp"));
-
-            if (!clientId.equals(audience)
-                    || !("accounts.google.com".equals(issuer)
-                        || "https://accounts.google.com".equals(issuer))
-                    || subject == null || subject.isBlank()
-                    || email == null || email.isBlank()
-                    || !"true".equalsIgnoreCase(emailVerified)
-                    || expiresAt <= Instant.now().getEpochSecond()) {
-                throw invalidToken();
-            }
-
-            return new GoogleIdentity(
-                    subject,
-                    email.trim().toLowerCase(),
-                    normalizeName(name, email)
-            );
+            return validatePayload(payload, Instant.now().getEpochSecond());
         } catch (RestClientResponseException e) {
             throw invalidToken();
         }
+    }
+
+    GoogleIdentity validatePayload(
+            Map<String, Object> payload,
+            long nowEpochSecond) {
+        if (payload == null) {
+            throw invalidToken();
+        }
+
+        String audience = stringValue(payload.get("aud"));
+        String issuer = stringValue(payload.get("iss"));
+        String subject = stringValue(payload.get("sub"));
+        String email = stringValue(payload.get("email"));
+        String name = stringValue(payload.get("name"));
+        String emailVerified =
+                stringValue(payload.get("email_verified"));
+        long expiresAt = parseLong(payload.get("exp"));
+
+        if (!clientId.equals(audience)
+                || !("accounts.google.com".equals(issuer)
+                    || "https://accounts.google.com".equals(issuer))
+                || subject == null || subject.isBlank()
+                || email == null || email.isBlank()
+                || !email.contains("@")
+                || !"true".equalsIgnoreCase(emailVerified)
+                || expiresAt <= nowEpochSecond) {
+            throw invalidToken();
+        }
+
+        return new GoogleIdentity(
+                subject,
+                email.trim().toLowerCase(),
+                normalizeName(name, email)
+        );
     }
 
     private IllegalArgumentException invalidToken() {
