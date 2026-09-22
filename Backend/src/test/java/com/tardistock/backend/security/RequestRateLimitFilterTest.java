@@ -295,4 +295,68 @@ class RequestRateLimitFilterTest {
 
         assertEquals(200, response.getStatus());
     }
+    @Test
+    void limitsLeaderboardReads() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 20; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "GET",
+                            "/api/leaderboard"
+                    );
+            request.setRemoteAddr("203.0.113.80");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "GET",
+                        "/api/leaderboard"
+                );
+        blocked.setRemoteAddr("203.0.113.80");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
+    void limitsPublicProfileReads() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 60; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "GET",
+                            "/api/profile/example"
+                    );
+            request.setRemoteAddr("203.0.113.81");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "GET",
+                        "/api/profile/example"
+                );
+        blocked.setRemoteAddr("203.0.113.81");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
 }
