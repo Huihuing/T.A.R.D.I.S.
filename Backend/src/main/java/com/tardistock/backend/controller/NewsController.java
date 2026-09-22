@@ -27,6 +27,7 @@ public class NewsController {
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int MAX_QUERY_LENGTH = 120;
     private static final long NEWS_CACHE_MS = 5 * 60 * 1000L;
+    private static final long NEWS_STALE_MS = 60 * 60 * 1000L;
     private static final int MAX_NEWS_CACHE_ENTRIES = 100;
 
     @Value("${naver.api.client-id}")
@@ -95,7 +96,7 @@ public class NewsController {
                     "Finnhub news rate limit reached for {}",
                     normalized
             );
-            if (cached != null) {
+            if (isUsableStale(cached)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(429).body(Map.of(
@@ -107,7 +108,7 @@ public class NewsController {
                     normalized,
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -174,7 +175,7 @@ public class NewsController {
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
             log.warn("Naver news rate limit reached");
-            if (cached != null) {
+            if (isUsableStale(cached)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(429).body(Map.of(
@@ -185,7 +186,7 @@ public class NewsController {
                     "Naver news request failed: {}",
                     e.getClass().getSimpleName()
             );
-            if (cached != null) {
+            if (isUsableStale(cached)) {
                 return ResponseEntity.ok(cached.value());
             }
             return ResponseEntity.status(502).body(Map.of(
@@ -216,6 +217,12 @@ public class NewsController {
     private boolean isFresh(CacheEntry entry) {
         return entry != null
                 && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private boolean isUsableStale(CacheEntry entry) {
+        return entry != null
+                && entry.expiresAt() + NEWS_STALE_MS
+                > System.currentTimeMillis();
     }
 
     private void putBounded(
