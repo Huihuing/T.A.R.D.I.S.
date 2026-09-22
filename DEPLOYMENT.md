@@ -106,7 +106,7 @@ jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED&serverTimezone=Asia/Seoul&
 - 보호 API가 익명 요청에 401을 반환하는지 smoke test 확인
 
 
-## 6. Google 로그인 / 이메일 인증
+## 7. Google 로그인 / 이메일 인증
 
 Google 로그인은 백엔드의 `GOOGLE_CLIENT_ID`와 프론트 Vercel의
 `VITE_GOOGLE_CLIENT_ID`에 **같은 Web Client ID**를 설정합니다.
@@ -118,10 +118,28 @@ GitHub에 커밋하지 않습니다.
 Google로 새로 생성된 SNS 전용 계정은 별도의 이메일 인증이나 로컬 비밀번호
 재설정을 요구하지 않습니다.
 
-## 7. 관리자 페이지
+## 8. 관리자 페이지
 
 Render의 `ADMIN_USERNAMES`에 애플리케이션 아이디를 쉼표로 구분해 지정합니다.
 예: `admin1,admin2`
 
 관리자 페이지는 운영 통계 조회 용도이며 사용자 잔고를 임의로 수정하는 기능은
 제공하지 않습니다.
+
+
+## 9. CI / 배포 검증 정책
+
+GitHub Actions 사용량을 줄이기 위해 일반 push/PR에서는 Actions CI를 자동 실행하지 않습니다.
+
+기본 검증 경로:
+
+1. GitHub `main`에 커밋
+2. Vercel이 `Frontend`를 빌드하고 Production 배포
+3. Render가 루트 `Dockerfile`로 백엔드를 빌드·기동
+4. Vercel이 `READY`, Render가 `live`인지 확인
+5. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
+
+GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
+필요할 때만 `workflow_dispatch`로 수동 실행합니다.
+
+이 방식은 GitHub Actions가 일시적으로 제한되어도 배포 검증 흐름을 유지하기 위한 운영 정책입니다.
