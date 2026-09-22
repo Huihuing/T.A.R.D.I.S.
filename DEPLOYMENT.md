@@ -62,6 +62,7 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `DB_POOL_MAX_SIZE` | `5` | Hikari 최대 DB 연결 수. Aiven free 1GB 단일 노드 기준 |
 | `DB_POOL_MIN_IDLE` | `1` | 유휴 상태에서 유지할 최소 연결 수 |
 | `DB_CONNECTION_TIMEOUT_MS` | `10000` | DB 연결 획득 대기 시간 |
+| `DB_INITIALIZATION_FAIL_TIMEOUT_MS` | `60000` | Hikari 초기 DB 연결 재시도 허용 시간(ms) |
 | `DB_VALIDATION_TIMEOUT_MS` | `5000` | 연결 유효성 검사 제한 시간 |
 | `DB_IDLE_TIMEOUT_MS` | `300000` | 최소 연결 수를 초과한 유휴 연결 정리 시간 |
 | `DB_MAX_LIFETIME_MS` | `1500000` | 풀 연결 최대 수명 |
