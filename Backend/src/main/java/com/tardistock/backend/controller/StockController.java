@@ -29,6 +29,8 @@ public class StockController {
     private static final long QUOTE_CACHE_MS = 10_000L;
     private static final long SYMBOL_CACHE_MS = 6 * 60 * 60 * 1000L;
     private static final long SEARCH_CACHE_MS = 60_000L;
+    private static final int MAX_QUOTE_CACHE_ENTRIES = 1_000;
+    private static final int MAX_SEARCH_CACHE_ENTRIES = 200;
 
     @Value("${finnhub.api.key}")
     private String finnhubToken;
@@ -65,12 +67,14 @@ public class StockController {
                     restTemplate.getForEntity(url, Map.class);
             Map<?, ?> body = response.getBody();
             if (body != null) {
-                quoteCache.put(
+                putBounded(
+                        quoteCache,
                         normalized,
                         new CacheEntry<>(
                                 body,
                                 System.currentTimeMillis() + QUOTE_CACHE_MS
-                        )
+                        ),
+                        MAX_QUOTE_CACHE_ENTRIES
                 );
             }
             return ResponseEntity.ok(body);
@@ -236,12 +240,14 @@ public class StockController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                searchCache.put(
+                putBounded(
+                        searchCache,
                         cacheKey,
                         new CacheEntry<>(
                                 body,
                                 System.currentTimeMillis() + SEARCH_CACHE_MS
-                        )
+                        ),
+                        MAX_SEARCH_CACHE_ENTRIES
                 );
             }
             return ResponseEntity.ok(body);
@@ -285,6 +291,23 @@ public class StockController {
     private boolean isFresh(CacheEntry<?> entry) {
         return entry != null
                 && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private <T> void putBounded(
+            ConcurrentHashMap<String, CacheEntry<T>> cache,
+            String key,
+            CacheEntry<T> value,
+            int maxEntries) {
+        if (cache.size() >= maxEntries) {
+            long now = System.currentTimeMillis();
+            cache.entrySet().removeIf(
+                    entry -> entry.getValue().expiresAt() <= now
+            );
+            if (cache.size() >= maxEntries) {
+                cache.clear();
+            }
+        }
+        cache.put(key, value);
     }
 
     private record CacheEntry<T>(

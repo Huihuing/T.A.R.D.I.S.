@@ -27,6 +27,7 @@ public class NewsController {
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int MAX_QUERY_LENGTH = 120;
     private static final long NEWS_CACHE_MS = 60_000L;
+    private static final int MAX_NEWS_CACHE_ENTRIES = 100;
 
     @Value("${naver.api.client-id}")
     private String naverClientId;
@@ -79,7 +80,8 @@ public class NewsController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                globalCache.put(
+                putBounded(
+                        globalCache,
                         normalized,
                         new CacheEntry(
                                 body,
@@ -160,7 +162,8 @@ public class NewsController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                koreaCache.put(
+                putBounded(
+                        koreaCache,
                         cacheKey,
                         new CacheEntry(
                                 body,
@@ -213,6 +216,22 @@ public class NewsController {
     private boolean isFresh(CacheEntry entry) {
         return entry != null
                 && entry.expiresAt() > System.currentTimeMillis();
+    }
+
+    private void putBounded(
+            ConcurrentHashMap<String, CacheEntry> cache,
+            String key,
+            CacheEntry value) {
+        if (cache.size() >= MAX_NEWS_CACHE_ENTRIES) {
+            long now = System.currentTimeMillis();
+            cache.entrySet().removeIf(
+                    entry -> entry.getValue().expiresAt() <= now
+            );
+            if (cache.size() >= MAX_NEWS_CACHE_ENTRIES) {
+                cache.clear();
+            }
+        }
+        cache.put(key, value);
     }
 
     private record CacheEntry(
