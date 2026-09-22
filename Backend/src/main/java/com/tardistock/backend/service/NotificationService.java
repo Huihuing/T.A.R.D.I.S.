@@ -67,6 +67,16 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
+    public List<Notification> recentSecurity(String username) {
+        Member member = requireMember(username);
+        return notificationRepository
+                .findTop20ByMemberAndTypeOrderByCreatedAtDesc(
+                        member,
+                        "SECURITY"
+                );
+    }
+
+    @Transactional(readOnly = true)
     public long unreadCount(String username) {
         return notificationRepository
                 .countByMemberAndReadAtIsNull(
