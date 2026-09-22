@@ -61,3 +61,9 @@ T.A.R.D.I.S.는 **실시간 시장 데이터 기반 모의투자, 가상 자산 
 설정 값과 실행 방법은 [DEPLOYMENT.md](DEPLOYMENT.md)를 참고하세요.
 
 > `Backend/src/main/resources/application-api.yaml`과 `.env*` 파일은 로컬 전용이며 Git에 커밋하지 않습니다.
+
+
+## 운영 문서 / Operations
+
+- [운영 인프라 및 리전 계획](docs/INFRASTRUCTURE.md)
+- [DB 마이그레이션 / Flyway 전환 가이드](docs/DB_MIGRATION.md)
