@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, CheckCheck, X } from 'lucide-react';
+import {
+    ArrowLeftRight,
+    Bell,
+    BellRing,
+    CheckCheck,
+    ClipboardCheck,
+    Info,
+    MessageCircle,
+    Target,
+    X
+} from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { API_URL } from '../config';
@@ -21,6 +31,7 @@ export default function NotificationCenter() {
     const [isOpen, setIsOpen] = useState(false);
     const [items, setItems] = useState<NotificationItem[]>([]);
     const [unread, setUnread] = useState(0);
+    const [unreadOnly, setUnreadOnly] = useState(false);
     const clientRef = useRef<Client | null>(null);
 
     const load = async () => {
@@ -170,11 +181,55 @@ export default function NotificationCenter() {
         }).format(date);
     };
 
+    const notificationMeta = (type: string) => {
+        switch (type) {
+            case 'COMMENT':
+                return {
+                    label: '댓글',
+                    icon: MessageCircle,
+                    className: 'text-sky-300 bg-sky-500/10'
+                };
+            case 'TRANSFER':
+                return {
+                    label: '송금',
+                    icon: ArrowLeftRight,
+                    className: 'text-emerald-300 bg-emerald-500/10'
+                };
+            case 'PRICE_ALERT':
+                return {
+                    label: '가격 알림',
+                    icon: Target,
+                    className: 'text-amber-300 bg-amber-500/10'
+                };
+            case 'LIMIT_ORDER':
+                return {
+                    label: '지정가 주문',
+                    icon: ClipboardCheck,
+                    className: 'text-indigo-300 bg-indigo-500/10'
+                };
+            default:
+                return {
+                    label: '알림',
+                    icon: Info,
+                    className: 'text-slate-300 bg-slate-700/60'
+                };
+        }
+    };
+
+    const visibleItems = unreadOnly
+        ? items.filter(item => !Boolean(item.readAt || item.read))
+        : items;
+
     return (
         <div className="fixed top-4 right-4 z-[120]">
             <button
                 type="button"
-                onClick={() => setIsOpen(prev => !prev)}
+                onClick={() => {
+                    setIsOpen(prev => {
+                        if (!prev) load();
+                        return !prev;
+                    });
+                }}
                 className="relative w-11 h-11 rounded-full bg-slate-800/95 border border-slate-700 text-slate-200 hover:text-sky-400 shadow-xl flex items-center justify-center"
                 aria-label="알림센터"
             >
@@ -188,43 +243,82 @@ export default function NotificationCenter() {
 
             {isOpen && (
                 <div className="absolute right-0 mt-3 w-[340px] max-h-[480px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-                    <div className="flex items-center justify-between p-4 border-b border-slate-800">
-                        <div>
-                            <div className="font-black text-white">
-                                알림
+                    <div className="p-4 border-b border-slate-800">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="font-black text-white flex items-center gap-2">
+                                    <BellRing className="w-4 h-4 text-sky-400" />
+                                    알림
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">
+                                    읽지 않은 알림 {unread}개
+                                </div>
                             </div>
-                            <div className="text-xs text-slate-500">
-                                읽지 않은 알림 {unread}개
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={markAllRead}
+                                    disabled={unread === 0}
+                                    className="p-2 text-slate-400 hover:text-emerald-400 disabled:opacity-30 disabled:hover:text-slate-400"
+                                    title="모두 읽음"
+                                >
+                                    <CheckCheck className="w-4 h-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsOpen(false)}
+                                    className="p-2 text-slate-400 hover:text-white"
+                                    aria-label="알림센터 닫기"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1">
+
+                        <div className="flex gap-2 mt-3">
                             <button
                                 type="button"
-                                onClick={markAllRead}
-                                className="p-2 text-slate-400 hover:text-emerald-400"
-                                title="모두 읽음"
+                                onClick={() => setUnreadOnly(false)}
+                                className={
+                                    'px-3 py-1.5 rounded-lg text-xs font-bold border '
+                                    + (!unreadOnly
+                                        ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                                        : 'bg-slate-800 text-slate-500 border-slate-700')
+                                }
                             >
-                                <CheckCheck className="w-4 h-4" />
+                                전체 {items.length}
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setIsOpen(false)}
-                                className="p-2 text-slate-400 hover:text-white"
+                                onClick={() => setUnreadOnly(true)}
+                                className={
+                                    'px-3 py-1.5 rounded-lg text-xs font-bold border '
+                                    + (unreadOnly
+                                        ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                                        : 'bg-slate-800 text-slate-500 border-slate-700')
+                                }
                             >
-                                <X className="w-4 h-4" />
+                                안 읽음 {unread}
                             </button>
                         </div>
                     </div>
 
-                    <div className="overflow-y-auto max-h-[400px]">
-                        {items.length === 0 ? (
+                    <div
+                        className="overflow-y-auto max-h-[400px]"
+                        aria-live="polite"
+                    >
+                        {visibleItems.length === 0 ? (
                             <div className="p-8 text-center text-sm text-slate-500">
-                                아직 알림이 없습니다.
+                                {unreadOnly
+                                    ? '읽지 않은 알림이 없습니다.'
+                                    : '아직 알림이 없습니다.'}
                             </div>
                         ) : (
-                            items.map(item => {
+                            visibleItems.map(item => {
                                 const isRead =
                                     Boolean(item.readAt || item.read);
+                                const meta = notificationMeta(item.type);
+                                const TypeIcon = meta.icon;
                                 return (
                                     <button
                                         key={item.id}
@@ -237,8 +331,21 @@ export default function NotificationCenter() {
                                                 className={`mt-1 w-2 h-2 rounded-full shrink-0 ${isRead ? 'bg-slate-600' : 'bg-sky-400'}`}
                                             />
                                             <div className="min-w-0">
-                                                <div className="text-[11px] uppercase tracking-wide text-sky-400 font-bold mb-1">
-                                                    {item.type}
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span
+                                                        className={
+                                                            'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold '
+                                                            + meta.className
+                                                        }
+                                                    >
+                                                        <TypeIcon className="w-3 h-3" />
+                                                        {meta.label}
+                                                    </span>
+                                                    {!isRead && (
+                                                        <span className="text-[10px] text-sky-400 font-bold">
+                                                            NEW
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="text-sm text-slate-200 break-words">
                                                     {item.message}

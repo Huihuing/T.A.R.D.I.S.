@@ -28,6 +28,10 @@ export default function StockPage() {
     const [orderAmount, setOrderAmount] = useState<number | ''>('');
     const [orderPrice, setOrderPrice] = useState<number | ''>('');
     const [isOrderSaving, setIsOrderSaving] = useState(false);
+    const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
+    const [orderStatusFilter, setOrderStatusFilter] = useState<
+        'ALL' | 'PENDING' | 'FILLED' | 'CANCELLED' | 'REJECTED'
+    >('ALL');
 
     const fetchBookmarks = async () => {
         const username = localStorage.getItem('username');
@@ -59,6 +63,9 @@ export default function StockPage() {
                 const uniqueNew = newStocks.filter(s => !existingSymbols.has(s.symbol));
                 return [...prev, ...uniqueNew];
             });
+            setLoadedCount(prev =>
+                Math.max(prev, Math.min(endIndex, ALL_SYMBOLS.length))
+            );
         } catch (error) { console.error(error); } finally { setIsLoading(false); }
     };
 
@@ -175,18 +182,98 @@ export default function StockPage() {
     };
 
     const cancelLimitOrder = async (id: number) => {
+        const order = limitOrders.find(item => item.id === id);
+        if (!order || order.status !== 'PENDING') return;
+
+        const sideLabel = order.side === 'BUY' ? '매수' : '매도';
+        if (!window.confirm(
+            order.symbol + ' ' + order.amount + '주 '
+            + sideLabel + ' 지정가 주문을 취소할까요?'
+        )) {
+            return;
+        }
+
+        setCancelingOrderId(id);
         try {
             const res = await fetch(API_URL + '/api/limit-orders/' + id, {
                 method: 'DELETE',
                 headers: getAuthHeaders(false)
             });
             const data = await res.json().catch(() => ({}));
-            if (!res.ok) return alert(data.message || '주문 취소에 실패했습니다.');
+            if (!res.ok) {
+                alert(data.message || '주문 취소에 실패했습니다.');
+                return;
+            }
             await fetchLimitOrders();
         } catch {
             alert('주문 취소 중 오류가 발생했습니다.');
+        } finally {
+            setCancelingOrderId(null);
         }
     };
+
+    const formatKstDateTime = (value?: string | null) => {
+        if (!value) return '';
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+            ? value
+            : value + '+09:00';
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) return value;
+
+        return new Intl.DateTimeFormat('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    };
+
+    const orderStatusLabel = (status: string) => ({
+        PENDING: '대기',
+        FILLED: '체결',
+        CANCELLED: '취소',
+        REJECTED: '거절'
+    }[status] || status);
+
+    const orderStatusClass = (status: string) => {
+        if (status === 'PENDING') {
+            return 'bg-amber-500/15 text-amber-300 border-amber-500/20';
+        }
+        if (status === 'FILLED') {
+            return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20';
+        }
+        if (status === 'REJECTED') {
+            return 'bg-rose-500/15 text-rose-300 border-rose-500/20';
+        }
+        return 'bg-slate-700/70 text-slate-300 border-slate-600';
+    };
+
+    const filteredLimitOrders =
+        orderStatusFilter === 'ALL'
+            ? limitOrders
+            : limitOrders.filter(
+                order => order.status === orderStatusFilter
+            );
+
+    const estimatedOrderValue =
+        orderAmount && orderPrice
+            ? Number(orderAmount) * Number(orderPrice)
+            : 0;
+
+    const likelyImmediateTrigger =
+        Boolean(
+            selectedStock?.c
+            && orderPrice
+            && (
+                (orderSide === 'BUY'
+                    && Number(selectedStock.c) <= Number(orderPrice))
+                || (orderSide === 'SELL'
+                    && Number(selectedStock.c) >= Number(orderPrice))
+            )
+        );
     return (
         <div className="p-4 sm:p-6 md:p-8 min-h-screen text-slate-200 bg-[#0b1120] relative">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
@@ -261,28 +348,131 @@ export default function StockPage() {
 
             {localStorage.getItem("token") && (
                 <div className="mt-8 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <ClipboardList className="w-5 h-5 text-sky-400" />
-                        <h2 className="font-extrabold text-white">지정가 주문 내역</h2>
-                        <span className="text-xs text-slate-500">대기 {limitOrders.filter(order => order.status === 'PENDING').length}건</span>
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-2">
+                            <ClipboardList className="w-5 h-5 text-sky-400" />
+                            <h2 className="font-extrabold text-white">지정가 주문 내역</h2>
+                            <span className="text-xs text-slate-500">
+                                대기 {limitOrders.filter(order => order.status === 'PENDING').length}건
+                            </span>
+                            <button
+                                type="button"
+                                onClick={fetchLimitOrders}
+                                className="p-1.5 text-slate-500 hover:text-sky-300 rounded-lg hover:bg-slate-800"
+                                title="주문 내역 새로고침"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                            {[
+                                ['ALL', '전체'],
+                                ['PENDING', '대기'],
+                                ['FILLED', '체결'],
+                                ['CANCELLED', '취소'],
+                                ['REJECTED', '거절']
+                            ].map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() =>
+                                        setOrderStatusFilter(
+                                            value as typeof orderStatusFilter
+                                        )
+                                    }
+                                    className={
+                                        'px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors '
+                                        + (orderStatusFilter === value
+                                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                            : 'bg-slate-900/50 text-slate-500 border-slate-700 hover:text-slate-300')
+                                    }
+                                >
+                                    {label}
+                                    <span className="ml-1 opacity-60">
+                                        {value === 'ALL'
+                                            ? limitOrders.length
+                                            : limitOrders.filter(
+                                                order => order.status === value
+                                            ).length}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
+
                     {limitOrders.length === 0 ? (
                         <p className="text-sm text-slate-500">아직 등록된 지정가 주문이 없습니다.</p>
+                    ) : filteredLimitOrders.length === 0 ? (
+                        <p className="text-sm text-slate-500 py-4 text-center">
+                            이 상태의 주문이 없습니다.
+                        </p>
                     ) : (
                         <div className="flex flex-col gap-2">
-                            {limitOrders.map(order => (
-                                <div key={order.id} className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3">
-                                    <div>
-                                        <p className="font-bold text-white">{order.symbol} · {order.amount}주 · {order.side === 'BUY' ? '매수' : '매도'}</p>
-                                        <p className="text-xs text-slate-500 mt-1">지정가 ${Number(order.limitPrice).toFixed(2)}{order.fillPrice ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2) : ''}</p>
+                            {filteredLimitOrders.map(order => (
+                                <div
+                                    key={order.id}
+                                    className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 items-center bg-slate-900/50 border border-slate-700/60 rounded-xl px-4 py-3"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="font-bold text-white">
+                                                {order.symbol} · {order.amount}주 · {order.side === 'BUY' ? '매수' : '매도'}
+                                            </p>
+                                            <span
+                                                className={
+                                                    'text-[11px] font-bold px-2 py-1 rounded-lg border '
+                                                    + orderStatusClass(order.status)
+                                                }
+                                            >
+                                                {orderStatusLabel(order.status)}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            지정가 {'$' + Number(order.limitPrice).toFixed(2)}
+                                            {order.fillPrice
+                                                ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2)
+                                                : ''}
+                                        </p>
+                                        <div className="text-[11px] text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                                            <span>등록 {formatKstDateTime(order.createdAt)}</span>
+                                            {order.completedAt && (
+                                                <span>완료 {formatKstDateTime(order.completedAt)}</span>
+                                            )}
+                                        </div>
+                                        {order.resultMessage && order.status !== 'PENDING' && (
+                                            <p className={
+                                                'text-xs mt-2 '
+                                                + (order.status === 'REJECTED'
+                                                    ? 'text-rose-300'
+                                                    : 'text-slate-500')
+                                            }>
+                                                {order.resultMessage}
+                                            </p>
+                                        )}
                                     </div>
-                                    <span className={'text-xs font-bold px-2 py-1 rounded-lg ' + (order.status === 'PENDING' ? 'bg-amber-500/15 text-amber-400' : order.status === 'FILLED' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700 text-slate-400')}>{order.status}</span>
+
+                                    <div className="text-xs text-slate-500 lg:text-right">
+                                        주문 #{order.id}
+                                    </div>
+
                                     {order.status === 'PENDING' ? (
-                                        <button type="button" onClick={() => cancelLimitOrder(order.id)} className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg" aria-label="지정가 주문 취소">
-                                            <Trash2 className="w-4 h-4" />
+                                        <button
+                                            type="button"
+                                            disabled={cancelingOrderId === order.id}
+                                            onClick={() => cancelLimitOrder(order.id)}
+                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-300 hover:bg-rose-500/10 rounded-lg font-bold text-xs disabled:opacity-50"
+                                            aria-label="지정가 주문 취소"
+                                        >
+                                            {cancelingOrderId === order.id ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                            )}
+                                            취소
                                         </button>
                                     ) : (
-                                        <span className="text-xs text-slate-500 md:text-right">{order.resultMessage || ''}</span>
+                                        <span className="hidden lg:block w-[70px]" />
                                     )}
                                 </div>
                             ))}
@@ -337,10 +527,33 @@ export default function StockPage() {
                                         <input type="number" min="1" step="1" value={orderAmount} onChange={e => setOrderAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder="수량" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
                                         <input type="number" min="0.01" step="0.01" value={orderPrice} onChange={e => setOrderPrice(e.target.value === "" ? "" : Number(e.target.value))} placeholder="지정가" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
                                     </div>
+                                    <div className="mt-3 bg-slate-800/70 border border-slate-700 rounded-xl p-3 text-xs">
+                                        <div className="flex justify-between text-slate-400">
+                                            <span>예상 주문금액</span>
+                                            <span className="font-mono font-bold text-slate-200">
+                                                {estimatedOrderValue > 0
+                                                    ? '$' + estimatedOrderValue.toFixed(2)
+                                                    : '-'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-slate-500 mt-1">
+                                            <span>현재가</span>
+                                            <span className="font-mono">
+                                                {selectedStock.c
+                                                    ? '$' + Number(selectedStock.c).toFixed(2)
+                                                    : '-'}
+                                            </span>
+                                        </div>
+                                        {likelyImmediateTrigger && (
+                                            <p className="mt-2 text-amber-300 leading-relaxed">
+                                                현재가가 이미 체결 조건을 만족합니다. 다음 주문 처리 시 빠르게 체결될 수 있습니다.
+                                            </p>
+                                        )}
+                                    </div>
                                     <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
                                         {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
                                     </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.</p>
+                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다. 주문은 체결 시점의 잔액·보유 수량을 다시 확인합니다.</p>
                                 </div>
                             </div>
                         </motion.div>
