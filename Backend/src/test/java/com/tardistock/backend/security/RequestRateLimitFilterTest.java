@@ -359,4 +359,37 @@ class RequestRateLimitFilterTest {
         assertEquals(429, blockedResponse.getStatus());
     }
 
+    @Test
+    void profilePathsShareOneRateLimitBucket() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 60; i++) {
+            String username = i % 2 == 0 ? "alpha" : "beta";
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "GET",
+                            "/api/profile/" + username
+                    );
+            request.setRemoteAddr("203.0.113.82");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "GET",
+                        "/api/profile/gamma"
+                );
+        blocked.setRemoteAddr("203.0.113.82");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
 }
