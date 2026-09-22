@@ -1,24 +1,36 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
-import Home from './pages/Home';
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';
-import Wallet from './pages/Wallet';
-import Register from './pages/Register';
-import SetupPin from './pages/SetupPin';
-import StockPage from './pages/StockPage';
-import NewsPage from './pages/NewsPage';
-import Watchlist from './pages/Watchlist';
-import Board from './pages/Board';
-import Trollbox from './components/Trollbox';
-import NotificationCenter from './components/NotificationCenter';
-import Leaderboard from './pages/Leaderboard';
-import Profile from './pages/Profile';
-import ForgotPassword from './pages/ForgotPassword';
-import Admin from './pages/Admin';
-import Settings from './pages/Settings';
 import { getStoredToken, refreshAccessToken } from './auth';
+
+const Home = lazy(() => import('./pages/Home'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Login = lazy(() => import('./pages/Login'));
+const Wallet = lazy(() => import('./pages/Wallet'));
+const Register = lazy(() => import('./pages/Register'));
+const SetupPin = lazy(() => import('./pages/SetupPin'));
+const StockPage = lazy(() => import('./pages/StockPage'));
+const NewsPage = lazy(() => import('./pages/NewsPage'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Board = lazy(() => import('./pages/Board'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const Profile = lazy(() => import('./pages/Profile'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const Admin = lazy(() => import('./pages/Admin'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Trollbox = lazy(() => import('./components/Trollbox'));
+const NotificationCenter = lazy(
+  () => import('./components/NotificationCenter')
+);
+
+function RouteFallback() {
+  return (
+    <div className="min-h-screen bg-[#0b1120] text-slate-500 flex items-center justify-center">
+      화면을 불러오는 중...
+    </div>
+  );
+}
+
 
 export default function App() {
   const [, setSessionRevision] = useState(0);
@@ -66,7 +78,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -107,7 +120,8 @@ export default function App() {
             </div>
           }
         />
-      </Routes>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }
