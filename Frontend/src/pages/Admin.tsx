@@ -1,5 +1,6 @@
 import { API_URL } from '../config';
 import { getAuthHeaders } from '../auth';
+import { confirmAction, notify } from '../uiFeedback';
 import { useEffect, useState } from 'react';
 import {
     Activity,
@@ -100,7 +101,17 @@ export default function Admin() {
             ? '신고된 원문을 삭제하고 관련 신고를 처리 완료할까요?'
             : '이 신고를 기각 처리할까요?';
 
-        if (!window.confirm(message)) return;
+        const accepted = await confirmAction({
+            title: action === 'DELETE_CONTENT'
+                ? '신고 원문 삭제'
+                : '신고 기각',
+            message,
+            confirmLabel: action === 'DELETE_CONTENT'
+                ? '원문 삭제'
+                : '기각',
+            danger: action === 'DELETE_CONTENT'
+        });
+        if (!accepted) return;
 
         setModerationLoading(true);
         try {
@@ -114,12 +125,21 @@ export default function Admin() {
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data?.message || '신고 처리에 실패했습니다.');
+                notify(
+                    data?.message || '신고 처리에 실패했습니다.',
+                    'error'
+                );
                 return;
             }
+            notify(
+                action === 'DELETE_CONTENT'
+                    ? '원문을 삭제하고 신고를 처리했습니다.'
+                    : '신고를 기각 처리했습니다.',
+                'success'
+            );
             await loadAdminData();
         } catch {
-            alert('신고 처리 중 오류가 발생했습니다.');
+            notify('신고 처리 중 오류가 발생했습니다.', 'error');
         } finally {
             setModerationLoading(false);
         }
