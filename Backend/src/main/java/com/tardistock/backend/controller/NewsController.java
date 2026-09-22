@@ -26,7 +26,7 @@ public class NewsController {
     private static final Pattern SYMBOL_PATTERN =
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int MAX_QUERY_LENGTH = 120;
-    private static final long NEWS_CACHE_MS = 60_000L;
+    private static final long NEWS_CACHE_MS = 5 * 60 * 1000L;
     private static final int MAX_NEWS_CACHE_ENTRIES = 100;
 
     @Value("${naver.api.client-id}")
