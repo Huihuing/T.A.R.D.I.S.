@@ -97,6 +97,29 @@ class RefreshTokenServiceTest {
     }
 
     @Test
+    void issueTrimsOldSessionsBeyondTwenty() {
+        RefreshTokenRepository repository =
+                mock(RefreshTokenRepository.class);
+        RefreshTokenService service =
+                new RefreshTokenService(repository, 30, true);
+
+        Member member = mock(Member.class);
+        List<RefreshToken> sessions =
+                java.util.stream.IntStream.range(0, 21)
+                        .mapToObj(i -> mock(RefreshToken.class))
+                        .toList();
+
+        when(repository.findByMemberOrderByCreatedAtDesc(member))
+                .thenReturn(sessions);
+
+        service.issue(member);
+
+        verify(repository).deleteAll(
+                sessions.subList(20, 21)
+        );
+    }
+
+    @Test
     void rotateUsesWriteLockedLookup() {
         RefreshTokenRepository repository =
                 mock(RefreshTokenRepository.class);
