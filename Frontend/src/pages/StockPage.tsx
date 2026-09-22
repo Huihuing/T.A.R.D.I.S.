@@ -64,10 +64,7 @@ export default function StockPage() {
                 return [...prev, ...uniqueNew];
             });
             setLoadedCount(prev =>
-                Math.max(
-                    prev,
-                    Math.min(endIndex, ALL_SYMBOLS.length)
-                )
+                Math.max(prev, Math.min(endIndex, ALL_SYMBOLS.length))
             );
         } catch (error) { console.error(error); } finally { setIsLoading(false); }
     };
@@ -188,10 +185,10 @@ export default function StockPage() {
         const order = limitOrders.find(item => item.id === id);
         if (!order || order.status !== 'PENDING') return;
 
+        const sideLabel = order.side === 'BUY' ? '매수' : '매도';
         if (!window.confirm(
-            `${order.symbol} ${order.amount}주 ${
-                order.side === 'BUY' ? '매수' : '매도'
-            } 지정가 주문을 취소할까요?`
+            order.symbol + ' ' + order.amount + '주 '
+            + sideLabel + ' 지정가 주문을 취소할까요?'
         )) {
             return;
         }
@@ -217,11 +214,12 @@ export default function StockPage() {
 
     const formatKstDateTime = (value?: string | null) => {
         if (!value) return '';
-        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+        const normalized = /[zZ]|[+-]\\d{2}:\\d{2}$/.test(value)
             ? value
-            : `${value}+09:00`;
+            : value + '+09:00';
         const date = new Date(normalized);
         if (Number.isNaN(date.getTime())) return value;
+
         return new Intl.DateTimeFormat('ko-KR', {
             timeZone: 'Asia/Seoul',
             year: 'numeric',
@@ -431,9 +429,57 @@ export default function StockPage() {
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-400 mt-1">
-                                            지정가 ${Number(order.limitPrice).toFixed(2)}
+                                            지정가 {'$' + Number(order.limitPrice).toFixed(2)}
                                             {order.fillPrice
-                                                ? ' · 체결가 
+                                                ? ' · 체결가 $' + Number(order.fillPrice).toFixed(2)
+                                                : ''}
+                                        </p>
+                                        <div className="text-[11px] text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                                            <span>등록 {formatKstDateTime(order.createdAt)}</span>
+                                            {order.completedAt && (
+                                                <span>완료 {formatKstDateTime(order.completedAt)}</span>
+                                            )}
+                                        </div>
+                                        {order.resultMessage && order.status !== 'PENDING' && (
+                                            <p className={
+                                                'text-xs mt-2 '
+                                                + (order.status === 'REJECTED'
+                                                    ? 'text-rose-300'
+                                                    : 'text-slate-500')
+                                            }>
+                                                {order.resultMessage}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="text-xs text-slate-500 lg:text-right">
+                                        주문 #{order.id}
+                                    </div>
+
+                                    {order.status === 'PENDING' ? (
+                                        <button
+                                            type="button"
+                                            disabled={cancelingOrderId === order.id}
+                                            onClick={() => cancelLimitOrder(order.id)}
+                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-300 hover:bg-rose-500/10 rounded-lg font-bold text-xs disabled:opacity-50"
+                                            aria-label="지정가 주문 취소"
+                                        >
+                                            {cancelingOrderId === order.id ? (
+                                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                            )}
+                                            취소
+                                        </button>
+                                    ) : (
+                                        <span className="hidden lg:block w-[70px]" />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
             <AnimatePresence>
                 {selectedStock && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
@@ -485,250 +531,16 @@ export default function StockPage() {
                                         <div className="flex justify-between text-slate-400">
                                             <span>예상 주문금액</span>
                                             <span className="font-mono font-bold text-slate-200">
-                                                ${estimatedOrderValue > 0
-                                                    ? '
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-} + Number(order.fillPrice).toFixed(2)
-                                                : ''}
-                                        </p>
-                                        <div className="text-[11px] text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                                            <span>등록 {formatKstDateTime(order.createdAt)}</span>
-                                            {order.completedAt && (
-                                                <span>완료 {formatKstDateTime(order.completedAt)}</span>
-                                            )}
-                                        </div>
-                                        {order.resultMessage && order.status !== 'PENDING' && (
-                                            <p className={
-                                                'text-xs mt-2 '
-                                                + (order.status === 'REJECTED'
-                                                    ? 'text-rose-300'
-                                                    : 'text-slate-500')
-                                            }>
-                                                {order.resultMessage}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="text-xs text-slate-500 lg:text-right">
-                                        주문 #{order.id}
-                                    </div>
-
-                                    {order.status === 'PENDING' ? (
-                                        <button
-                                            type="button"
-                                            disabled={cancelingOrderId === order.id}
-                                            onClick={() => cancelLimitOrder(order.id)}
-                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-300 hover:bg-rose-500/10 rounded-lg font-bold text-xs disabled:opacity-50"
-                                            aria-label="지정가 주문 취소"
-                                        >
-                                            {cancelingOrderId === order.id ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="w-4 h-4" />
-                                            )}
-                                            취소
-                                        </button>
-                                    ) : (
-                                        <span className="hidden lg:block w-[70px]" />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            <AnimatePresence>
-                {selectedStock && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full max-h-[90vh]">
-                            <div className="flex-1 bg-slate-950 p-2 min-h-[300px] md:min-h-[500px]">
-                                <iframe src={`https://s.tradingview.com/widgetembed/?symbol=${selectedStock.symbol}&interval=D&theme=dark&style=1&hide_top_toolbar=1&hide_side_toolbar=1&withdateranges=1&saveimage=0&locale=kr`} className="w-full h-full border-0 rounded-xl" allowTransparency={true} />
-                            </div>
-                            <div className="w-full md:w-80 p-4 sm:p-6 flex flex-col border-t md:border-t-0 md:border-l border-slate-800 overflow-y-auto">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div>
-                                        <div className="flex items-center gap-3">
-                                            <h2 className="text-2xl sm:text-3xl font-black text-white">{selectedStock.symbol}</h2>
-                                            <button
-                                                onClick={(e) => toggleBookmark(e, selectedStock.symbol, selectedStock.c || 0)}
-                                                className="p-1 rounded-lg hover:bg-slate-800 transition-all hover:scale-110"
-                                                title="관심 종목 (Watchlist) 추가/삭제"
-                                            >
-                                                <Star className={`w-6 h-6 ${bookmarks.includes(selectedStock.symbol) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
-                                            </button>
-                                        </div>
-                                        {selectedStock.description && <p className="text-xs text-slate-400 mt-1 truncate w-[200px] md:w-48">{selectedStock.description}</p>}
-                                    </div>
-                                    <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1.5 sm:p-1 transition-colors"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
-                                </div>
-                                <div className="mb-6 sm:mb-8">
-                                    <p className="text-4xl sm:text-5xl font-mono font-bold text-white">${selectedStock.c?.toFixed(2)}</p>
-                                    <div className="flex items-center gap-2 mt-2"><span className={`font-bold ${selectedStock.d > 0 ? 'text-emerald-500' : selectedStock.d < 0 ? 'text-rose-500' : 'text-slate-400'}`}>{selectedStock.d > 0 ? '+' : ''}{selectedStock.d?.toFixed(2)} ({selectedStock.dp > 0 ? '+' : ''}{selectedStock.dp?.toFixed(2)}%)</span></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 mb-auto">
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">고가 (High)</p><p className="font-mono font-bold text-white">${selectedStock.h?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">저가 (Low)</p><p className="font-mono font-bold text-white">${selectedStock.l?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">시가 (Open)</p><p className="font-mono font-bold text-white">${selectedStock.o?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">전일 종가 (Prev)</p><p className="font-mono font-bold text-white">${selectedStock.pc?.toFixed(2)}</p></div>
-                                </div>
-                                <div className="mt-6 pt-5 border-t border-slate-800">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <ClipboardList className="w-4 h-4 text-sky-400" />
-                                        <h3 className="font-bold text-white text-sm">지정가 주문</h3>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <button type="button" onClick={() => setOrderSide('BUY')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매수</button>
-                                        <button type="button" onClick={() => setOrderSide('SELL')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'SELL' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매도</button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input type="number" min="1" step="1" value={orderAmount} onChange={e => setOrderAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder="수량" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                        <input type="number" min="0.01" step="0.01" value={orderPrice} onChange={e => setOrderPrice(e.target.value === "" ? "" : Number(e.target.value))} placeholder="지정가" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                    </div>
-                                    <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
-                                        {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
-                                    </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.</p>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-} + estimatedOrderValue.toFixed(2)
+                                                {estimatedOrderValue > 0
+                                                    ? '$' + estimatedOrderValue.toFixed(2)
                                                     : '-'}
                                             </span>
                                         </div>
                                         <div className="flex justify-between text-slate-500 mt-1">
                                             <span>현재가</span>
                                             <span className="font-mono">
-                                                ${selectedStock.c
-                                                    ? '
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-} + Number(order.fillPrice).toFixed(2)
-                                                : ''}
-                                        </p>
-                                        <div className="text-[11px] text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                                            <span>등록 {formatKstDateTime(order.createdAt)}</span>
-                                            {order.completedAt && (
-                                                <span>완료 {formatKstDateTime(order.completedAt)}</span>
-                                            )}
-                                        </div>
-                                        {order.resultMessage && order.status !== 'PENDING' && (
-                                            <p className={
-                                                'text-xs mt-2 '
-                                                + (order.status === 'REJECTED'
-                                                    ? 'text-rose-300'
-                                                    : 'text-slate-500')
-                                            }>
-                                                {order.resultMessage}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="text-xs text-slate-500 lg:text-right">
-                                        주문 #{order.id}
-                                    </div>
-
-                                    {order.status === 'PENDING' ? (
-                                        <button
-                                            type="button"
-                                            disabled={cancelingOrderId === order.id}
-                                            onClick={() => cancelLimitOrder(order.id)}
-                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-300 hover:bg-rose-500/10 rounded-lg font-bold text-xs disabled:opacity-50"
-                                            aria-label="지정가 주문 취소"
-                                        >
-                                            {cancelingOrderId === order.id ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="w-4 h-4" />
-                                            )}
-                                            취소
-                                        </button>
-                                    ) : (
-                                        <span className="hidden lg:block w-[70px]" />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            <AnimatePresence>
-                {selectedStock && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full max-h-[90vh]">
-                            <div className="flex-1 bg-slate-950 p-2 min-h-[300px] md:min-h-[500px]">
-                                <iframe src={`https://s.tradingview.com/widgetembed/?symbol=${selectedStock.symbol}&interval=D&theme=dark&style=1&hide_top_toolbar=1&hide_side_toolbar=1&withdateranges=1&saveimage=0&locale=kr`} className="w-full h-full border-0 rounded-xl" allowTransparency={true} />
-                            </div>
-                            <div className="w-full md:w-80 p-4 sm:p-6 flex flex-col border-t md:border-t-0 md:border-l border-slate-800 overflow-y-auto">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div>
-                                        <div className="flex items-center gap-3">
-                                            <h2 className="text-2xl sm:text-3xl font-black text-white">{selectedStock.symbol}</h2>
-                                            <button
-                                                onClick={(e) => toggleBookmark(e, selectedStock.symbol, selectedStock.c || 0)}
-                                                className="p-1 rounded-lg hover:bg-slate-800 transition-all hover:scale-110"
-                                                title="관심 종목 (Watchlist) 추가/삭제"
-                                            >
-                                                <Star className={`w-6 h-6 ${bookmarks.includes(selectedStock.symbol) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
-                                            </button>
-                                        </div>
-                                        {selectedStock.description && <p className="text-xs text-slate-400 mt-1 truncate w-[200px] md:w-48">{selectedStock.description}</p>}
-                                    </div>
-                                    <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1.5 sm:p-1 transition-colors"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
-                                </div>
-                                <div className="mb-6 sm:mb-8">
-                                    <p className="text-4xl sm:text-5xl font-mono font-bold text-white">${selectedStock.c?.toFixed(2)}</p>
-                                    <div className="flex items-center gap-2 mt-2"><span className={`font-bold ${selectedStock.d > 0 ? 'text-emerald-500' : selectedStock.d < 0 ? 'text-rose-500' : 'text-slate-400'}`}>{selectedStock.d > 0 ? '+' : ''}{selectedStock.d?.toFixed(2)} ({selectedStock.dp > 0 ? '+' : ''}{selectedStock.dp?.toFixed(2)}%)</span></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 mb-auto">
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">고가 (High)</p><p className="font-mono font-bold text-white">${selectedStock.h?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">저가 (Low)</p><p className="font-mono font-bold text-white">${selectedStock.l?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">시가 (Open)</p><p className="font-mono font-bold text-white">${selectedStock.o?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">전일 종가 (Prev)</p><p className="font-mono font-bold text-white">${selectedStock.pc?.toFixed(2)}</p></div>
-                                </div>
-                                <div className="mt-6 pt-5 border-t border-slate-800">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <ClipboardList className="w-4 h-4 text-sky-400" />
-                                        <h3 className="font-bold text-white text-sm">지정가 주문</h3>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <button type="button" onClick={() => setOrderSide('BUY')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매수</button>
-                                        <button type="button" onClick={() => setOrderSide('SELL')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'SELL' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매도</button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input type="number" min="1" step="1" value={orderAmount} onChange={e => setOrderAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder="수량" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                        <input type="number" min="0.01" step="0.01" value={orderPrice} onChange={e => setOrderPrice(e.target.value === "" ? "" : Number(e.target.value))} placeholder="지정가" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                    </div>
-                                    <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
-                                        {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
-                                    </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.</p>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-} + Number(selectedStock.c).toFixed(2)
+                                                {selectedStock.c
+                                                    ? '$' + Number(selectedStock.c).toFixed(2)
                                                     : '-'}
                                             </span>
                                         </div>
@@ -742,114 +554,6 @@ export default function StockPage() {
                                         {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
                                     </button>
                                     <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다. 주문은 체결 시점의 잔액·보유 수량을 다시 확인합니다.</p>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-} + Number(order.fillPrice).toFixed(2)
-                                                : ''}
-                                        </p>
-                                        <div className="text-[11px] text-slate-600 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                                            <span>등록 {formatKstDateTime(order.createdAt)}</span>
-                                            {order.completedAt && (
-                                                <span>완료 {formatKstDateTime(order.completedAt)}</span>
-                                            )}
-                                        </div>
-                                        {order.resultMessage && order.status !== 'PENDING' && (
-                                            <p className={
-                                                'text-xs mt-2 '
-                                                + (order.status === 'REJECTED'
-                                                    ? 'text-rose-300'
-                                                    : 'text-slate-500')
-                                            }>
-                                                {order.resultMessage}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="text-xs text-slate-500 lg:text-right">
-                                        주문 #{order.id}
-                                    </div>
-
-                                    {order.status === 'PENDING' ? (
-                                        <button
-                                            type="button"
-                                            disabled={cancelingOrderId === order.id}
-                                            onClick={() => cancelLimitOrder(order.id)}
-                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-rose-300 hover:bg-rose-500/10 rounded-lg font-bold text-xs disabled:opacity-50"
-                                            aria-label="지정가 주문 취소"
-                                        >
-                                            {cancelingOrderId === order.id ? (
-                                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="w-4 h-4" />
-                                            )}
-                                            취소
-                                        </button>
-                                    ) : (
-                                        <span className="hidden lg:block w-[70px]" />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            <AnimatePresence>
-                {selectedStock && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-6" onClick={() => setSelectedStock(null)}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-full max-h-[90vh]">
-                            <div className="flex-1 bg-slate-950 p-2 min-h-[300px] md:min-h-[500px]">
-                                <iframe src={`https://s.tradingview.com/widgetembed/?symbol=${selectedStock.symbol}&interval=D&theme=dark&style=1&hide_top_toolbar=1&hide_side_toolbar=1&withdateranges=1&saveimage=0&locale=kr`} className="w-full h-full border-0 rounded-xl" allowTransparency={true} />
-                            </div>
-                            <div className="w-full md:w-80 p-4 sm:p-6 flex flex-col border-t md:border-t-0 md:border-l border-slate-800 overflow-y-auto">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div>
-                                        <div className="flex items-center gap-3">
-                                            <h2 className="text-2xl sm:text-3xl font-black text-white">{selectedStock.symbol}</h2>
-                                            <button
-                                                onClick={(e) => toggleBookmark(e, selectedStock.symbol, selectedStock.c || 0)}
-                                                className="p-1 rounded-lg hover:bg-slate-800 transition-all hover:scale-110"
-                                                title="관심 종목 (Watchlist) 추가/삭제"
-                                            >
-                                                <Star className={`w-6 h-6 ${bookmarks.includes(selectedStock.symbol) ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'}`} />
-                                            </button>
-                                        </div>
-                                        {selectedStock.description && <p className="text-xs text-slate-400 mt-1 truncate w-[200px] md:w-48">{selectedStock.description}</p>}
-                                    </div>
-                                    <button onClick={() => setSelectedStock(null)} className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1.5 sm:p-1 transition-colors"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
-                                </div>
-                                <div className="mb-6 sm:mb-8">
-                                    <p className="text-4xl sm:text-5xl font-mono font-bold text-white">${selectedStock.c?.toFixed(2)}</p>
-                                    <div className="flex items-center gap-2 mt-2"><span className={`font-bold ${selectedStock.d > 0 ? 'text-emerald-500' : selectedStock.d < 0 ? 'text-rose-500' : 'text-slate-400'}`}>{selectedStock.d > 0 ? '+' : ''}{selectedStock.d?.toFixed(2)} ({selectedStock.dp > 0 ? '+' : ''}{selectedStock.dp?.toFixed(2)}%)</span></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 mb-auto">
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">고가 (High)</p><p className="font-mono font-bold text-white">${selectedStock.h?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">저가 (Low)</p><p className="font-mono font-bold text-white">${selectedStock.l?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">시가 (Open)</p><p className="font-mono font-bold text-white">${selectedStock.o?.toFixed(2)}</p></div>
-                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700/50"><p className="text-xs text-slate-400 mb-1">전일 종가 (Prev)</p><p className="font-mono font-bold text-white">${selectedStock.pc?.toFixed(2)}</p></div>
-                                </div>
-                                <div className="mt-6 pt-5 border-t border-slate-800">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <ClipboardList className="w-4 h-4 text-sky-400" />
-                                        <h3 className="font-bold text-white text-sm">지정가 주문</h3>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <button type="button" onClick={() => setOrderSide('BUY')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매수</button>
-                                        <button type="button" onClick={() => setOrderSide('SELL')} className={'py-2 rounded-lg font-bold text-sm ' + (orderSide === 'SELL' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400')}>지정가 매도</button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input type="number" min="1" step="1" value={orderAmount} onChange={e => setOrderAmount(e.target.value === "" ? "" : Number(e.target.value))} placeholder="수량" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                        <input type="number" min="0.01" step="0.01" value={orderPrice} onChange={e => setOrderPrice(e.target.value === "" ? "" : Number(e.target.value))} placeholder="지정가" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" />
-                                    </div>
-                                    <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
-                                        {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
-                                    </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다.</p>
                                 </div>
                             </div>
                         </motion.div>
