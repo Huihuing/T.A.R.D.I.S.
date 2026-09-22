@@ -8,6 +8,7 @@ import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
+import com.tardistock.backend.service.PasswordResetService;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member sender = new Member(
                 "alice",
@@ -80,7 +82,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.transfer(
@@ -126,6 +129,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member member = new Member(
                 "alice",
@@ -148,7 +152,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.settings(auth("alice"));
@@ -174,6 +179,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member member = new Member(
                 "alice",
@@ -199,7 +205,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.changePassword(
@@ -225,6 +232,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member member = new Member(
                 "alice",
@@ -246,7 +254,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.changePin(
@@ -270,6 +279,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member member = new Member(
                 "alice",
@@ -295,7 +305,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.linkGoogle(
@@ -316,6 +327,7 @@ class AccountControllerTest {
         LedgerService ledger = mock(LedgerService.class);
         RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
         GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
 
         Member member = new Member(
                 "g_alice",
@@ -338,7 +350,8 @@ class AccountControllerTest {
                 notifications,
                 ledger,
                 refreshTokens,
-                google
+                google,
+                passwordReset
         );
 
         ResponseEntity<?> response = controller.unlinkGoogle(
@@ -348,6 +361,118 @@ class AccountControllerTest {
         assertEquals(409, response.getStatusCode().value());
         assertEquals("GOOGLE", member.getSocialProvider());
         verify(members, never()).save(any(Member.class));
+    }
+
+    @Test
+    void resetPinUsesSecurityCodeAndUpdatesPin() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        when(encoder.matches("5678", "encoded-pin"))
+                .thenReturn(false);
+        when(encoder.encode("5678"))
+                .thenReturn("encoded-new-pin");
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google,
+                passwordReset
+        );
+
+        ResponseEntity<?> response = controller.resetPin(
+                Map.of(
+                        "code", "123456",
+                        "newPin", "5678"
+                ),
+                auth("alice")
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("encoded-new-pin", member.getPin());
+        assertTrue(member.isPinConfigured());
+        verify(passwordReset).consumeSecurityCode(member, "123456");
+        verify(notifications).create(
+                member,
+                "SECURITY",
+                "이메일 인증을 통해 송금 PIN이 재설정되었습니다."
+        );
+    }
+
+    @Test
+    void googleOnlyAccountCanEnablePasswordWithSecurityCode() {
+        WalletRepository wallets = mock(WalletRepository.class);
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        LedgerService ledger = mock(LedgerService.class);
+        RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+        GoogleIdentityService google = mock(GoogleIdentityService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
+
+        Member member = new Member(
+                "g_alice",
+                "random-password",
+                "Alice",
+                "alice@example.test",
+                "random-pin"
+        );
+        member.setSocialProvider("GOOGLE");
+        member.setPasswordLoginEnabled(false);
+
+        when(members.findByUsernameForUpdate("g_alice"))
+                .thenReturn(Optional.of(member));
+        when(encoder.encode("new-password"))
+                .thenReturn("encoded-new-password");
+
+        AccountController controller = new AccountController(
+                wallets,
+                members,
+                encoder,
+                notifications,
+                ledger,
+                refreshTokens,
+                google,
+                passwordReset
+        );
+
+        ResponseEntity<?> response = controller.enablePasswordLogin(
+                Map.of(
+                        "code", "654321",
+                        "newPassword", "new-password"
+                ),
+                auth("g_alice")
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(member.isPasswordLoginEnabled());
+        assertEquals("encoded-new-password", member.getPassword());
+        verify(passwordReset).consumeSecurityCode(member, "654321");
+        verify(notifications).create(
+                member,
+                "SECURITY",
+                "일반 비밀번호 로그인이 추가되었습니다."
+        );
     }
 
     private static UsernamePasswordAuthenticationToken auth(
