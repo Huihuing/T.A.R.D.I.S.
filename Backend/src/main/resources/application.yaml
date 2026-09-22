@@ -1,4 +1,18 @@
+server:
+  shutdown: graceful
+  compression:
+    enabled: true
+    min-response-size: 1KB
+    mime-types:
+      - application/json
+      - text/html
+      - text/plain
+      - text/css
+      - application/javascript
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   application:
     name: backend
   datasource:
