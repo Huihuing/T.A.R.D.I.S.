@@ -53,6 +53,14 @@ export default function Settings() {
     const [confirmPin, setConfirmPin] = useState('');
     const [pinLoading, setPinLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
+    const [recoveryMode, setRecoveryMode] = useState<'PIN' | 'PASSWORD' | null>(null);
+    const [securityCode, setSecurityCode] = useState('');
+    const [recoveryPin, setRecoveryPin] = useState('');
+    const [confirmRecoveryPin, setConfirmRecoveryPin] = useState('');
+    const [recoveryPassword, setRecoveryPassword] = useState('');
+    const [confirmRecoveryPassword, setConfirmRecoveryPassword] = useState('');
+    const [securityCodeSending, setSecurityCodeSending] = useState(false);
+    const [recoveryLoading, setRecoveryLoading] = useState(false);
 
     const loadSettings = async () => {
         try {
@@ -180,6 +188,114 @@ export default function Settings() {
         }
     };
 
+    const sendSecurityCode = async () => {
+        setSecurityCodeSending(true);
+        try {
+            const res = await fetch(
+                `${API_URL}/api/account/security-code/send`,
+                {
+                    method: 'POST',
+                    headers: getAuthHeaders(false)
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || '보안 인증번호 발송에 실패했습니다.');
+                return;
+            }
+            alert(data.message || '계정 이메일로 인증번호를 전송했습니다.');
+        } catch {
+            alert('보안 인증번호 발송 중 서버 오류가 발생했습니다.');
+        } finally {
+            setSecurityCodeSending(false);
+        }
+    };
+
+    const handlePinReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!/^\d{6}$/.test(securityCode)) {
+            alert('이메일 인증번호 6자리를 입력해주세요.');
+            return;
+        }
+        if (!/^\d{4}$/.test(recoveryPin)) {
+            alert('새 PIN은 숫자 4자리로 입력해주세요.');
+            return;
+        }
+        if (recoveryPin !== confirmRecoveryPin) {
+            alert('새 PIN 확인 값이 일치하지 않습니다.');
+            return;
+        }
+
+        setRecoveryLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/account/pin/reset`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    code: securityCode,
+                    newPin: recoveryPin
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || 'PIN 재설정에 실패했습니다.');
+                return;
+            }
+            alert(data.message || '송금 PIN을 재설정했습니다.');
+            setRecoveryMode(null);
+            setSecurityCode('');
+            setRecoveryPin('');
+            setConfirmRecoveryPin('');
+            await loadSettings();
+        } catch {
+            alert('PIN 재설정 중 서버 오류가 발생했습니다.');
+        } finally {
+            setRecoveryLoading(false);
+        }
+    };
+
+    const handlePasswordEnable = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!/^\d{6}$/.test(securityCode)) {
+            alert('이메일 인증번호 6자리를 입력해주세요.');
+            return;
+        }
+        if (recoveryPassword.length < 8 || recoveryPassword.length > 64) {
+            alert('새 비밀번호는 8~64자로 입력해주세요.');
+            return;
+        }
+        if (recoveryPassword !== confirmRecoveryPassword) {
+            alert('새 비밀번호 확인 값이 일치하지 않습니다.');
+            return;
+        }
+
+        setRecoveryLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/account/password/enable`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    code: securityCode,
+                    newPassword: recoveryPassword
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || '일반 비밀번호 추가에 실패했습니다.');
+                return;
+            }
+            alert(data.message || '일반 비밀번호 로그인이 추가되었습니다.');
+            setRecoveryMode(null);
+            setSecurityCode('');
+            setRecoveryPassword('');
+            setConfirmRecoveryPassword('');
+            await loadSettings();
+        } catch {
+            alert('일반 비밀번호 추가 중 서버 오류가 발생했습니다.');
+        } finally {
+            setRecoveryLoading(false);
+        }
+    };
     const linkGoogle = async (
         response: GoogleCredentialResponse
     ) => {
@@ -437,9 +553,64 @@ export default function Settings() {
                                         </form>
                                     </>
                                 ) : (
-                                    <div className="mt-4 bg-slate-900/60 border border-slate-700 rounded-2xl p-4 text-sm text-slate-400">
-                                        이 계정은 Google 로그인 전용입니다.
-                                        일반 비밀번호 변경은 사용할 수 없습니다.
+                                    <div className="mt-4 bg-slate-900/60 border border-slate-700 rounded-2xl p-4">
+                                        <p className="text-sm text-slate-400">
+                                            현재 Google 로그인 전용 계정입니다. 계정 이메일 인증 후 일반 비밀번호 로그인을 추가할 수 있습니다.
+                                        </p>
+                                        {recoveryMode !== 'PASSWORD' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setRecoveryMode('PASSWORD');
+                                                    setSecurityCode('');
+                                                }}
+                                                className="mt-4 w-full rounded-xl bg-sky-500/10 border border-sky-500/20 py-3 text-sm font-bold text-sky-300 hover:bg-sky-500/20"
+                                            >
+                                                일반 비밀번호 추가
+                                            </button>
+                                        ) : (
+                                            <form onSubmit={handlePasswordEnable} className="mt-4 space-y-3">
+                                                <SecurityCodeInput
+                                                    value={securityCode}
+                                                    onChange={setSecurityCode}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={securityCodeSending}
+                                                    onClick={sendSecurityCode}
+                                                    className="w-full rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                                                >
+                                                    {securityCodeSending ? '발송 중...' : '이메일 인증번호 보내기'}
+                                                </button>
+                                                <PasswordInput
+                                                    value={recoveryPassword}
+                                                    onChange={setRecoveryPassword}
+                                                    placeholder="새 비밀번호 (8~64자)"
+                                                />
+                                                <PasswordInput
+                                                    value={confirmRecoveryPassword}
+                                                    onChange={setConfirmRecoveryPassword}
+                                                    placeholder="새 비밀번호 확인"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={recoveryLoading}
+                                                        onClick={() => setRecoveryMode(null)}
+                                                        className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 font-bold text-slate-400 hover:text-white disabled:opacity-50"
+                                                    >
+                                                        취소
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={recoveryLoading}
+                                                        className="flex-1 rounded-xl bg-sky-600 py-3 font-bold text-white hover:bg-sky-500 disabled:opacity-50"
+                                                    >
+                                                        {recoveryLoading ? '추가 중...' : '비밀번호 추가'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        )}
                                     </div>
                                 )}
                             </section>
@@ -486,6 +657,68 @@ export default function Settings() {
                                                 : 'PIN 설정'}
                                     </button>
                                 </form>
+
+                                {settings.pinConfigured && (
+                                    <div className="mt-4 border-t border-slate-700 pt-4">
+                                        {recoveryMode !== 'PIN' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setRecoveryMode('PIN');
+                                                    setSecurityCode('');
+                                                }}
+                                                className="w-full rounded-xl bg-amber-500/10 border border-amber-500/20 py-2.5 text-sm font-bold text-amber-300 hover:bg-amber-500/20"
+                                            >
+                                                PIN을 잊으셨나요? 이메일로 재설정
+                                            </button>
+                                        ) : (
+                                            <form onSubmit={handlePinReset} className="space-y-3">
+                                                <p className="text-xs leading-relaxed text-slate-500">
+                                                    {settings.email}로 받은 6자리 인증번호와 새 PIN을 입력하세요.
+                                                </p>
+                                                <SecurityCodeInput
+                                                    value={securityCode}
+                                                    onChange={setSecurityCode}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={securityCodeSending}
+                                                    onClick={sendSecurityCode}
+                                                    className="w-full rounded-xl border border-slate-700 bg-slate-900 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                                                >
+                                                    {securityCodeSending ? '발송 중...' : '이메일 인증번호 보내기'}
+                                                </button>
+                                                <PinInput
+                                                    value={recoveryPin}
+                                                    onChange={setRecoveryPin}
+                                                    placeholder="새 PIN"
+                                                />
+                                                <PinInput
+                                                    value={confirmRecoveryPin}
+                                                    onChange={setConfirmRecoveryPin}
+                                                    placeholder="새 PIN 확인"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={recoveryLoading}
+                                                        onClick={() => setRecoveryMode(null)}
+                                                        className="flex-1 rounded-xl border border-slate-700 bg-slate-900 py-3 font-bold text-slate-400 hover:text-white disabled:opacity-50"
+                                                    >
+                                                        취소
+                                                    </button>
+                                                    <button
+                                                        type="submit"
+                                                        disabled={recoveryLoading}
+                                                        className="flex-1 rounded-xl bg-amber-500 py-3 font-black text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                                                    >
+                                                        {recoveryLoading ? '재설정 중...' : 'PIN 재설정'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </div>
+                                )}
                             </section>
                         </div>
 
@@ -578,6 +811,33 @@ function Info({
                 {value}
             </div>
         </div>
+    );
+}
+
+
+function SecurityCodeInput({
+    value,
+    onChange
+}: {
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={value}
+            onChange={e =>
+                onChange(
+                    e.target.value.replace(/\D/g, '').slice(0, 6)
+                )
+            }
+            placeholder="이메일 인증번호 6자리"
+            required
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-amber-500 font-mono tracking-widest"
+        />
     );
 }
 
