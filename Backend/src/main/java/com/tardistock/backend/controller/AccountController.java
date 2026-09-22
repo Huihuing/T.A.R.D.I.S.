@@ -606,9 +606,9 @@ public class AccountController {
             }
 
             fromWallet.setBalance(
-                    fromWallet.getBalance() - amount);
+                    roundMoney(fromWallet.getBalance() - amount));
             toWallet.setBalance(
-                    toWallet.getBalance() + amount);
+                    roundMoney(toWallet.getBalance() + amount));
             walletRepository.save(fromWallet);
             walletRepository.save(toWallet);
 
@@ -698,4 +698,8 @@ public class AccountController {
                     "금액을 올바르게 입력하세요.");
         }
     }
+    private double roundMoney(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
 }
