@@ -36,7 +36,7 @@ public class PriceAlertService {
 
     @Transactional(readOnly = true)
     public List<PriceAlert> list(String username) {
-        return priceAlertRepository.findByMemberOrderByCreatedAtDesc(
+        return priceAlertRepository.findTop200ByMemberOrderByCreatedAtDesc(
                 requireMember(username)
         );
     }
