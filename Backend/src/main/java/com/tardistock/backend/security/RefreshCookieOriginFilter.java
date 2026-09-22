@@ -13,6 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 @Component
@@ -30,11 +31,12 @@ public class RefreshCookieOriginFilter extends OncePerRequestFilter {
     public RefreshCookieOriginFilter(
             @Value("${app.frontend-url:https://tardis-neon.vercel.app}")
             String frontendUrl) {
-        this.allowedOrigins = Set.of(
-                normalize(frontendUrl),
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        );
+        LinkedHashSet<String> origins = new LinkedHashSet<>();
+        origins.add(normalize(frontendUrl));
+        origins.add("http://localhost:5173");
+        origins.add("http://127.0.0.1:5173");
+        origins.remove("");
+        this.allowedOrigins = Set.copyOf(origins);
     }
 
     @Override
