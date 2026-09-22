@@ -76,8 +76,8 @@ public class SecurityReportController {
     private String text(JsonNode node, String field) {
         if (node == null) return "";
         JsonNode value = node.get(field);
-        return value != null && value.isTextual()
-                ? value.asText()
+        return value != null && value.isString()
+                ? value.asString()
                 : "";
     }
 
