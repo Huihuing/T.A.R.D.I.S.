@@ -33,4 +33,4 @@ google:
 
 jwt:
   secret: CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_BYTES
-  expiration-ms: 86400000
+  expiration-ms: 900000
