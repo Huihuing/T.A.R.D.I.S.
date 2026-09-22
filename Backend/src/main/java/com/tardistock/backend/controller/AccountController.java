@@ -7,6 +7,7 @@ import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
+import com.tardistock.backend.service.PasswordResetService;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -31,6 +32,7 @@ public class AccountController {
     private final LedgerService ledgerService;
     private final RefreshTokenService refreshTokenService;
     private final GoogleIdentityService googleIdentityService;
+    private final PasswordResetService passwordResetService;
 
     public AccountController(
             WalletRepository walletRepository,
@@ -39,7 +41,8 @@ public class AccountController {
             NotificationService notificationService,
             LedgerService ledgerService,
             RefreshTokenService refreshTokenService,
-            GoogleIdentityService googleIdentityService) {
+            GoogleIdentityService googleIdentityService,
+            PasswordResetService passwordResetService) {
         this.walletRepository = walletRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -47,6 +50,7 @@ public class AccountController {
         this.ledgerService = ledgerService;
         this.refreshTokenService = refreshTokenService;
         this.googleIdentityService = googleIdentityService;
+        this.passwordResetService = passwordResetService;
     }
 
     @GetMapping("/ledger")
@@ -142,6 +146,140 @@ public class AccountController {
         }
     }
 
+
+    @PostMapping("/security-code/send")
+    public ResponseEntity<?> sendSecurityCode(
+            Authentication authentication) {
+        try {
+            Member member = memberRepository.findByUsername(
+                            requireUsername(authentication))
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."));
+
+            passwordResetService.sendSecurityCode(member);
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message",
+                    "계정 이메일로 6자리 보안 인증번호를 전송했습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(503).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/pin/reset")
+    @Transactional
+    public ResponseEntity<?> resetPin(
+            @RequestBody Map<String, String> request,
+            Authentication authentication) {
+        try {
+            Member member = memberRepository.findByUsernameForUpdate(
+                            requireUsername(authentication))
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."));
+
+            String code = request.get("code");
+            String newPin = request.get("newPin");
+
+            if (newPin == null || !newPin.matches("\\d{4}")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "새 PIN은 숫자 4자리로 입력해주세요."
+                ));
+            }
+            if (member.isPinConfigured()
+                    && passwordEncoder.matches(
+                            newPin,
+                            member.getPin())) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "현재 PIN과 다른 PIN을 사용해주세요."
+                ));
+            }
+
+            passwordResetService.consumeSecurityCode(member, code);
+
+            member.setPin(passwordEncoder.encode(newPin));
+            member.setPinConfigured(true);
+            memberRepository.save(member);
+
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "이메일 인증을 통해 송금 PIN이 재설정되었습니다."
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "송금 PIN을 재설정했습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(410).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/password/enable")
+    @Transactional
+    public ResponseEntity<?> enablePasswordLogin(
+            @RequestBody Map<String, String> request,
+            Authentication authentication) {
+        try {
+            Member member = memberRepository.findByUsernameForUpdate(
+                            requireUsername(authentication))
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "사용자를 찾을 수 없습니다."));
+
+            if (member.isPasswordLoginEnabled()) {
+                return ResponseEntity.status(409).body(Map.of(
+                        "message", "이미 일반 비밀번호 로그인을 사용할 수 있습니다."
+                ));
+            }
+
+            String code = request.get("code");
+            String newPassword = request.get("newPassword");
+            if (newPassword == null
+                    || newPassword.length() < 8
+                    || newPassword.length() > 64) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "새 비밀번호는 8~64자로 입력해주세요."
+                ));
+            }
+
+            passwordResetService.consumeSecurityCode(member, code);
+
+            member.setPassword(passwordEncoder.encode(newPassword));
+            member.setPasswordLoginEnabled(true);
+            memberRepository.save(member);
+
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "일반 비밀번호 로그인이 추가되었습니다."
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "passwordLoginEnabled", true,
+                    "message", "일반 비밀번호 로그인을 사용할 수 있게 되었습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(410).body(
+                    Map.of("message", e.getMessage()));
+        }
+    }
+
     @PostMapping("/password/change")
     @Transactional
     public ResponseEntity<?> changePassword(
@@ -193,6 +331,11 @@ public class AccountController {
 
             member.setPassword(passwordEncoder.encode(newPassword));
             memberRepository.save(member);
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "계정 비밀번호가 변경되었습니다."
+            );
             refreshTokenService.revokeAll(member);
 
             return ResponseEntity.ok(Map.of(
@@ -248,6 +391,11 @@ public class AccountController {
             member.setPin(passwordEncoder.encode(newPin));
             member.setPinConfigured(true);
             memberRepository.save(member);
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "송금 PIN이 변경되었습니다."
+            );
 
             return ResponseEntity.ok(Map.of(
                     "status", "SUCCESS",
@@ -310,6 +458,11 @@ public class AccountController {
             member.setSocialSubject(identity.subject());
             member.setEmailVerified(true);
             memberRepository.save(member);
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "Google 로그인 연결이 추가되었습니다."
+            );
 
             return ResponseEntity.ok(Map.of(
                     "status", "SUCCESS",
@@ -351,6 +504,11 @@ public class AccountController {
             member.setSocialProvider(null);
             member.setSocialSubject(null);
             memberRepository.save(member);
+            notificationService.create(
+                    member,
+                    "SECURITY",
+                    "Google 로그인 연결이 해제되었습니다."
+            );
 
             return ResponseEntity.ok(Map.of(
                     "status", "SUCCESS",
