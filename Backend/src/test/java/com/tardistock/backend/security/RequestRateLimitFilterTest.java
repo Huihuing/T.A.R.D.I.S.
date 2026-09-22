@@ -35,6 +35,56 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsRepeatedGoogleLoginRequests() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 20; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest("POST", "/api/auth/google");
+            request.setRemoteAddr("203.0.113.20");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest("POST", "/api/auth/google");
+        blocked.setRemoteAddr("203.0.113.20");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
+    void limitsRepeatedRefreshRequests() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 60; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest("POST", "/api/auth/refresh");
+            request.setRemoteAddr("203.0.113.21");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest("POST", "/api/auth/refresh");
+        blocked.setRemoteAddr("203.0.113.21");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
     void countersAreSeparatedByClientIp() throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter();
 
