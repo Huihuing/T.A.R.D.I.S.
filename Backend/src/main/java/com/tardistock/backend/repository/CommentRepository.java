@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Post;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface CommentRepository
@@ -15,4 +16,10 @@ public interface CommentRepository
     List<Comment> findByMember(Member member);
 
     long countByMember(Member member);
+
+    boolean existsByMemberAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            Member member,
+            LocalDateTime start,
+            LocalDateTime end
+    );
 }
