@@ -143,6 +143,70 @@ class RequestRateLimitFilterTest {
     }
 
     @Test
+    void limitsRepeatedSecurityCodeRequests() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "POST",
+                            "/api/account/security-code/send"
+                    );
+            request.setRemoteAddr("203.0.113.50");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "POST",
+                        "/api/account/security-code/send"
+                );
+        blocked.setRemoteAddr("203.0.113.50");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
+    void limitsRepeatedPinResetRequests() throws Exception {
+        RequestRateLimitFilter filter = new RequestRateLimitFilter();
+
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletRequest request =
+                    new MockHttpServletRequest(
+                            "POST",
+                            "/api/account/pin/reset"
+                    );
+            request.setRemoteAddr("203.0.113.51");
+            MockHttpServletResponse response =
+                    new MockHttpServletResponse();
+
+            filter.doFilter(request, response, (req, res) -> {});
+            assertEquals(200, response.getStatus());
+        }
+
+        MockHttpServletRequest blocked =
+                new MockHttpServletRequest(
+                        "POST",
+                        "/api/account/pin/reset"
+                );
+        blocked.setRemoteAddr("203.0.113.51");
+        MockHttpServletResponse blockedResponse =
+                new MockHttpServletResponse();
+
+        filter.doFilter(blocked, blockedResponse, (req, res) -> {});
+
+        assertEquals(429, blockedResponse.getStatus());
+    }
+
+    @Test
     void countersAreSeparatedByClientIp() throws Exception {
         RequestRateLimitFilter filter = new RequestRateLimitFilter();
 
