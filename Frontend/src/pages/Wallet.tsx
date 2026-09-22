@@ -2,7 +2,7 @@ import { API_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
-import { getAuthHeaders } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
@@ -14,14 +14,14 @@ export default function Wallet() {
     const [lastReceipt, setLastReceipt] = useState<any | null>(null);
 
     const fetchBalance = () => {
-        fetch(`${API_URL}/api/trade/balance`, { headers: getAuthHeaders() })
+        authFetch(`${API_URL}/api/trade/balance`, { headers: getAuthHeaders() })
             .then(res => res.ok ? res.text() : '0')
             .then(bal => setBalance(Number(bal) || 0))
             .catch(() => setBalance(0));
     };
 
     const fetchLedger = () => {
-        fetch(`${API_URL}/api/account/ledger`, { headers: getAuthHeaders() })
+        authFetch(`${API_URL}/api/account/ledger`, { headers: getAuthHeaders() })
             .then(async res => {
                 const data = await res.json().catch(() => []);
                 return res.ok && Array.isArray(data) ? data : [];
@@ -58,7 +58,7 @@ export default function Wallet() {
         if (!targetUser) return alert('송금 대상 유저명을 입력하세요.');
 
         try {
-            const res = await fetch(`${API_URL}/api/account/transfer`, {
+            const res = await authFetch(`${API_URL}/api/account/transfer`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
