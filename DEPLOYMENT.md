@@ -59,6 +59,13 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `JPA_SHOW_SQL` | `false` | SQL 로그 출력 여부 |
 | `JPA_DDL_AUTO` | `update` | Hibernate 스키마 정책. 마이그레이션 도입 후 `validate` 전환 권장 |
 | `JWT_EXPIRATION_MS` | `900000` | access JWT 유효시간(ms), 기본 15분. refresh cookie로 로그인 유지 |
+| `DB_POOL_MAX_SIZE` | `5` | Hikari 최대 DB 연결 수. Aiven free 1GB 단일 노드 기준 |
+| `DB_POOL_MIN_IDLE` | `1` | 유휴 상태에서 유지할 최소 연결 수 |
+| `DB_CONNECTION_TIMEOUT_MS` | `10000` | DB 연결 획득 대기 시간 |
+| `DB_VALIDATION_TIMEOUT_MS` | `5000` | 연결 유효성 검사 제한 시간 |
+| `DB_IDLE_TIMEOUT_MS` | `300000` | 최소 연결 수를 초과한 유휴 연결 정리 시간 |
+| `DB_MAX_LIFETIME_MS` | `1500000` | 풀 연결 최대 수명 |
+| `DB_KEEPALIVE_TIME_MS` | `120000` | 장시간 유휴 연결 keepalive 주기 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
 
@@ -95,6 +102,10 @@ jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED&serverTimezone=Asia/Seoul&
 ```
 
 실제 Host, Port, 사용자명, 비밀번호는 문서나 Git에 커밋하지 않습니다.
+
+현재 운영 Aiven MySQL은 실수로 서비스가 삭제되거나 전원 종료되는 것을 막기 위해
+termination protection을 활성화합니다. Render의 outbound IP가 고정되지 않은 환경에서는
+Aiven IP allowlist를 임의로 좁히지 않습니다. 고정 egress를 도입한 뒤에만 제한 범위를 축소합니다.
 
 ## 6. 공개 저장소 체크리스트
 
