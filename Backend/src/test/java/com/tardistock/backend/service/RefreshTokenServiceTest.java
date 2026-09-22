@@ -60,7 +60,7 @@ class RefreshTokenServiceTest {
 
         String value = service.clearCookie().toString();
 
-        assertTrue(value.contains("SameSite=None"));
+        assertTrue(value.contains("SameSite=Lax"));
         assertTrue(value.contains("Secure"));
         assertTrue(value.contains("Max-Age=0"));
     }
