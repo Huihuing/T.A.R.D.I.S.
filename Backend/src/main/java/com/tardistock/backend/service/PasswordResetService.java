@@ -102,6 +102,102 @@ public class PasswordResetService {
     }
 
     @Transactional
+    public void sendSecurityCode(Member member) {
+        if (member == null) {
+            throw new IllegalArgumentException(
+                    "사용자를 찾을 수 없습니다.");
+        }
+        if (!member.isEmailVerified()) {
+            throw new IllegalArgumentException(
+                    "이메일 인증이 완료된 계정에서만 사용할 수 있습니다.");
+        }
+        if (mailUsername == null || mailUsername.isBlank()) {
+            throw new IllegalStateException(
+                    "이메일 발송 설정이 아직 구성되지 않았습니다.");
+        }
+
+        String email = normalizeEmail(member.getEmail());
+        LocalDateTime now = LocalDateTime.now(KST);
+        PasswordResetCode reset = resetRepository
+                .findByEmailIgnoreCase(email)
+                .orElseGet(() -> new PasswordResetCode(email));
+
+        if (reset.getLastSentAt() != null
+                && now.isBefore(reset.getLastSentAt().plusMinutes(1))) {
+            return;
+        }
+
+        String code = String.format(
+                Locale.ROOT,
+                "%06d",
+                100000 + RANDOM.nextInt(900000)
+        );
+
+        reset.setEmail(email);
+        reset.setCodeHash(passwordEncoder.encode(code));
+        reset.setExpiresAt(now.plusMinutes(10));
+        reset.setLastSentAt(now);
+        reset.setAttempts(0);
+        resetRepository.save(reset);
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailUsername);
+        message.setTo(email);
+        message.setSubject("[T.A.R.D.I.S.] 계정 보안 인증번호");
+        message.setText(
+                "T.A.R.D.I.S. 계정 보안 인증번호는 "
+                        + code + " 입니다.\n\n"
+                        + "인증번호는 10분 동안 유효합니다.\n"
+                        + "PIN 재설정 또는 로그인 방식 변경 요청에 사용됩니다.\n"
+                        + "본인이 요청하지 않았다면 이 메일을 무시해주세요."
+        );
+        mailSender.send(message);
+    }
+
+    @Transactional
+    public void consumeSecurityCode(
+            Member member,
+            String rawCode) {
+        if (member == null) {
+            throw new IllegalArgumentException(
+                    "사용자를 찾을 수 없습니다.");
+        }
+
+        String email = normalizeEmail(member.getEmail());
+        String code = rawCode == null ? "" : rawCode.trim();
+
+        if (!code.matches("\\d{6}")) {
+            throw invalidRequest();
+        }
+
+        PasswordResetCode reset = resetRepository
+                .findByEmailIgnoreCase(email)
+                .orElseThrow(this::invalidRequest);
+
+        LocalDateTime now = LocalDateTime.now(KST);
+        if (reset.getExpiresAt() == null
+                || now.isAfter(reset.getExpiresAt())) {
+            resetRepository.delete(reset);
+            throw new IllegalStateException(
+                    "인증번호가 만료되었습니다. 다시 요청해주세요.");
+        }
+
+        if (reset.getAttempts() >= 5) {
+            resetRepository.delete(reset);
+            throw new IllegalStateException(
+                    "인증번호 입력 횟수를 초과했습니다. 다시 요청해주세요.");
+        }
+
+        reset.setAttempts(reset.getAttempts() + 1);
+        if (!passwordEncoder.matches(code, reset.getCodeHash())) {
+            resetRepository.save(reset);
+            throw invalidRequest();
+        }
+
+        resetRepository.delete(reset);
+    }
+
+    @Transactional
     public void resetPassword(
             String rawEmail,
             String rawCode,
