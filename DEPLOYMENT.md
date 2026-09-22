@@ -156,3 +156,17 @@ GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 필요할 때만 `workflow_dispatch`로 수동 실행합니다.
 
 이 방식은 GitHub Actions가 일시적으로 제한되어도 배포 검증 흐름을 유지하기 위한 운영 정책입니다.
+
+
+### Vercel build rate limit 절감
+
+Vercel은 Frontend Root Directory 기준 실제 파일 변경이 없는 커밋을 자동으로 건너뜁니다.
+`Frontend/vercel.json`의 `ignoreCommand`가 다음 원칙을 적용합니다.
+
+- `dependabot/*` 브랜치 배포 생략
+- Backend/문서만 바뀐 커밋은 Vercel 빌드 생략
+- Frontend 파일이 실제로 바뀐 커밋만 Vercel 빌드 수행
+
+Vercel 상태가 `build-rate-limit`으로 실패할 경우 이는 애플리케이션 빌드 오류와 구분합니다.
+이때는 Render의 Docker frontend-check 단계(`npm run build`)와 backend test 결과를 임시 검증 경로로 사용합니다.
+Vercel 제한이 해제된 뒤 최신 Frontend 커밋이 Production `READY`인지 다시 확인합니다.
