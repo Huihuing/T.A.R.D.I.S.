@@ -2,7 +2,12 @@ import { API_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag, X, AlertTriangle } from 'lucide-react';
-import { getAuthHeaders } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
+
+type ManageAction =
+    | { type: 'DELETE_POST'; isGuest: boolean }
+    | { type: 'EDIT_COMMENT'; comment: any }
+    | { type: 'DELETE_COMMENT'; comment: any };
 
 export default function Board() {
     const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
@@ -31,6 +36,11 @@ export default function Board() {
     const [reportReason, setReportReason] = useState('SPAM');
     const [reportDetail, setReportDetail] = useState('');
     const [reportSubmitting, setReportSubmitting] = useState(false);
+    const [manageAction, setManageAction] =
+        useState<ManageAction | null>(null);
+    const [managePassword, setManagePassword] = useState('');
+    const [manageCommentContent, setManageCommentContent] = useState('');
+    const [manageSubmitting, setManageSubmitting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
@@ -218,101 +228,134 @@ export default function Board() {
         setViewMode('write');
     };
 
-    const deletePost = async () => {
-        if (!confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
-
-        let password = '';
-        if (selectedPost.isGuest) {
-            password = window.prompt('작성할 때 입력한 비밀번호를 입력하세요.') || '';
-            if (!password) return;
-        }
-
-        try {
-            const res = await fetch(`${API_URL}/api/board/posts/${selectedPost.id}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(selectedPost.isGuest
-                    ? { guestPassword: password }
-                    : {})
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(data?.message || '게시글 삭제에 실패했습니다.');
-                return;
-            }
-            setViewMode('list');
-        } catch {
-            alert('게시글 삭제 중 오류가 발생했습니다.');
-        }
+    const resetManageModal = () => {
+        setManageAction(null);
+        setManagePassword('');
+        setManageCommentContent('');
     };
 
-    const editComment = async (comment: any) => {
-        const nextContent = window.prompt(
-            '수정할 댓글 내용을 입력하세요.',
-            comment.content
-        );
-        if (nextContent === null) return;
-        if (!nextContent.trim()) {
+    const closeManageModal = () => {
+        if (manageSubmitting) return;
+        resetManageModal();
+    };
+
+    const deletePost = () => {
+        setManageAction({
+            type: 'DELETE_POST',
+            isGuest: Boolean(selectedPost.isGuest)
+        });
+        setManagePassword('');
+        setManageCommentContent('');
+    };
+
+    const editComment = (comment: any) => {
+        setManageAction({
+            type: 'EDIT_COMMENT',
+            comment
+        });
+        setManageCommentContent(comment.content || '');
+        setManagePassword('');
+    };
+
+    const deleteComment = (comment: any) => {
+        setManageAction({
+            type: 'DELETE_COMMENT',
+            comment
+        });
+        setManagePassword('');
+        setManageCommentContent('');
+    };
+
+    const submitManageAction = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!manageAction || manageSubmitting) return;
+
+        const guestOwned = manageAction.type === 'DELETE_POST'
+            ? manageAction.isGuest
+            : Boolean(manageAction.comment?.isGuest);
+
+        if (guestOwned && !managePassword) {
+            alert('작성 비밀번호를 입력해주세요.');
+            return;
+        }
+
+        if (
+            manageAction.type === 'EDIT_COMMENT'
+            && !manageCommentContent.trim()
+        ) {
             alert('댓글 내용을 입력해주세요.');
             return;
         }
 
-        let password = '';
-        if (comment.isGuest) {
-            password = window.prompt(
-                '댓글 작성 비밀번호를 입력하세요.'
-            ) || '';
-            if (!password) return;
-        }
-
+        setManageSubmitting(true);
         try {
+            if (manageAction.type === 'DELETE_POST') {
+                const res = await fetch(
+                    `${API_URL}/api/board/posts/${selectedPost.id}`,
+                    {
+                        method: 'DELETE',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify(
+                            guestOwned
+                                ? { guestPassword: managePassword }
+                                : {}
+                        )
+                    }
+                );
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(
+                        data?.message
+                        || '게시글 삭제에 실패했습니다.'
+                    );
+                    return;
+                }
+
+                resetManageModal();
+                setViewMode('list');
+                return;
+            }
+
+            const comment = manageAction.comment;
+            const isEdit = manageAction.type === 'EDIT_COMMENT';
             const res = await fetch(
                 `${API_URL}/api/board/comments/${comment.id}`,
                 {
-                    method: 'PUT',
+                    method: isEdit ? 'PUT' : 'DELETE',
                     headers: getAuthHeaders(),
                     body: JSON.stringify({
-                        content: nextContent.trim(),
-                        ...(comment.isGuest
-                            ? { guestPassword: password }
+                        ...(isEdit
+                            ? {
+                                content:
+                                    manageCommentContent.trim()
+                            }
+                            : {}),
+                        ...(guestOwned
+                            ? {
+                                guestPassword:
+                                    managePassword
+                            }
                             : {})
                     })
                 }
             );
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                alert(data?.message || '댓글 수정에 실패했습니다.');
+                alert(
+                    data?.message
+                    || (isEdit
+                        ? '댓글 수정에 실패했습니다.'
+                        : '댓글 삭제에 실패했습니다.')
+                );
                 return;
             }
-            viewPostDetail(selectedPost.id);
-        } catch {
-            alert('댓글 수정 중 오류가 발생했습니다.');
-        }
-    };
 
-    const deleteComment = async (comment: any) => {
-        let password = '';
-        if (comment.isGuest) {
-            password = window.prompt('댓글 작성 비밀번호를 입력하세요.') || '';
-            if (!password) return;
-        }
-
-        try {
-            const res = await fetch(`${API_URL}/api/board/comments/${comment.id}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(comment.isGuest
-                    ? { guestPassword: password }
-                    : {})
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                alert(data?.message || '댓글 삭제에 실패했습니다.');
-                return;
-            }
-            viewPostDetail(selectedPost.id);
+            resetManageModal();
+            await viewPostDetail(selectedPost.id);
         } catch {
-            alert('댓글 삭제 중 오류가 발생했습니다.');
+            alert('콘텐츠 처리 중 오류가 발생했습니다.');
+        } finally {
+            setManageSubmitting(false);
         }
     };
 
@@ -370,7 +413,7 @@ export default function Board() {
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') return alert('로그인이 필요합니다.');
         try {
-            const res = await fetch(`${API_URL}/api/trade/portfolio`, { headers: getAuthHeaders(false) });
+            const res = await authFetch(`${API_URL}/api/trade/portfolio`, { headers: getAuthHeaders(false) });
             if (!res.ok) return alert('포트폴리오를 불러오려면 다시 로그인해 주세요.');
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
@@ -697,6 +740,147 @@ export default function Board() {
                                 </div>
                             </form>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {manageAction && (
+                    <motion.div
+                        className="fixed inset-0 z-[210] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onMouseDown={closeManageModal}
+                    >
+                        <motion.div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="manage-dialog-title"
+                            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                            onMouseDown={e => e.stopPropagation()}
+                            className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl"
+                        >
+                            <div className="flex items-start justify-between gap-4 border-b border-slate-800 p-6">
+                                <div>
+                                    <h2
+                                        id="manage-dialog-title"
+                                        className="text-xl font-black text-white"
+                                    >
+                                        {manageAction.type === 'EDIT_COMMENT'
+                                            ? '댓글 수정'
+                                            : manageAction.type === 'DELETE_COMMENT'
+                                                ? '댓글 삭제'
+                                                : '게시글 삭제'}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-slate-400">
+                                        {manageAction.type === 'EDIT_COMMENT'
+                                            ? '댓글 내용을 수정한 뒤 저장하세요.'
+                                            : '삭제한 콘텐츠는 되돌릴 수 없습니다.'}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeManageModal}
+                                    disabled={manageSubmitting}
+                                    className="rounded-xl p-2 text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-40"
+                                    aria-label="콘텐츠 관리 창 닫기"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <form
+                                onSubmit={submitManageAction}
+                                className="space-y-4 p-6"
+                            >
+                                {manageAction.type === 'EDIT_COMMENT' && (
+                                    <textarea
+                                        value={manageCommentContent}
+                                        onChange={e =>
+                                            setManageCommentContent(
+                                                e.target.value.slice(
+                                                    0,
+                                                    3000
+                                                )
+                                            )
+                                        }
+                                        maxLength={3000}
+                                        rows={5}
+                                        required
+                                        className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-sky-500"
+                                    />
+                                )}
+
+                                {(
+                                    manageAction.type === 'DELETE_POST'
+                                        ? manageAction.isGuest
+                                        : Boolean(
+                                            manageAction.comment
+                                                ?.isGuest
+                                        )
+                                ) && (
+                                    <div>
+                                        <label className="mb-2 block text-sm font-bold text-slate-300">
+                                            작성 비밀번호
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={managePassword}
+                                            onChange={e =>
+                                                setManagePassword(
+                                                    e.target.value.slice(
+                                                        0,
+                                                        64
+                                                    )
+                                                )
+                                            }
+                                            minLength={4}
+                                            maxLength={64}
+                                            required
+                                            autoComplete="current-password"
+                                            placeholder="작성할 때 입력한 비밀번호"
+                                            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-sky-500"
+                                        />
+                                    </div>
+                                )}
+
+                                {manageAction.type !== 'EDIT_COMMENT' && (
+                                    <div className="flex gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs leading-relaxed text-rose-200">
+                                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                        삭제하면 해당 콘텐츠는 복구할 수 없습니다.
+                                    </div>
+                                )}
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeManageModal}
+                                        disabled={manageSubmitting}
+                                        className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 font-bold text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                                    >
+                                        취소
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={manageSubmitting}
+                                        className={
+                                            'flex-1 rounded-xl py-3 font-black disabled:opacity-50 '
+                                            + (manageAction.type === 'EDIT_COMMENT'
+                                                ? 'bg-sky-500 text-slate-950 hover:bg-sky-400'
+                                                : 'bg-rose-500 text-white hover:bg-rose-400')
+                                        }
+                                    >
+                                        {manageSubmitting
+                                            ? '처리 중...'
+                                            : manageAction.type === 'EDIT_COMMENT'
+                                                ? '수정 저장'
+                                                : '삭제'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
