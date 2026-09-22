@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { getStoredToken } from '../auth';
+import { authFetch, getStoredToken } from '../auth';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Gift, Coins, CheckCircle2, Sparkles, X, Flame, TrendingUp, MessageSquare, Award, LifeBuoy } from 'lucide-react';
@@ -48,7 +48,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
 
     const fetchStatus = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/economy/status`, { headers: getAuthHeaders() });
+            const res = await authFetch(`${API_URL}/api/economy/status`, { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setStatus(data);
@@ -70,7 +70,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         if (loading) return;
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/economy/check-in`, {
+            const res = await authFetch(`${API_URL}/api/economy/check-in`, {
                 method: 'POST',
                 headers: getAuthHeaders()
             });
@@ -91,7 +91,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         if (loading) return;
         setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/economy/claim-quest`, {
+            const res = await authFetch(`${API_URL}/api/economy/claim-quest`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({ questType })
@@ -114,7 +114,7 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
         setLoading(true);
         setMessage(null);
         try {
-            const res = await fetch(`${API_URL}/api/economy/bankruptcy-relief`, {
+            const res = await authFetch(`${API_URL}/api/economy/bankruptcy-relief`, {
                 method: 'POST',
                 headers: getAuthHeaders()
             });
