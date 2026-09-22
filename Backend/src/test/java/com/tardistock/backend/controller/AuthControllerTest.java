@@ -413,6 +413,24 @@ class AuthControllerTest {
     }
 
     @Test
+    void refreshFailureDoesNotClearPotentiallyRotatedCookie() {
+        when(refreshTokenService.rotate("stale-refresh"))
+                .thenThrow(new IllegalArgumentException(
+                        "유효하지 않은 refresh token입니다."
+                ));
+
+        ResponseEntity<?> response =
+                authController.refresh("stale-refresh");
+
+        assertEquals(401, response.getStatusCode().value());
+        assertFalse(
+                response.getHeaders()
+                        .containsKey(org.springframework.http.HttpHeaders.SET_COOKIE)
+        );
+        verify(refreshTokenService, never()).clearCookie();
+    }
+
+    @Test
     void revokeOtherSessionsCreatesSecurityNotification() {
         Member member = new Member(
                 "alice",
