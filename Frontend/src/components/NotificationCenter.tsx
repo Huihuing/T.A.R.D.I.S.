@@ -41,7 +41,7 @@ export default function NotificationCenter() {
     const clientRef = useRef<Client | null>(null);
 
     const load = async () => {
-        if (isGuest || !getStoredToken()) return;
+        if (isGuest) return;
 
         try {
             const [itemsRes, countRes] = await Promise.all([
