@@ -203,7 +203,7 @@ GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 - 뉴스 썸네일은 여러 외부 제공처를 사용하므로 `img-src https:`를 유지
 
 CSP 위반 보고는 same-origin `/api/security/csp-report`로 보내고 Vercel rewrite가 Render API로 전달합니다.
-백엔드는 legacy `csp-report` payload와 최신 Reporting API 형태를 모두 처리하며 URI의 query/fragment는 로그에 남기지 않습니다.
+백엔드는 legacy `csp-report` payload와 최신 Reporting API 형태를 모두 처리하며 URI의 query/fragment는 로그에 남기지 않습니다. 프론트 응답은 `Reporting-Endpoints` + CSP `report-to`를 사용하고, 구형 브라우저 호환을 위해 `report-uri`도 함께 유지합니다.
 
 강제 정책으로 전환하기 전 확인 순서:
 
@@ -215,3 +215,18 @@ CSP 위반 보고는 same-origin `/api/security/csp-report`로 보내고 Vercel 
 Vite가 생성한 `/assets/*` 해시 파일은 파일명이 변경될 때 URL도 바뀌므로
 `Cache-Control: public, max-age=31536000, immutable`을 적용합니다.
 HTML과 비해시 파일은 Vercel의 재검증 정책을 유지합니다.
+
+
+### Vercel external rewrite 캐시 확인
+
+운영 `/api/stock/quote` 응답을 Vercel rewrite 경유로 확인했을 때 백엔드의 Spring Security 기본 캐시 방지 헤더가 유지됩니다.
+
+```text
+Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+Pragma: no-cache
+Expires: 0
+```
+
+따라서 인증/개인화 API가 Vercel CDN에 의도치 않게 저장되는 방향으로 별도 캐시 헤더를 추가하지 않습니다.
+시장 데이터의 반복 호출 절감은 현재 애플리케이션 내부 bounded cache/stale fallback을 우선 사용하고,
+CDN 캐시는 공개 GET endpoint별 데이터 성격과 사용자 영향 범위를 분리한 뒤 선택적으로 도입합니다.
