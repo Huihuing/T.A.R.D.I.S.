@@ -318,11 +318,13 @@ export default function Dashboard() {
             />
 
 
-            <div className="w-full bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 mb-6 shadow-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="w-full bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 sm:p-6 mb-6 shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                     <div>
-                        <h2 className="text-lg font-bold text-white">Portfolio Value History</h2>
-                        <p className="text-xs text-slate-400 mt-1">가상 총자산 변화를 한국시간 기준으로 표시합니다.</p>
+                        <h2 className="text-lg font-extrabold text-white">Portfolio Value History</h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                            기능 도입 이후 실제 총자산 스냅샷을 최대 1시간 간격으로 기록합니다.
+                        </p>
                     </div>
                     <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
                         {(['1D', '1W', '1M', 'ALL'] as const).map(range => (
@@ -330,11 +332,9 @@ export default function Dashboard() {
                                 key={range}
                                 type="button"
                                 onClick={() => setAssetHistoryRange(range)}
-                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
-                                    assetHistoryRange === range
-                                        ? 'bg-sky-500 text-white'
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
+                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${assetHistoryRange === range
+                                    ? 'bg-sky-500 text-white'
+                                    : 'text-slate-400 hover:text-white'}`}
                             >
                                 {range}
                             </button>
@@ -344,10 +344,14 @@ export default function Dashboard() {
 
                 <div className="w-full h-64">
                     {isAssetHistoryLoading ? (
-                        <div className="h-full flex items-center justify-center text-slate-500 text-sm font-bold">
-                            자산 추이를 불러오는 중입니다...
+                        <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                            자산 추이를 불러오는 중...
                         </div>
-                    ) : assetHistory.length > 0 ? (
+                    ) : assetHistory.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-slate-500 text-sm text-center px-4">
+                            아직 저장된 자산 스냅샷이 없습니다. 대시보드를 이용하면 실제 데이터가 쌓이기 시작합니다.
+                        </div>
+                    ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={assetHistory}>
                                 <defs>
@@ -1002,10 +1006,6 @@ export default function Dashboard() {
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-slate-500 text-sm font-bold">
-                            아직 자산 추이 데이터가 없습니다.
-                        </div>
                     )}
                 </div>
             </div>
