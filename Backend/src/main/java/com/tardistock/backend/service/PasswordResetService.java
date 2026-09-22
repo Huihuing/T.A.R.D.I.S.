@@ -69,7 +69,7 @@ public class PasswordResetService {
 
         LocalDateTime now = LocalDateTime.now(KST);
         PasswordResetCode reset = resetRepository
-                .findByEmailIgnoreCase(email)
+                .findByEmailForUpdate(email)
                 .orElseGet(() -> new PasswordResetCode(email));
 
         // 재발송 쿨다운 중에는 동일한 성공 응답을 유지합니다.
@@ -122,7 +122,7 @@ public class PasswordResetService {
         String email = normalizeEmail(member.getEmail());
         LocalDateTime now = LocalDateTime.now(KST);
         PasswordResetCode reset = resetRepository
-                .findByEmailIgnoreCase(email)
+                .findByEmailForUpdate(email)
                 .orElseGet(() -> new PasswordResetCode(email));
 
         if (reset.getLastSentAt() != null
@@ -174,7 +174,7 @@ public class PasswordResetService {
         }
 
         PasswordResetCode reset = resetRepository
-                .findByEmailIgnoreCase(email)
+                .findByEmailForUpdate(email)
                 .orElseThrow(this::invalidRequest);
 
         LocalDateTime now = LocalDateTime.now(KST);
@@ -227,7 +227,7 @@ public class PasswordResetService {
         }
 
         PasswordResetCode reset = resetRepository
-                .findByEmailIgnoreCase(email)
+                .findByEmailForUpdate(email)
                 .orElseThrow(this::invalidRequest);
 
         LocalDateTime now = LocalDateTime.now(KST);
