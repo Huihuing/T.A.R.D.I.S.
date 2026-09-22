@@ -95,6 +95,12 @@ export default function NotificationCenter() {
                                     )
                                 ].slice(0, 50));
                                 setUnread(prev => prev + 1);
+                                window.dispatchEvent(
+                                    new CustomEvent(
+                                        'tardis:notification',
+                                        { detail: incoming }
+                                    )
+                                );
                             } catch {
                                 load();
                             }
