@@ -8,6 +8,7 @@ import com.tardistock.backend.security.JwtTokenProvider;
 import com.tardistock.backend.service.EmailVerificationService;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +47,7 @@ public class AuthController {
     private final EmailVerificationService emailVerificationService;
     private final GoogleIdentityService googleIdentityService;
     private final RefreshTokenService refreshTokenService;
+    private final NotificationService notificationService;
 
     public AuthController(
             MemberRepository memberRepository,
@@ -55,7 +57,8 @@ public class AuthController {
             LedgerService ledgerService,
             EmailVerificationService emailVerificationService,
             GoogleIdentityService googleIdentityService,
-            RefreshTokenService refreshTokenService) {
+            RefreshTokenService refreshTokenService,
+            NotificationService notificationService) {
         this.memberRepository = memberRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
@@ -64,6 +67,7 @@ public class AuthController {
         this.emailVerificationService = emailVerificationService;
         this.googleIdentityService = googleIdentityService;
         this.refreshTokenService = refreshTokenService;
+        this.notificationService = notificationService;
     }
 
     @PostMapping("/email/send")
@@ -373,6 +377,16 @@ public class AuthController {
                     member,
                     refreshToken
             );
+
+            if (revoked > 0) {
+                notificationService.create(
+                        member,
+                        "SECURITY",
+                        "다른 로그인 세션 "
+                                + revoked
+                                + "개가 종료되었습니다."
+                );
+            }
 
             return ResponseEntity.ok(Map.of(
                     "status", "SUCCESS",
