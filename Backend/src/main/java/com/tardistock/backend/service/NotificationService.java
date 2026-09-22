@@ -101,15 +101,10 @@ public class NotificationService {
     @Transactional
     public int markAllRead(String username) {
         Member member = requireMember(username);
-        List<Notification> unread =
-                notificationRepository
-                        .findByMemberAndReadAtIsNull(member);
-
-        LocalDateTime now = LocalDateTime.now(KST);
-        unread.forEach(notification ->
-                notification.setReadAt(now));
-        notificationRepository.saveAll(unread);
-        return unread.size();
+        return notificationRepository.markAllReadByMember(
+                member,
+                LocalDateTime.now(KST)
+        );
     }
 
     private Member requireMember(String username) {
