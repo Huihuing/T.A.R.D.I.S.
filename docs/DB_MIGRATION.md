@@ -61,3 +61,52 @@ JPA_DDL_AUTO=validate
 - 운영 DB 스키마를 추측해서 `V1__baseline.sql`을 작성하지 않습니다.
 - 실제 dump 확인 전 `FLYWAY_ENABLED=true`로 전환하지 않습니다.
 - Flyway와 Hibernate `ddl-auto=update`를 동시에 스키마 변경 도구로 사용하지 않습니다.
+
+
+## 인덱스 후보 / Index candidates — 아직 적용 금지
+
+아래 항목은 현재 JPA Repository 조회 패턴을 기준으로 찾은 **후보**입니다.
+현재 운영 DB에는 `JPA_DDL_AUTO=update`가 사용되고 있으므로 엔티티의
+`@Index`를 바로 추가하지 않습니다. 실제 Aiven schema-only dump 또는
+`SHOW INDEX` 결과를 확인한 뒤, 이미 존재하는 인덱스를 제외하고 Flyway
+migration으로만 추가합니다.
+
+적용 전 반드시 확인할 것:
+
+1. 운영 Aiven의 실제 index 목록 확인
+2. 중복/유사 prefix index 확인
+3. 주요 쿼리의 `EXPLAIN` 확인
+4. clone/staging DB에서 migration 및 회귀 테스트
+5. write 비용 증가 대비 read 이득 확인
+
+### 후보
+
+| 테이블/엔티티 | 후보 인덱스 | 근거 |
+| --- | --- | --- |
+| `notifications` | `(member_id, created_at)` | 사용자별 최근 50개 알림 조회 |
+| `notifications` | `(member_id, type, created_at)` | 사용자+유형별 최근 알림 조회 |
+| `notifications` | `(member_id, read_at)` | 미읽음 count/list |
+| `price_alert` | `(member_id, created_at)` | 사용자별 알림 목록 |
+| `price_alert` | `(member_id, active)` | 사용자별 활성 알림 개수 |
+| `price_alert` | `(active, created_at)` | 스케줄러의 활성 알림 oldest-first batch |
+| `post` | `(created_at)` | 게시글 최신순 pagination |
+| `post` | `(member_id, created_at)` | 사용자 활동/기간 exists 조회 |
+| `comment` | `(post_id, created_at)` | 게시글별 댓글 시간순 조회 |
+| `comment` | `(member_id, created_at)` | 사용자 활동/기간 exists 조회 |
+| `trade_history` | `(member_id, trade_type, trade_time)` | 일일 BUY/SELL 활동 exists 조회 |
+
+### 이미 코드상 정의된 주요 인덱스
+
+- `refresh_token(token_hash)` unique
+- `refresh_token(member_id)`
+- `limit_order(status, symbol)`
+- `limit_order(member_id, created_at)`
+- `price_alert(active, symbol)`
+- `portfolio_snapshot(member_id, captured_at)`
+
+### 검색 쿼리 주의
+
+게시판 검색은 title/content에 `%검색어%` 형태의 contains 검색을 사용하므로
+일반 B-tree index만 추가해도 큰 효과를 기대하기 어렵습니다.
+데이터가 충분히 커진 뒤 실제 병목이 확인되면 MySQL FULLTEXT 또는 별도 검색
+구조를 검토합니다. 현재 단계에서는 임의로 FULLTEXT를 추가하지 않습니다.
