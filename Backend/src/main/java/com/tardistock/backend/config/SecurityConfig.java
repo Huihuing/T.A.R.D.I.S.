@@ -68,8 +68,13 @@ public class SecurityConfig {
                 // Retired raw-SQL routes stay denied as a defense-in-depth guard.
                 .requestMatchers("/api/member/**", "/api/wallet/**").denyAll()
 
-                // Authentication and SockJS handshake.
+                // Authentication, SockJS handshake, and minimal health check.
                 .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/actuator/health",
+                    "/actuator/health/**"
+                ).permitAll()
 
                 // Public read-only APIs.
                 .requestMatchers(HttpMethod.GET,

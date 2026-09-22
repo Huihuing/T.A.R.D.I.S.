@@ -69,6 +69,12 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
 
+### Render health check
+
+백엔드는 Spring Boot Actuator의 `/actuator/health`만 공개합니다.
+응답은 상세 내부정보를 노출하지 않고 DB 연결 상태를 포함한 전체 health만 제공합니다.
+Render Dashboard의 Health Check Path는 `/actuator/health`로 설정하는 것을 권장합니다.
+
 ## 3. Vercel 프론트엔드
 
 Root Directory를 `Frontend`로 지정합니다.

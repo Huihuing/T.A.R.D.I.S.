@@ -86,3 +86,14 @@ refresh-token:
 
 admin:
   usernames: ${ADMIN_USERNAMES:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
