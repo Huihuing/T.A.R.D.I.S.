@@ -1,4 +1,5 @@
 import { API_URL } from '../config';
+import { storeAccessToken } from '../auth';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function Login() {
         import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
     const finishLogin = (data: any) => {
-        localStorage.setItem('token', data.token);
+        storeAccessToken(data.token);
         localStorage.setItem(
             'username',
             data.username || username.trim()
