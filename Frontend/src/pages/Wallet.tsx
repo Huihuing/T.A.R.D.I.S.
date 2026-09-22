@@ -12,6 +12,7 @@ export default function Wallet() {
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
     const [ledger, setLedger] = useState<any[]>([]);
     const [lastReceipt, setLastReceipt] = useState<any | null>(null);
+    const [isTransferring, setIsTransferring] = useState(false);
 
     const fetchBalance = () => {
         authFetch(`${API_URL}/api/trade/balance`, { headers: getAuthHeaders() })
@@ -53,10 +54,12 @@ export default function Wallet() {
     }, []);
 
     const handleTransfer = async () => {
+        if (isTransferring) return;
         if (!amount || amount <= 0) return alert('올바른 금액을 입력하세요.');
         if (!accountPassword) return alert('계좌 비밀번호를 입력해 주세요.');
         if (!targetUser) return alert('송금 대상 유저명을 입력하세요.');
 
+        setIsTransferring(true);
         try {
             const res = await authFetch(`${API_URL}/api/account/transfer`, {
                 method: 'POST',
@@ -80,6 +83,8 @@ export default function Wallet() {
             }
         } catch {
             alert('서버와 통신 오류가 발생했습니다.');
+        } finally {
+            setIsTransferring(false);
         }
     };
 
@@ -167,9 +172,10 @@ export default function Wallet() {
 
                     <button
                         onClick={handleTransfer}
-                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-colors"
+                        disabled={isTransferring}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        송금하기 ➔
+                        {isTransferring ? '송금 처리 중...' : '송금하기 ➔'}
                     </button>
                 </div>
             </div>
