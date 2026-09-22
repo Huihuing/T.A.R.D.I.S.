@@ -56,7 +56,7 @@ public class EmailVerificationService {
 
         LocalDateTime now = LocalDateTime.now(KST);
         EmailVerification verification =
-                verificationRepository.findByEmailIgnoreCase(email)
+                verificationRepository.findByEmailForUpdate(email)
                         .orElseGet(() -> new EmailVerification(email));
 
         if (verification.getLastSentAt() != null
@@ -102,7 +102,7 @@ public class EmailVerificationService {
         }
 
         EmailVerification verification =
-                verificationRepository.findByEmailIgnoreCase(email)
+                verificationRepository.findByEmailForUpdate(email)
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "먼저 인증번호를 요청해주세요."));
@@ -132,7 +132,7 @@ public class EmailVerificationService {
     public boolean consumeVerified(String rawEmail) {
         String email = normalizeEmail(rawEmail);
         EmailVerification verification =
-                verificationRepository.findByEmailIgnoreCase(email)
+                verificationRepository.findByEmailForUpdate(email)
                         .orElse(null);
 
         if (verification == null || verification.getVerifiedAt() == null) {
