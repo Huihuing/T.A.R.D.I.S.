@@ -5,6 +5,7 @@ import {
     KeyRound,
     Link2,
     Mail,
+    MonitorSmartphone,
     ShieldCheck,
     Unlink,
     UserCog,
@@ -36,6 +37,13 @@ type SecurityActivity = {
     id: number;
     message: string;
     createdAt: string;
+};
+
+type ActiveSession = {
+    id: number;
+    createdAt: string;
+    expiresAt: string;
+    current: boolean;
 };
 
 export default function Settings() {
@@ -71,6 +79,62 @@ export default function Settings() {
         useState<SecurityActivity[]>([]);
     const [securityActivityLoading, setSecurityActivityLoading] =
         useState(false);
+    const [sessions, setSessions] = useState<ActiveSession[]>([]);
+    const [sessionsLoading, setSessionsLoading] = useState(false);
+    const [sessionsRevoking, setSessionsRevoking] = useState(false);
+
+    const loadSessions = async () => {
+        setSessionsLoading(true);
+        try {
+            const res = await fetch(
+                `${API_URL}/api/auth/sessions`,
+                {
+                    headers: getAuthHeaders(false),
+                    credentials: 'include'
+                }
+            );
+            if (!res.ok) {
+                setSessions([]);
+                return;
+            }
+            const data = await res.json().catch(() => ([]));
+            setSessions(Array.isArray(data) ? data : []);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    const revokeOtherSessions = async () => {
+        if (!window.confirm(
+            '현재 브라우저를 제외한 다른 로그인 세션을 모두 종료할까요?'
+        )) {
+            return;
+        }
+
+        setSessionsRevoking(true);
+        try {
+            const res = await fetch(
+                `${API_URL}/api/auth/sessions/revoke-others`,
+                {
+                    method: 'POST',
+                    headers: getAuthHeaders(false),
+                    credentials: 'include'
+                }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.message || '다른 로그인 세션 종료에 실패했습니다.');
+                return;
+            }
+
+            alert(data.message || '다른 로그인 세션을 종료했습니다.');
+            await loadSessions();
+        } catch {
+            alert('로그인 세션 정리 중 서버 오류가 발생했습니다.');
+        } finally {
+            setSessionsRevoking(false);
+        }
+    };
 
     const loadSecurityActivity = async () => {
         setSecurityActivityLoading(true);
@@ -110,6 +174,7 @@ export default function Settings() {
             setSettings(data);
             setError('');
             loadSecurityActivity();
+            loadSessions();
         } catch {
             setError('계정 설정을 불러오는 중 오류가 발생했습니다.');
         } finally {
@@ -453,6 +518,23 @@ export default function Settings() {
         }
     };
 
+    const formatSessionTime = (value: string) => {
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
+            ? value
+            : `${value}Z`;
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    };
+
     const formatSecurityTime = (value: string) => {
         const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
             ? value
@@ -764,6 +846,77 @@ export default function Settings() {
                                 )}
                             </section>
                         </div>
+
+                        <section className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <h2 className="text-xl font-black text-white flex items-center gap-2">
+                                        <MonitorSmartphone className="w-5 h-5 text-sky-300" />
+                                        활성 로그인 세션
+                                    </h2>
+                                    <p className="text-sm text-slate-400 mt-1">
+                                        refresh token 기준 로그인 세션입니다. 현재 브라우저는 유지한 채 다른 세션을 종료할 수 있습니다.
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={loadSessions}
+                                        disabled={sessionsLoading || sessionsRevoking}
+                                        className="px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 text-xs font-bold text-slate-400 hover:text-white disabled:opacity-50"
+                                    >
+                                        {sessionsLoading ? '갱신 중...' : '새로고침'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={revokeOtherSessions}
+                                        disabled={
+                                            sessionsRevoking
+                                            || sessions.filter(item => !item.current).length === 0
+                                        }
+                                        className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-xs font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
+                                    >
+                                        {sessionsRevoking ? '종료 중...' : '다른 세션 모두 종료'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-5 space-y-2">
+                                {sessionsLoading && sessions.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-500">
+                                        로그인 세션을 불러오는 중...
+                                    </div>
+                                ) : sessions.length === 0 ? (
+                                    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-sm text-slate-500">
+                                        확인 가능한 refresh 세션이 없습니다.
+                                    </div>
+                                ) : (
+                                    sessions.map(item => (
+                                        <div
+                                            key={item.id}
+                                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3"
+                                        >
+                                            <div>
+                                                <div className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                                                    로그인 세션 #{item.id}
+                                                    {item.current && (
+                                                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+                                                            현재 세션
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="mt-1 text-xs text-slate-500">
+                                                    생성/갱신 {formatSessionTime(item.createdAt)}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-slate-500 shrink-0">
+                                                만료 {formatSessionTime(item.expiresAt)}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </section>
 
                         <section className="bg-slate-800/50 border border-slate-700/60 rounded-3xl p-6">
                             <div className="flex items-center justify-between gap-3">
