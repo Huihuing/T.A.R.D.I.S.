@@ -29,6 +29,7 @@ public class PasswordResetService {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
+    private final NotificationService notificationService;
     private final JavaMailSender mailSender;
     private final String mailUsername;
 
@@ -37,12 +38,14 @@ public class PasswordResetService {
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
+            NotificationService notificationService,
             JavaMailSender mailSender,
             @Value("${spring.mail.username:}") String mailUsername) {
         this.resetRepository = resetRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
+        this.notificationService = notificationService;
         this.mailSender = mailSender;
         this.mailUsername = mailUsername;
     }
@@ -251,6 +254,11 @@ public class PasswordResetService {
 
         member.setPassword(passwordEncoder.encode(newPassword));
         memberRepository.save(member);
+        notificationService.create(
+                member,
+                "SECURITY",
+                "이메일 인증을 통한 비밀번호 재설정이 완료되었습니다."
+        );
         refreshTokenService.revokeAll(member);
         resetRepository.delete(reset);
     }
