@@ -83,7 +83,8 @@ public class SecurityConfig {
                 // Guest community posting and password-protected mutations.
                 .requestMatchers(HttpMethod.POST,
                     "/api/board/posts",
-                    "/api/board/comments"
+                    "/api/board/comments",
+                    "/api/board/reports"
                 ).permitAll()
                 .requestMatchers(HttpMethod.PUT,
                     "/api/board/posts/**",
