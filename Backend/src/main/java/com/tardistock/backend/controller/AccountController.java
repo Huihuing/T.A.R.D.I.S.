@@ -188,7 +188,7 @@ public class AccountController {
             walletRepository.save(fromWallet);
             walletRepository.save(toWallet);
 
-            ledgerService.record(
+            var outgoingEntry = ledgerService.record(
                     fromWallet.getMember(),
                     "TRANSFER_OUT",
                     -amount,
@@ -219,6 +219,11 @@ public class AccountController {
                     "status", "SUCCESS",
                     "message",
                     toUsername + "님에게 송금이 완료되었습니다.",
+                    "transactionId", outgoingEntry.getId(),
+                    "fromUser", fromUsername,
+                    "toUser", toUsername,
+                    "amount", amount,
+                    "transferredAt", outgoingEntry.getCreatedAt().toString(),
                     "newBalance", fromWallet.getBalance()
             ));
         } catch (IllegalArgumentException e) {
