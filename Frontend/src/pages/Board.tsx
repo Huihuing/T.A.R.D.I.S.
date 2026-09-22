@@ -1,7 +1,7 @@
 import { API_URL } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag } from 'lucide-react';
+import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag, X, AlertTriangle } from 'lucide-react';
 import { getAuthHeaders } from '../auth';
 
 export default function Board() {
@@ -23,6 +23,14 @@ export default function Board() {
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
     const [isListLoading, setIsListLoading] = useState(false);
+    const [reportTarget, setReportTarget] = useState<{
+        targetType: 'POST' | 'COMMENT';
+        targetId: number;
+        label: string;
+    } | null>(null);
+    const [reportReason, setReportReason] = useState('SPAM');
+    const [reportDetail, setReportDetail] = useState('');
+    const [reportSubmitting, setReportSubmitting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
@@ -308,48 +316,37 @@ export default function Board() {
         }
     };
 
-    const reportContent = async (
+    const openReportModal = (
         targetType: 'POST' | 'COMMENT',
-        targetId: number
+        targetId: number,
+        label: string
     ) => {
-        const selectedReason = window.prompt(
-            '신고 사유를 선택해주세요.\n1. 스팸/도배\n2. 욕설/불쾌한 내용\n3. 괴롭힘/공격적 내용\n4. 허위·오해 소지가 있는 정보\n5. 기타',
-            '1'
-        );
-        if (selectedReason === null) return;
+        setReportTarget({ targetType, targetId, label });
+        setReportReason('SPAM');
+        setReportDetail('');
+    };
 
-        const reasons: Record<string, string> = {
-            '1': 'SPAM',
-            '2': 'ABUSE',
-            '3': 'HARASSMENT',
-            '4': 'MISINFORMATION',
-            '5': 'OTHER'
-        };
-        const reason = reasons[selectedReason.trim()];
-        if (!reason) {
-            alert('1~5 중 하나를 입력해주세요.');
-            return;
-        }
+    const closeReportModal = () => {
+        if (reportSubmitting) return;
+        setReportTarget(null);
+        setReportReason('SPAM');
+        setReportDetail('');
+    };
 
-        const detail = window.prompt(
-            '추가 설명이 있으면 입력해주세요. (선택, 최대 500자)',
-            ''
-        );
-        if (detail === null) return;
-        if (detail.length > 500) {
-            alert('추가 설명은 500자 이하로 입력해주세요.');
-            return;
-        }
+    const submitReport = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!reportTarget) return;
 
+        setReportSubmitting(true);
         try {
             const res = await fetch(`${API_URL}/api/board/reports`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
-                    targetType,
-                    targetId,
-                    reason,
-                    detail: detail.trim()
+                    targetType: reportTarget.targetType,
+                    targetId: reportTarget.targetId,
+                    reason: reportReason,
+                    detail: reportDetail.trim()
                 })
             });
             const data = await res.json().catch(() => ({}));
@@ -357,12 +354,17 @@ export default function Board() {
                 alert(data?.message || '신고 접수에 실패했습니다.');
                 return;
             }
+
+            setReportTarget(null);
+            setReportReason('SPAM');
+            setReportDetail('');
             alert('신고가 접수되었습니다. 관리자가 확인할 수 있습니다.');
         } catch {
             alert('신고 접수 중 오류가 발생했습니다.');
+        } finally {
+            setReportSubmitting(false);
         }
     };
-
     // 💡 수익률 첨부 버튼 로직
     const appendROI = async () => {
         const username = localStorage.getItem('username');
@@ -600,7 +602,7 @@ export default function Board() {
                             <div className="flex gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => reportContent('POST', selectedPost.id)}
+                                    onClick={() => openReportModal('POST', selectedPost.id, `게시글 #${selectedPost.id}`)}
                                     className="text-sm bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
                                 >
                                     <Flag className="w-3.5 h-3.5" /> 신고
@@ -635,7 +637,7 @@ export default function Board() {
                                                 <span className="text-xs text-slate-500">{formatKstDateTime(c.createdAt)}</span>
                                                 <button
                                                     type="button"
-                                                    onClick={() => reportContent('COMMENT', c.id)}
+                                                    onClick={() => openReportModal('COMMENT', c.id, `댓글 #${c.id}`)}
                                                     className="text-xs text-amber-300 hover:text-amber-200 flex items-center gap-1"
                                                 >
                                                     <Flag className="w-3 h-3" /> 신고
@@ -695,6 +697,105 @@ export default function Board() {
                                 </div>
                             </form>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            <AnimatePresence>
+                {reportTarget && (
+                    <motion.div
+                        className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onMouseDown={closeReportModal}
+                    >
+                        <motion.div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="report-dialog-title"
+                            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+                            onMouseDown={e => e.stopPropagation()}
+                            className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl"
+                        >
+                            <div className="flex items-start justify-between gap-4 border-b border-slate-800 p-6">
+                                <div className="flex gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10">
+                                        <AlertTriangle className="h-5 w-5 text-amber-300" />
+                                    </div>
+                                    <div>
+                                        <h2 id="report-dialog-title" className="text-xl font-black text-white">콘텐츠 신고</h2>
+                                        <p className="mt-1 text-sm text-slate-400">{reportTarget.label}을 관리자에게 신고합니다.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeReportModal}
+                                    disabled={reportSubmitting}
+                                    className="rounded-xl p-2 text-slate-500 hover:bg-slate-800 hover:text-white disabled:opacity-40"
+                                    aria-label="신고 창 닫기"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={submitReport} className="space-y-5 p-6">
+                                <div>
+                                    <label htmlFor="report-reason" className="mb-2 block text-sm font-bold text-slate-300">신고 사유</label>
+                                    <select
+                                        id="report-reason"
+                                        value={reportReason}
+                                        onChange={e => setReportReason(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-amber-400"
+                                    >
+                                        <option value="SPAM">스팸 / 도배</option>
+                                        <option value="ABUSE">욕설 / 불쾌한 내용</option>
+                                        <option value="HARASSMENT">괴롭힘 / 공격적 내용</option>
+                                        <option value="MISINFORMATION">허위·오해 소지가 있는 정보</option>
+                                        <option value="OTHER">기타</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <label htmlFor="report-detail" className="text-sm font-bold text-slate-300">추가 설명 <span className="font-normal text-slate-500">(선택)</span></label>
+                                        <span className={reportDetail.length >= 450 ? 'text-xs text-amber-300' : 'text-xs text-slate-500'}>{reportDetail.length}/500</span>
+                                    </div>
+                                    <textarea
+                                        id="report-detail"
+                                        value={reportDetail}
+                                        onChange={e => setReportDetail(e.target.value.slice(0, 500))}
+                                        maxLength={500}
+                                        rows={4}
+                                        placeholder="관리자가 판단하는 데 도움이 될 내용을 적어주세요."
+                                        className="w-full resize-none rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-amber-400"
+                                    />
+                                </div>
+
+                                <p className="rounded-xl border border-slate-700 bg-slate-800/70 p-3 text-xs leading-relaxed text-slate-400">
+                                    신고만으로 콘텐츠가 자동 삭제되지는 않습니다. 관리자가 내용을 확인한 뒤 처리합니다.
+                                </p>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeReportModal}
+                                        disabled={reportSubmitting}
+                                        className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 font-bold text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                                    >
+                                        취소
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={reportSubmitting}
+                                        className="flex-1 rounded-xl bg-amber-500 py-3 font-black text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                                    >
+                                        {reportSubmitting ? '접수 중...' : '신고 접수'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
