@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
@@ -57,6 +59,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private static final int MAX_COUNTERS = 20_000;
     private static final long MAX_COUNTER_AGE_SECONDS = 3_700;
     private static final long CLEANUP_EVERY_REQUESTS = 512;
+    private static final int MAX_CLIENT_IP_LENGTH = 45;
 
     private final ConcurrentHashMap<String, WindowCounter> counters =
             new ConcurrentHashMap<>();
@@ -175,10 +178,86 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private String getClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+            int comma = forwarded.indexOf(',');
+            String firstHop = comma >= 0
+                    ? forwarded.substring(0, comma)
+                    : forwarded;
+            String normalizedForwarded = normalizeIpLiteral(firstHop);
+            if (!normalizedForwarded.isBlank()) {
+                return normalizedForwarded;
+            }
         }
-        String remote = request.getRemoteAddr();
-        return remote == null || remote.isBlank() ? "unknown" : remote;
+
+        String normalizedRemote = normalizeIpLiteral(request.getRemoteAddr());
+        return normalizedRemote.isBlank() ? "unknown" : normalizedRemote;
+    }
+
+    private String normalizeIpLiteral(String candidate) {
+        if (candidate == null) return "";
+
+        String value = candidate.trim();
+        if (value.isEmpty() || value.length() > MAX_CLIENT_IP_LENGTH) {
+            return "";
+        }
+
+        String ipv4 = normalizeIpv4(value);
+        if (!ipv4.isBlank()) {
+            return ipv4;
+        }
+
+        if (!looksLikeIpv6Literal(value)) {
+            return "";
+        }
+
+        try {
+            InetAddress address = InetAddress.getByName(value);
+            return address instanceof Inet6Address
+                    ? address.getHostAddress()
+                    : "";
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String normalizeIpv4(String value) {
+        String[] parts = value.split("\\.", -1);
+        if (parts.length != 4) return "";
+
+        int[] octets = new int[4];
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (part.isEmpty() || part.length() > 3) return "";
+            if (part.length() > 1 && part.charAt(0) == '0') return "";
+
+            int octet = 0;
+            for (int j = 0; j < part.length(); j++) {
+                char ch = part.charAt(j);
+                if (ch < '0' || ch > '9') return "";
+                octet = octet * 10 + (ch - '0');
+            }
+            if (octet > 255) return "";
+            octets[i] = octet;
+        }
+
+        return octets[0] + "."
+                + octets[1] + "."
+                + octets[2] + "."
+                + octets[3];
+    }
+
+    private boolean looksLikeIpv6Literal(String value) {
+        if (!value.contains(":")) return false;
+
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            boolean allowed = (ch >= '0' && ch <= '9')
+                    || (ch >= 'a' && ch <= 'f')
+                    || (ch >= 'A' && ch <= 'F')
+                    || ch == ':'
+                    || ch == '.';
+            if (!allowed) return false;
+        }
+        return true;
     }
 
     private void cleanupExpired(long now) {
