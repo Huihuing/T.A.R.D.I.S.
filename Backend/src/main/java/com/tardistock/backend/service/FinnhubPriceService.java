@@ -9,8 +9,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.Comparator;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -25,20 +27,30 @@ public class FinnhubPriceService {
             LoggerFactory.getLogger(FinnhubPriceService.class);
     private static final Pattern SYMBOL_PATTERN =
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
+    private static final int CACHE_SECONDS = 60;
+    private static final int MAX_CACHE_ENTRIES = 500;
 
     @Value("${finnhub.api.key}")
     private String apiKey;
 
-    private final RestTemplate restTemplate =
-            ExternalApiHttpClient.create();
+    private final RestTemplate restTemplate;
+    private final ConcurrentHashMap<String, CachedPrice> cache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<Double>> inFlight =
+            new ConcurrentHashMap<>();
 
-    // 캐시: symbol -> CachedPrice(price, cachedAt)
-    private final ConcurrentHashMap<String, CachedPrice> cache = new ConcurrentHashMap<>();
-    private static final int CACHE_SECONDS = 60;
+    public FinnhubPriceService() {
+        this(ExternalApiHttpClient.create());
+    }
+
+    FinnhubPriceService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     /**
      * 종목 심볼의 현재가를 반환합니다.
      * 캐시가 유효하면 캐시 값을 반환하고, 만료되었으면 Finnhub API를 호출합니다.
+     * 동일 종목의 동시 cache miss는 한 번의 외부 호출만 수행합니다.
      * API 호출 실패 시 만료된 캐시 값(있으면)을 반환하며, 없으면 0.0을 반환합니다.
      *
      * @param symbol 종목 심볼 (e.g. "AAPL", "TSLA")
@@ -51,23 +63,60 @@ public class FinnhubPriceService {
         }
 
         CachedPrice cached = cache.get(normalized);
-
-        // 캐시가 유효한 경우 즉시 반환
-        if (cached != null && cached.cachedAt.plusSeconds(CACHE_SECONDS).isAfter(LocalDateTime.now())) {
+        if (isFresh(cached)) {
             return cached.price;
         }
 
-        // Finnhub REST API 호출 (RestTemplate 사용)
+        CompletableFuture<Double> candidate = new CompletableFuture<>();
+        CompletableFuture<Double> existing =
+                inFlight.putIfAbsent(normalized, candidate);
+
+        if (existing != null) {
+            try {
+                return existing.join();
+            } catch (Exception e) {
+                CachedPrice fallback = cache.get(normalized);
+                return fallback != null ? fallback.price : 0.0;
+            }
+        }
+
         try {
-            String url = "https://finnhub.io/api/v1/quote?symbol=" + normalized + "&token=" + apiKey;
-            Map<?, ?> response = restTemplate.getForObject(url, Map.class);
+            double price = refreshPrice(normalized, cached);
+            candidate.complete(price);
+            return price;
+        } catch (RuntimeException e) {
+            candidate.completeExceptionally(e);
+            throw e;
+        } finally {
+            inFlight.remove(normalized, candidate);
+        }
+    }
+
+    private double refreshPrice(
+            String normalized,
+            CachedPrice staleCache) {
+        try {
+            String url =
+                    "https://finnhub.io/api/v1/quote?symbol="
+                            + normalized
+                            + "&token="
+                            + apiKey;
+            Map<?, ?> response =
+                    restTemplate.getForObject(url, Map.class);
 
             if (response != null && response.containsKey("c")) {
                 Object cVal = response.get("c");
-                double currentPrice = Double.parseDouble(cVal.toString());
+                double currentPrice =
+                        Double.parseDouble(cVal.toString());
 
                 if (currentPrice > 0) {
-                    cache.put(normalized, new CachedPrice(currentPrice, LocalDateTime.now()));
+                    putBounded(
+                            normalized,
+                            new CachedPrice(
+                                    currentPrice,
+                                    LocalDateTime.now()
+                            )
+                    );
                     log.debug(
                             "Finnhub price refreshed for {}",
                             normalized
@@ -75,7 +124,6 @@ public class FinnhubPriceService {
                     return currentPrice;
                 }
             }
-
         } catch (Exception e) {
             log.warn(
                     "Finnhub price request failed for {}: {}",
@@ -84,8 +132,27 @@ public class FinnhubPriceService {
             );
         }
 
-        // API 호출 실패 시 만료된 캐시라도 반환 (없으면 0.0)
-        return cached != null ? cached.price : 0.0;
+        return staleCache != null ? staleCache.price : 0.0;
+    }
+
+    private boolean isFresh(CachedPrice cached) {
+        return cached != null
+                && cached.cachedAt
+                .plusSeconds(CACHE_SECONDS)
+                .isAfter(LocalDateTime.now());
+    }
+
+    private void putBounded(String symbol, CachedPrice price) {
+        if (!cache.containsKey(symbol)
+                && cache.size() >= MAX_CACHE_ENTRIES) {
+            cache.entrySet().stream()
+                    .min(Comparator.comparing(
+                            entry -> entry.getValue().cachedAt
+                    ))
+                    .map(Map.Entry::getKey)
+                    .ifPresent(cache::remove);
+        }
+        cache.put(symbol, price);
     }
 
     private String normalizeSymbol(String symbol) {
@@ -97,7 +164,10 @@ public class FinnhubPriceService {
                 : null;
     }
 
-    /** 캐시 항목 */
+    int cacheSizeForTest() {
+        return cache.size();
+    }
+
     private static class CachedPrice {
         final double price;
         final LocalDateTime cachedAt;
