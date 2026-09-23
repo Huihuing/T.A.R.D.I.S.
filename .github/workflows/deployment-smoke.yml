@@ -17,13 +17,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error             --retry 6 --retry-all-errors --retry-delay 10             --connect-timeout 10 --max-time 60             https://tardis-neon.vercel.app/ > /dev/null
+          curl --fail --silent --show-error \
+            --retry 6 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 10 --max-time 60 \
+            https://tardis-neon.vercel.app/ > /dev/null
+
+      - name: Check backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error \
+            --retry 6 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 10 --max-time 60 \
+            --output /tmp/readiness.json \
+            --write-out "%{http_code}" \
+            https://t-a-r-d-i-s.onrender.com/actuator/health/readiness)"
+          echo "Readiness status: $status"
+          test "$status" = "200"
+          grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' /tmp/readiness.json
 
       - name: Check public board API
         shell: bash
         run: |
           set -euo pipefail
-          status="$(curl --silent --show-error             --retry 6 --retry-all-errors --retry-delay 10             --connect-timeout 10 --max-time 60             --output /tmp/board.json             --write-out "%{http_code}"             https://t-a-r-d-i-s.onrender.com/api/board/posts)"
+          status="$(curl --silent --show-error \
+            --retry 6 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 10 --max-time 60 \
+            --output /tmp/board.json \
+            --write-out "%{http_code}" \
+            https://t-a-r-d-i-s.onrender.com/api/board/posts)"
           echo "Board API status: $status"
           test "$status" -ge 200
           test "$status" -lt 300
@@ -32,7 +54,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status="$(curl --silent --show-error             --retry 6 --retry-all-errors --retry-delay 10             --connect-timeout 10 --max-time 60             --output /tmp/protected.json             --write-out "%{http_code}"             https://t-a-r-d-i-s.onrender.com/api/trade/balance)"
+          status="$(curl --silent --show-error \
+            --retry 6 --retry-all-errors --retry-delay 10 \
+            --connect-timeout 10 --max-time 60 \
+            --output /tmp/protected.json \
+            --write-out "%{http_code}" \
+            https://t-a-r-d-i-s.onrender.com/api/trade/balance)"
           echo "Protected API status: $status"
           if [ "$status" != "401" ]; then
             echo "Expected 401 for anonymous protected API request."
