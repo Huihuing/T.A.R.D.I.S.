@@ -2,6 +2,7 @@ package com.tardistock.backend.controller;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
 import com.tardistock.backend.util.BoundedCacheSupport;
+import com.tardistock.backend.util.SingleFlightSupport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -50,6 +52,8 @@ public class StockController {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry<String>> candlesCache =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<ResponseEntity<?>>> inFlight =
+            new ConcurrentHashMap<>();
     private volatile CacheEntry<String> symbolsCache;
 
     @GetMapping("/quote")
@@ -61,6 +65,19 @@ public class StockController {
             ));
         }
 
+        CacheEntry<Map<?, ?>> cached = quoteCache.get(normalized);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        return SingleFlightSupport.execute(
+                inFlight,
+                "quote:" + normalized,
+                () -> loadQuote(normalized)
+        );
+    }
+
+    private ResponseEntity<?> loadQuote(String normalized) {
         CacheEntry<Map<?, ?>> cached = quoteCache.get(normalized);
         if (isFresh(cached)) {
             return ResponseEntity.ok(cached.value());
@@ -84,7 +101,7 @@ public class StockController {
                                 System.currentTimeMillis() + QUOTE_CACHE_MS
                         ),
                         MAX_QUOTE_CACHE_ENTRIES,
-                        entry -> entry.expiresAt()
+                        CacheEntry::expiresAt
                 );
             }
             return ResponseEntity.ok(body);
@@ -127,14 +144,6 @@ public class StockController {
                         ? "D"
                         : resolution.trim().toUpperCase(Locale.ROOT);
 
-        String candlesCacheKey =
-                normalized + ":" + normalizedResolution;
-        CacheEntry<String> cached =
-                candlesCache.get(candlesCacheKey);
-        if (isFresh(cached)) {
-            return ResponseEntity.ok(cached.value());
-        }
-
         String interval;
         String range;
         switch (normalizedResolution) {
@@ -155,6 +164,36 @@ public class StockController {
                         "message", "resolution은 D, W, M 중 하나여야 합니다."
                 ));
             }
+        }
+
+        String candlesCacheKey =
+                normalized + ":" + normalizedResolution;
+        CacheEntry<String> cached =
+                candlesCache.get(candlesCacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        return SingleFlightSupport.execute(
+                inFlight,
+                "candles:" + candlesCacheKey,
+                () -> loadCandles(
+                        normalized,
+                        candlesCacheKey,
+                        interval,
+                        range
+                )
+        );
+    }
+
+    private ResponseEntity<?> loadCandles(
+            String normalized,
+            String candlesCacheKey,
+            String interval,
+            String range) {
+        CacheEntry<String> cached = candlesCache.get(candlesCacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
         }
 
         try {
@@ -191,7 +230,7 @@ public class StockController {
                                         + CANDLES_CACHE_MS
                         ),
                         MAX_CANDLES_CACHE_ENTRIES,
-                        entry -> entry.expiresAt()
+                        CacheEntry::expiresAt
                 );
             }
             return ResponseEntity.ok(body);
@@ -212,6 +251,19 @@ public class StockController {
 
     @GetMapping("/symbols")
     public ResponseEntity<?> getAllSymbols() {
+        CacheEntry<String> cached = symbolsCache;
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        return SingleFlightSupport.execute(
+                inFlight,
+                "symbols",
+                this::loadSymbols
+        );
+    }
+
+    private ResponseEntity<?> loadSymbols() {
         CacheEntry<String> cached = symbolsCache;
         if (isFresh(cached)) {
             return ResponseEntity.ok(cached.value());
@@ -273,6 +325,21 @@ public class StockController {
             return ResponseEntity.ok(cached.value());
         }
 
+        return SingleFlightSupport.execute(
+                inFlight,
+                "search:" + cacheKey,
+                () -> loadSearch(normalized, cacheKey)
+        );
+    }
+
+    private ResponseEntity<?> loadSearch(
+            String normalized,
+            String cacheKey) {
+        CacheEntry<String> cached = searchCache.get(cacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
         try {
             URI uri = UriComponentsBuilder
                     .fromUriString("https://finnhub.io/api/v1/search")
@@ -295,7 +362,7 @@ public class StockController {
                                 System.currentTimeMillis() + SEARCH_CACHE_MS
                         ),
                         MAX_SEARCH_CACHE_ENTRIES,
-                        entry -> entry.expiresAt()
+                        CacheEntry::expiresAt
                 );
             }
             return ResponseEntity.ok(body);
@@ -353,6 +420,10 @@ public class StockController {
         return entry != null
                 && entry.expiresAt() + staleAllowanceMs
                 > System.currentTimeMillis();
+    }
+
+    int inFlightSizeForTest() {
+        return inFlight.size();
     }
 
     private record CacheEntry<T>(
