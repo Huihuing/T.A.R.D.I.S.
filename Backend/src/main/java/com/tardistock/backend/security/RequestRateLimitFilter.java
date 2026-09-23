@@ -53,6 +53,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private static final Policy NEWS_READ_POLICY = new Policy(60, 60);
     private static final Policy PROFILE_READ_POLICY = new Policy(60, 60);
     private static final Policy LEADERBOARD_READ_POLICY = new Policy(20, 60);
+    private static final Policy BOARD_READ_POLICY = new Policy(120, 60);
     private static final int MAX_COUNTERS = 20_000;
     private static final long MAX_COUNTER_AGE_SECONDS = 3_700;
     private static final long CLEANUP_EVERY_REQUESTS = 512;
@@ -142,6 +143,11 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         if ("GET".equals(method) && "/api/leaderboard".equals(uri)) {
             return LEADERBOARD_READ_POLICY;
         }
+        if ("GET".equals(method)
+                && ("/api/board".equals(uri)
+                || uri.startsWith("/api/board/"))) {
+            return BOARD_READ_POLICY;
+        }
         return null;
     }
 
@@ -157,6 +163,11 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         }
         if ("GET".equals(method) && uri.startsWith("/api/profile/")) {
             return "/api/profile/*";
+        }
+        if ("GET".equals(method)
+                && ("/api/board".equals(uri)
+                || uri.startsWith("/api/board/"))) {
+            return "/api/board/*";
         }
         return uri;
     }
