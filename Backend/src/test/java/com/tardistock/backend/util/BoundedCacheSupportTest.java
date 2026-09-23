@@ -65,6 +65,33 @@ class BoundedCacheSupportTest {
     }
 
     @Test
+    void shrinksPreexistingOversizedCacheBackToMaximum() {
+        long now = System.currentTimeMillis();
+        ConcurrentHashMap<String, Entry> cache = new ConcurrentHashMap<>();
+        cache.put("a", new Entry("a", now + 1_000));
+        cache.put("b", new Entry("b", now + 2_000));
+        cache.put("c", new Entry("c", now + 3_000));
+        cache.put("d", new Entry("d", now + 4_000));
+        cache.put("e", new Entry("e", now + 5_000));
+
+        BoundedCacheSupport.put(
+                cache,
+                "incoming",
+                new Entry("incoming", now + 6_000),
+                3,
+                Entry::expiresAt
+        );
+
+        assertEquals(3, cache.size());
+        assertFalse(cache.containsKey("a"));
+        assertFalse(cache.containsKey("b"));
+        assertFalse(cache.containsKey("c"));
+        assertTrue(cache.containsKey("d"));
+        assertTrue(cache.containsKey("e"));
+        assertTrue(cache.containsKey("incoming"));
+    }
+
+    @Test
     void remainsStrictlyBoundedUnderConcurrentWrites() throws Exception {
         int maxEntries = 100;
         long expiresAt = System.currentTimeMillis() + 60_000;
