@@ -143,16 +143,18 @@ public class FinnhubPriceService {
     }
 
     private void putBounded(String symbol, CachedPrice price) {
-        if (!cache.containsKey(symbol)
-                && cache.size() >= MAX_CACHE_ENTRIES) {
-            cache.entrySet().stream()
-                    .min(Comparator.comparing(
-                            entry -> entry.getValue().cachedAt
-                    ))
-                    .map(Map.Entry::getKey)
-                    .ifPresent(cache::remove);
+        synchronized (cache) {
+            if (!cache.containsKey(symbol)
+                    && cache.size() >= MAX_CACHE_ENTRIES) {
+                cache.entrySet().stream()
+                        .min(Comparator.comparing(
+                                entry -> entry.getValue().cachedAt
+                        ))
+                        .map(Map.Entry::getKey)
+                        .ifPresent(cache::remove);
+            }
+            cache.put(symbol, price);
         }
-        cache.put(symbol, price);
     }
 
     private String normalizeSymbol(String symbol) {
