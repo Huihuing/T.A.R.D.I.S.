@@ -29,15 +29,19 @@ public final class BoundedCacheSupport {
                         entry -> expiresAt.applyAsLong(entry.getValue()) <= now
                 );
 
-                if (cache.size() >= maxEntries) {
-                    cache.entrySet().stream()
+                while (cache.size() >= maxEntries) {
+                    K evictionKey = cache.entrySet().stream()
                             .min(Comparator.comparingLong(
                                     entry -> expiresAt.applyAsLong(
                                             entry.getValue()
                                     )
                             ))
                             .map(Map.Entry::getKey)
-                            .ifPresent(cache::remove);
+                            .orElse(null);
+                    if (evictionKey == null) {
+                        break;
+                    }
+                    cache.remove(evictionKey);
                 }
             }
 

@@ -28,6 +28,9 @@ public final class SingleFlightSupport {
                 if (cause instanceof RuntimeException runtimeException) {
                     throw runtimeException;
                 }
+                if (cause instanceof Error error) {
+                    throw error;
+                }
                 throw e;
             }
         }
@@ -36,9 +39,15 @@ public final class SingleFlightSupport {
             V result = action.get();
             candidate.complete(result);
             return result;
-        } catch (RuntimeException e) {
-            candidate.completeExceptionally(e);
-            throw e;
+        } catch (Throwable failure) {
+            candidate.completeExceptionally(failure);
+            if (failure instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (failure instanceof Error error) {
+                throw error;
+            }
+            throw new CompletionException(failure);
         } finally {
             inFlight.remove(key, candidate);
         }
