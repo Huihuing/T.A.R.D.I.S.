@@ -13,6 +13,8 @@ import {
   type BackendWakeSnapshot
 } from '../backendWakeup';
 
+const WAKE_BANNER_DELAY_MS = 900;
+
 function formatElapsed(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -46,9 +48,10 @@ export default function BackendWakeStatus() {
     };
   }, []);
 
+  const elapsedMs = now - snapshot.startedAt;
   const elapsed = useMemo(
-    () => formatElapsed(now - snapshot.startedAt),
-    [now, snapshot.startedAt]
+    () => formatElapsed(elapsedMs),
+    [elapsedMs]
   );
 
   const readyVisible = snapshot.status === 'ready'
@@ -56,6 +59,10 @@ export default function BackendWakeStatus() {
     && now - snapshot.readyAt < 3_500;
 
   if (snapshot.status === 'ready' && !readyVisible) {
+    return null;
+  }
+
+  if (snapshot.status !== 'ready' && elapsedMs < WAKE_BANNER_DELAY_MS) {
     return null;
   }
 
