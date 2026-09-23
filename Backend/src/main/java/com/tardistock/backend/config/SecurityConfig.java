@@ -68,8 +68,21 @@ public class SecurityConfig {
                 // Retired raw-SQL routes stay denied as a defense-in-depth guard.
                 .requestMatchers("/api/member/**", "/api/wallet/**").denyAll()
 
-                // Authentication, SockJS handshake, and minimal health check.
-                .requestMatchers("/api/auth/**", "/ws-stomp/**").permitAll()
+                // Only endpoints that must work before authentication are public.
+                .requestMatchers(HttpMethod.POST,
+                    "/api/auth/email/send",
+                    "/api/auth/email/verify",
+                    "/api/auth/register",
+                    "/api/auth/login",
+                    "/api/auth/google",
+                    "/api/auth/refresh",
+                    "/api/auth/logout",
+                    "/api/auth/password/send",
+                    "/api/auth/password/reset"
+                ).permitAll()
+                .requestMatchers("/ws-stomp/**").permitAll()
+
+                // Minimal health check endpoints for platform probes.
                 .requestMatchers(
                     HttpMethod.GET,
                     "/actuator/health",
@@ -101,7 +114,7 @@ public class SecurityConfig {
                     "/api/board/comments/**"
                 ).permitAll()
 
-                // Everything else requires a valid JWT.
+                // Everything else, including auth session management, requires JWT.
                 .anyRequest().authenticated()
             )
             .addFilterBefore(
