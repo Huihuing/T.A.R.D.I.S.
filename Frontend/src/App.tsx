@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import { getStoredToken, refreshAccessToken } from './auth';
 import UiFeedbackHost from './components/UiFeedbackHost';
+import BackendWakeStatus from './components/BackendWakeStatus';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -97,6 +98,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <UiFeedbackHost />
+      <BackendWakeStatus />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
         <Route path="/login" element={<Login />} />
