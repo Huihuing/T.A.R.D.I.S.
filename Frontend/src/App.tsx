@@ -43,12 +43,19 @@ export default function App() {
   useEffect(() => {
     let active = true;
 
-    const restoreIfNeeded = async () => {
-      if (getStoredToken()) return;
-      const restored = await refreshAccessToken();
-      if (active && restored) {
+    const syncSessionUi = () => {
+      if (active) {
         setSessionRevision(prev => prev + 1);
       }
+    };
+
+    const restoreIfNeeded = async () => {
+      if (getStoredToken()) return;
+      await refreshAccessToken();
+      // A failed refresh can still be meaningful: an explicit 401 clears
+      // stale username/auth state. Re-render consumers such as Board either
+      // way so guest/member UI matches the resulting auth state.
+      syncSessionUi();
     };
 
     restoreIfNeeded();
@@ -57,10 +64,8 @@ export default function App() {
       const username = localStorage.getItem('username');
       if (!username || username === 'Guest') return;
 
-      const refreshed = await refreshAccessToken();
-      if (active && refreshed) {
-        setSessionRevision(prev => prev + 1);
-      }
+      await refreshAccessToken();
+      syncSessionUi();
     };
 
     const interval = window.setInterval(
