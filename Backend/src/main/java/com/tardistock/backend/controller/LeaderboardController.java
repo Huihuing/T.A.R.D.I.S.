@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -31,6 +32,7 @@ public class LeaderboardController {
     private final WalletRepository walletRepository;
     private final PortfolioRepository portfolioRepository;
     private final FinnhubPriceService finnhubPriceService;
+    private final ReentrantLock leaderboardRefreshLock = new ReentrantLock();
     private volatile CacheEntry leaderboardCache;
 
     public LeaderboardController(
@@ -48,11 +50,37 @@ public class LeaderboardController {
     @Transactional(readOnly = true)
     public ResponseEntity<?> getLeaderboard() {
         CacheEntry cached = leaderboardCache;
-        if (cached != null
-                && cached.expiresAt() > System.currentTimeMillis()) {
+        if (isFresh(cached)) {
             return ResponseEntity.ok(cached.value());
         }
 
+        if (!leaderboardRefreshLock.tryLock()) {
+            if (cached != null) {
+                return ResponseEntity.ok(cached.value());
+            }
+            leaderboardRefreshLock.lock();
+        }
+
+        try {
+            cached = leaderboardCache;
+            if (isFresh(cached)) {
+                return ResponseEntity.ok(cached.value());
+            }
+
+            List<Map<String, Object>> result = buildLeaderboard();
+            List<Map<String, Object>> immutableResult = List.copyOf(result);
+            leaderboardCache = new CacheEntry(
+                    immutableResult,
+                    System.currentTimeMillis() + LEADERBOARD_CACHE_MS
+            );
+
+            return ResponseEntity.ok(immutableResult);
+        } finally {
+            leaderboardRefreshLock.unlock();
+        }
+    }
+
+    private List<Map<String, Object>> buildLeaderboard() {
         List<Member> members = memberRepository.findAll();
 
         Map<Long, Wallet> walletsByMemberId =
@@ -131,12 +159,12 @@ public class LeaderboardController {
             ));
         }
 
-        leaderboardCache = new CacheEntry(
-                List.copyOf(result),
-                System.currentTimeMillis() + LEADERBOARD_CACHE_MS
-        );
+        return result;
+    }
 
-        return ResponseEntity.ok(result);
+    private boolean isFresh(CacheEntry cached) {
+        return cached != null
+                && cached.expiresAt() > System.currentTimeMillis();
     }
 
     private record CacheEntry(
