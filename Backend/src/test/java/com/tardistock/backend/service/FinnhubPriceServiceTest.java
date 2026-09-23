@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -91,6 +93,41 @@ class FinnhubPriceServiceTest {
         assertEquals(500, service.cacheSizeForTest());
         verify(restTemplate, times(501))
                 .getForObject(anyString(), eq(Map.class));
+    }
+
+    @Test
+    void priceCacheRemainsBoundedUnderConcurrentDistinctSymbols()
+            throws Exception {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.getForObject(anyString(), eq(Map.class)))
+                .thenReturn(Map.of("c", 10.0));
+
+        FinnhubPriceService service = service(restTemplate);
+        ExecutorService executor = Executors.newFixedThreadPool(32);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Double>> futures = new ArrayList<>();
+
+        try {
+            for (int i = 0; i < 600; i++) {
+                int index = i;
+                futures.add(executor.submit(() -> {
+                    assertTrue(start.await(5, TimeUnit.SECONDS));
+                    return service.getPrice("C" + index);
+                }));
+            }
+
+            start.countDown();
+
+            for (Future<Double> future : futures) {
+                assertEquals(10.0, future.get(10, TimeUnit.SECONDS));
+            }
+
+            assertEquals(500, service.cacheSizeForTest());
+            verify(restTemplate, times(600))
+                    .getForObject(anyString(), eq(Map.class));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
