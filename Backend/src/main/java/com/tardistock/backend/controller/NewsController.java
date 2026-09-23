@@ -1,6 +1,7 @@
 package com.tardistock.backend.controller;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
+import com.tardistock.backend.util.BoundedCacheSupport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,13 +82,15 @@ public class NewsController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                putBounded(
+                BoundedCacheSupport.put(
                         globalCache,
                         normalized,
                         new CacheEntry(
                                 body,
                                 System.currentTimeMillis() + NEWS_CACHE_MS
-                        )
+                        ),
+                        MAX_NEWS_CACHE_ENTRIES,
+                        CacheEntry::expiresAt
                 );
             }
             return ResponseEntity.ok(body);
@@ -163,13 +166,15 @@ public class NewsController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                putBounded(
+                BoundedCacheSupport.put(
                         koreaCache,
                         cacheKey,
                         new CacheEntry(
                                 body,
                                 System.currentTimeMillis() + NEWS_CACHE_MS
-                        )
+                        ),
+                        MAX_NEWS_CACHE_ENTRIES,
+                        CacheEntry::expiresAt
                 );
             }
             return ResponseEntity.ok(body);
@@ -223,22 +228,6 @@ public class NewsController {
         return entry != null
                 && entry.expiresAt() + NEWS_STALE_MS
                 > System.currentTimeMillis();
-    }
-
-    private void putBounded(
-            ConcurrentHashMap<String, CacheEntry> cache,
-            String key,
-            CacheEntry value) {
-        if (cache.size() >= MAX_NEWS_CACHE_ENTRIES) {
-            long now = System.currentTimeMillis();
-            cache.entrySet().removeIf(
-                    entry -> entry.getValue().expiresAt() <= now
-            );
-            if (cache.size() >= MAX_NEWS_CACHE_ENTRIES) {
-                cache.clear();
-            }
-        }
-        cache.put(key, value);
     }
 
     private record CacheEntry(
