@@ -5,13 +5,16 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +126,63 @@ class SingleFlightSupportTest {
         assertEquals(42, result);
         assertEquals(2, executions.get());
         assertTrue(inFlight.isEmpty());
+    }
+
+    @Test
+    void fatalLeaderFailureIsPropagatedToFollowerWithoutHanging() throws Exception {
+        TrackingMap<String, CompletableFuture<Integer>> inFlight =
+                new TrackingMap<>();
+        CountDownLatch leaderStarted = new CountDownLatch(1);
+        CountDownLatch releaseLeader = new CountDownLatch(1);
+        AtomicInteger followerExecutions = new AtomicInteger();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> leader = executor.submit(() ->
+                    SingleFlightSupport.execute(
+                            inFlight,
+                            "AAPL",
+                            () -> {
+                                leaderStarted.countDown();
+                                await(releaseLeader);
+                                throw new AssertionError("fatal leader failure");
+                            }
+                    )
+            );
+
+            leaderStarted.await();
+
+            Future<Integer> follower = executor.submit(() ->
+                    SingleFlightSupport.execute(
+                            inFlight,
+                            "AAPL",
+                            () -> {
+                                followerExecutions.incrementAndGet();
+                                return 999;
+                            }
+                    )
+            );
+
+            inFlight.awaitSecondPutIfAbsent();
+            releaseLeader.countDown();
+
+            ExecutionException leaderFailure = assertThrows(
+                    ExecutionException.class,
+                    () -> leader.get(2, TimeUnit.SECONDS)
+            );
+            ExecutionException followerFailure = assertThrows(
+                    ExecutionException.class,
+                    () -> follower.get(2, TimeUnit.SECONDS)
+            );
+
+            assertInstanceOf(AssertionError.class, leaderFailure.getCause());
+            assertInstanceOf(AssertionError.class, followerFailure.getCause());
+            assertEquals(0, followerExecutions.get());
+            assertTrue(inFlight.isEmpty());
+        } finally {
+            releaseLeader.countDown();
+            executor.shutdownNow();
+        }
     }
 
     private static void await(CountDownLatch latch) {
