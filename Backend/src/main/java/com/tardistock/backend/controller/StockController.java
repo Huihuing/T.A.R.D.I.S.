@@ -1,6 +1,7 @@
 package com.tardistock.backend.controller;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
+import com.tardistock.backend.util.BoundedCacheSupport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,14 +76,15 @@ public class StockController {
                     restTemplate.getForEntity(url, Map.class);
             Map<?, ?> body = response.getBody();
             if (body != null) {
-                putBounded(
+                BoundedCacheSupport.put(
                         quoteCache,
                         normalized,
                         new CacheEntry<>(
                                 body,
                                 System.currentTimeMillis() + QUOTE_CACHE_MS
                         ),
-                        MAX_QUOTE_CACHE_ENTRIES
+                        MAX_QUOTE_CACHE_ENTRIES,
+                        entry -> entry.expiresAt()
                 );
             }
             return ResponseEntity.ok(body);
@@ -180,7 +182,7 @@ public class StockController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                putBounded(
+                BoundedCacheSupport.put(
                         candlesCache,
                         candlesCacheKey,
                         new CacheEntry<>(
@@ -188,7 +190,8 @@ public class StockController {
                                 System.currentTimeMillis()
                                         + CANDLES_CACHE_MS
                         ),
-                        MAX_CANDLES_CACHE_ENTRIES
+                        MAX_CANDLES_CACHE_ENTRIES,
+                        entry -> entry.expiresAt()
                 );
             }
             return ResponseEntity.ok(body);
@@ -284,14 +287,15 @@ public class StockController {
 
             String body = response.getBody();
             if (body != null && !body.isBlank()) {
-                putBounded(
+                BoundedCacheSupport.put(
                         searchCache,
                         cacheKey,
                         new CacheEntry<>(
                                 body,
                                 System.currentTimeMillis() + SEARCH_CACHE_MS
                         ),
-                        MAX_SEARCH_CACHE_ENTRIES
+                        MAX_SEARCH_CACHE_ENTRIES,
+                        entry -> entry.expiresAt()
                 );
             }
             return ResponseEntity.ok(body);
@@ -349,23 +353,6 @@ public class StockController {
         return entry != null
                 && entry.expiresAt() + staleAllowanceMs
                 > System.currentTimeMillis();
-    }
-
-    private <T> void putBounded(
-            ConcurrentHashMap<String, CacheEntry<T>> cache,
-            String key,
-            CacheEntry<T> value,
-            int maxEntries) {
-        if (cache.size() >= maxEntries) {
-            long now = System.currentTimeMillis();
-            cache.entrySet().removeIf(
-                    entry -> entry.getValue().expiresAt() <= now
-            );
-            if (cache.size() >= maxEntries) {
-                cache.clear();
-            }
-        }
-        cache.put(key, value);
     }
 
     private record CacheEntry<T>(
