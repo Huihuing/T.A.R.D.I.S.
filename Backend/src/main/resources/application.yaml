@@ -29,6 +29,8 @@ spring:
       idle-timeout: ${DB_IDLE_TIMEOUT_MS:300000}
       max-lifetime: ${DB_MAX_LIFETIME_MS:1500000}
       keepalive-time: ${DB_KEEPALIVE_TIME_MS:120000}
+      data-source-properties:
+        connectTimeout: ${DB_DRIVER_CONNECT_TIMEOUT_MS:10000}
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
