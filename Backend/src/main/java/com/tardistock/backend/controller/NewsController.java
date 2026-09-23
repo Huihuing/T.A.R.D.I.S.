@@ -2,6 +2,7 @@ package com.tardistock.backend.controller;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
 import com.tardistock.backend.util.BoundedCacheSupport;
+import com.tardistock.backend.util.SingleFlightSupport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -40,12 +42,21 @@ public class NewsController {
     @Value("${finnhub.api.key}")
     private String finnhubToken;
 
-    private final RestTemplate restTemplate =
-            ExternalApiHttpClient.create();
+    private final RestTemplate restTemplate;
     private final ConcurrentHashMap<String, CacheEntry> globalCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry> koreaCache =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<ResponseEntity<?>>> inFlight =
+            new ConcurrentHashMap<>();
+
+    public NewsController() {
+        this(ExternalApiHttpClient.create());
+    }
+
+    NewsController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @GetMapping("/global")
     public ResponseEntity<?> getGlobalNews(
@@ -57,6 +68,19 @@ public class NewsController {
             ));
         }
 
+        CacheEntry cached = globalCache.get(normalized);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        return SingleFlightSupport.execute(
+                inFlight,
+                "global:" + normalized,
+                () -> loadGlobalNews(normalized)
+        );
+    }
+
+    private ResponseEntity<?> loadGlobalNews(String normalized) {
         CacheEntry cached = globalCache.get(normalized);
         if (isFresh(cached)) {
             return ResponseEntity.ok(cached.value());
@@ -134,6 +158,21 @@ public class NewsController {
 
         String cacheKey =
                 normalizedQuery.toLowerCase(Locale.ROOT);
+        CacheEntry cached = koreaCache.get(cacheKey);
+        if (isFresh(cached)) {
+            return ResponseEntity.ok(cached.value());
+        }
+
+        return SingleFlightSupport.execute(
+                inFlight,
+                "korea:" + cacheKey,
+                () -> loadKoreanNews(normalizedQuery, cacheKey)
+        );
+    }
+
+    private ResponseEntity<?> loadKoreanNews(
+            String normalizedQuery,
+            String cacheKey) {
         CacheEntry cached = koreaCache.get(cacheKey);
         if (isFresh(cached)) {
             return ResponseEntity.ok(cached.value());
@@ -228,6 +267,10 @@ public class NewsController {
         return entry != null
                 && entry.expiresAt() + NEWS_STALE_MS
                 > System.currentTimeMillis();
+    }
+
+    int inFlightSizeForTest() {
+        return inFlight.size();
     }
 
     private record CacheEntry(
