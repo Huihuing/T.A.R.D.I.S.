@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { getAuthHeaders } from '../auth';
+import { authFetch } from '../auth';
 import { confirmAction, notify } from '../uiFeedback';
 import { useEffect, useState } from 'react';
 import {
@@ -59,12 +59,8 @@ export default function Admin() {
     const loadAdminData = async () => {
         try {
             const [statsRes, reportsRes] = await Promise.all([
-                fetch(`${API_URL}/api/admin/stats`, {
-                    headers: getAuthHeaders(false)
-                }),
-                fetch(`${API_URL}/api/admin/reports?status=${reportStatus}`, {
-                    headers: getAuthHeaders(false)
-                })
+                authFetch(`${API_URL}/api/admin/stats`),
+                authFetch(`${API_URL}/api/admin/reports?status=${reportStatus}`)
             ]);
 
             const statsData = await statsRes.json().catch(() => ({}));
@@ -115,11 +111,13 @@ export default function Admin() {
 
         setModerationLoading(true);
         try {
-            const res = await fetch(
+            const res = await authFetch(
                 `${API_URL}/api/admin/reports/${report.id}`,
                 {
                     method: 'PATCH',
-                    headers: getAuthHeaders(),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({ action })
                 }
             );
