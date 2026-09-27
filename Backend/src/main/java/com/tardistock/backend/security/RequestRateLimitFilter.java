@@ -64,6 +64,19 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
     private final ConcurrentHashMap<String, WindowCounter> counters =
             new ConcurrentHashMap<>();
     private final AtomicLong rateLimitedRequestCount = new AtomicLong();
+    private final Object counterInsertionLock = new Object();
+    private final int maxCounters;
+
+    public RequestRateLimitFilter() {
+        this(MAX_COUNTERS);
+    }
+
+    RequestRateLimitFilter(int maxCounters) {
+        if (maxCounters <= 0) {
+            throw new IllegalArgumentException("maxCounters must be positive");
+        }
+        this.maxCounters = maxCounters;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -90,18 +103,11 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
             cleanupExpired(now);
         }
 
-        if (!counters.containsKey(key) && counters.size() >= MAX_COUNTERS) {
-            cleanupExpired(now);
-            if (counters.size() >= MAX_COUNTERS) {
-                writeRateLimitResponse(response, 60);
-                return;
-            }
+        WindowCounter counter = getOrCreateCounter(key, now);
+        if (counter == null) {
+            writeRateLimitResponse(response, 60);
+            return;
         }
-
-        WindowCounter counter = counters.computeIfAbsent(
-                key,
-                ignored -> new WindowCounter(now, 0)
-        );
 
         int current;
         long retryAfter;
@@ -125,6 +131,34 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private WindowCounter getOrCreateCounter(String key, long now) {
+        WindowCounter existing = counters.get(key);
+        if (existing != null) {
+            return existing;
+        }
+
+        // Only new-key insertion is serialized. Existing counters keep the
+        // lock-free ConcurrentHashMap fast path, while simultaneous first-time
+        // clients cannot race past the global counter capacity.
+        synchronized (counterInsertionLock) {
+            existing = counters.get(key);
+            if (existing != null) {
+                return existing;
+            }
+
+            if (counters.size() >= maxCounters) {
+                cleanupExpired(now);
+                if (counters.size() >= maxCounters) {
+                    return null;
+                }
+            }
+
+            WindowCounter created = new WindowCounter(now, 0);
+            counters.put(key, created);
+            return created;
+        }
     }
 
     private Policy resolvePolicy(HttpServletRequest request) {
