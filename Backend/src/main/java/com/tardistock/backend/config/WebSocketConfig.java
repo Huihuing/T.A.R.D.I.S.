@@ -15,6 +15,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 import java.util.List;
 
@@ -22,6 +23,10 @@ import java.util.List;
 @EnableWebSocketMessageBroker
 public class WebSocketConfig
         implements WebSocketMessageBrokerConfigurer {
+
+    private static final String CHAT_TOPIC = "/topic/chat";
+    private static final String CHAT_SEND_DESTINATION = "/app/chat";
+    private static final int MAX_INBOUND_MESSAGE_BYTES = 8 * 1024;
 
     private final String frontendUrl;
     private final JwtTokenProvider jwtTokenProvider;
@@ -54,6 +59,12 @@ public class WebSocketConfig
     }
 
     @Override
+    public void configureWebSocketTransport(
+            WebSocketTransportRegistration registration) {
+        registration.setMessageSizeLimit(MAX_INBOUND_MESSAGE_BYTES);
+    }
+
+    @Override
     public void configureClientInboundChannel(
             ChannelRegistration registration) {
         registration.interceptors(
@@ -67,7 +78,7 @@ public class WebSocketConfig
 
                         if (StompCommand.CONNECT.equals(
                                 accessor.getCommand())) {
-                            authenticate(accessor);
+                            authenticateIfPresent(accessor);
                         }
 
                         if (StompCommand.SUBSCRIBE.equals(
@@ -77,9 +88,7 @@ public class WebSocketConfig
 
                         if (StompCommand.SEND.equals(
                                 accessor.getCommand())) {
-                            throw new MessagingException(
-                                    "Client WebSocket messages are not supported"
-                            );
+                            authorizeSend(accessor);
                         }
 
                         return message;
@@ -88,15 +97,18 @@ public class WebSocketConfig
         );
     }
 
-    private void authenticate(
+    private void authenticateIfPresent(
             StompHeaderAccessor accessor) {
         String authorization =
                 accessor.getFirstNativeHeader("Authorization");
 
-        if (authorization == null
-                || !authorization.startsWith("Bearer ")) {
+        if (authorization == null || authorization.isBlank()) {
+            return;
+        }
+        if (!authorization.startsWith("Bearer ")) {
             throw new MessagingException(
-                    "WebSocket authentication required");
+                    "Unsupported WebSocket authorization scheme"
+            );
         }
 
         String token =
@@ -121,6 +133,10 @@ public class WebSocketConfig
     private void authorizeSubscription(
             StompHeaderAccessor accessor) {
         String destination = accessor.getDestination();
+        if (CHAT_TOPIC.equals(destination)) {
+            return;
+        }
+
         if (destination == null
                 || !destination.startsWith(
                         "/topic/alerts/")) {
@@ -142,6 +158,16 @@ public class WebSocketConfig
                 accessor.getUser().getName())) {
             throw new MessagingException(
                     "Cannot subscribe to another user's alerts");
+        }
+    }
+
+    private void authorizeSend(
+            StompHeaderAccessor accessor) {
+        if (!CHAT_SEND_DESTINATION.equals(
+                accessor.getDestination())) {
+            throw new MessagingException(
+                    "Unsupported WebSocket send destination"
+            );
         }
     }
 }
