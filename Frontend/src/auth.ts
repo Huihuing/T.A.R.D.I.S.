@@ -20,6 +20,23 @@ export function clearAuth(): void {
     localStorage.removeItem('needsPinSetup');
 }
 
+// localStorage is shared between tabs while access tokens intentionally live in
+// per-tab sessionStorage. Propagate an explicit logout immediately so another
+// tab cannot keep using its still-valid JWT or an authenticated STOMP session.
+window.addEventListener('storage', event => {
+    if (
+        event.key !== EXPLICIT_LOGOUT_KEY
+        || event.newValue !== '1'
+    ) {
+        return;
+    }
+
+    clearAuth();
+    if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+    }
+});
+
 function decodeJwtPayload(token: string): { exp?: number } | null {
     try {
         const parts = token.split('.');
@@ -72,6 +89,15 @@ export function storeAccessToken(token: string): void {
 }
 
 export function getStoredToken(): string | null {
+    // The storage event handles normal cross-tab logout immediately. Keep this
+    // guard as a second line of defense for suspended/background tabs that may
+    // resume after the event was delayed.
+    if (hasExplicitLogoutIntent()) {
+        sessionStorage.removeItem('token');
+        localStorage.removeItem('token');
+        return null;
+    }
+
     let token = sessionStorage.getItem('token');
 
     // One-time migration for users who logged in before access tokens
