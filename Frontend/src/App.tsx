@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import { getStoredToken, refreshAccessToken } from './auth';
 import UiFeedbackHost from './components/UiFeedbackHost';
 import BackendWakeStatus from './components/BackendWakeStatus';
+import ProtectedRoute from './components/ProtectedRoute';
 import { BACKEND_READY_EVENT } from './backendWakeup';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -33,7 +34,6 @@ function RouteFallback() {
     </div>
   );
 }
-
 
 export default function App() {
   const [, setSessionRevision] = useState(0);
@@ -119,46 +119,67 @@ export default function App() {
       <BackendWakeStatus />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/setup-pin" element={<SetupPin />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route
+            path="/setup-pin"
+            element={
+              <ProtectedRoute>
+                <SetupPin />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/*"
-          element={
-            <div className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans">
-              <Sidebar
-                isOpen={isSidebarOpen}
-                toggleSidebar={toggleSidebar}
-              />
+          <Route
+            path="/*"
+            element={
+              <div className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans">
+                <Sidebar
+                  isOpen={isSidebarOpen}
+                  toggleSidebar={toggleSidebar}
+                />
 
-              <main className="flex-1 h-screen overflow-y-auto relative transition-all">
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/stock" element={<StockPage />} />
-                  <Route path="/news" element={<NewsPage />} />
-                  <Route path="/wallet" element={<Wallet />} />
-                  <Route path="/watchlist" element={<Watchlist />} />
-                  <Route path="/board" element={<Board />} />
-                  <Route
-                    path="/leaderboard"
-                    element={<Leaderboard />}
-                  />
-                  <Route
-                    path="/profile/:username"
-                    element={<Profile />}
-                  />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/admin" element={<Admin />} />
-                </Routes>
-                <NotificationCenter />
-                <Trollbox />
-              </main>
-            </div>
-          }
-        />
+                <main className="flex-1 h-screen overflow-y-auto relative transition-all">
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/stock" element={<StockPage />} />
+                    <Route path="/news" element={<NewsPage />} />
+                    <Route path="/wallet" element={<Wallet />} />
+                    <Route path="/watchlist" element={<Watchlist />} />
+                    <Route path="/board" element={<Board />} />
+                    <Route
+                      path="/leaderboard"
+                      element={<Leaderboard />}
+                    />
+                    <Route
+                      path="/profile/:username"
+                      element={<Profile />}
+                    />
+                    <Route
+                      path="/settings"
+                      element={
+                        <ProtectedRoute>
+                          <Settings />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin"
+                      element={
+                        <ProtectedRoute>
+                          <Admin />
+                        </ProtectedRoute>
+                      }
+                    />
+                  </Routes>
+                  <NotificationCenter />
+                  <Trollbox />
+                </main>
+              </div>
+            }
+          />
         </Routes>
       </Suspense>
     </BrowserRouter>
