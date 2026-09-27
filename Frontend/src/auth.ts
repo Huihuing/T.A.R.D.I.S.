@@ -129,6 +129,14 @@ async function performAccessTokenRefresh(): Promise<boolean> {
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.token && data.username) {
+            // Another tab can explicitly log out while this refresh request is
+            // already in flight. Re-check the shared logout guard immediately
+            // before storing the response so a late success cannot resurrect
+            // the session or clear the user's logout intent.
+            if (hasExplicitLogoutIntent()) {
+                return false;
+            }
+
             storeAccessToken(data.token);
             localStorage.setItem('username', data.username);
 
