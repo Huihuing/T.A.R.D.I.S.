@@ -1,7 +1,8 @@
-import { API_URL, WS_URL } from '../config';
+import { API_URL } from '../config';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, RefreshCw, RotateCcw } from 'lucide-react';
+import { useBackendReadyRetry } from '../useBackendReadyRetry';
 
 interface NewsItem { id: number; headline: string; summary: string; url: string; image: string; datetime: number; }
 interface NaverNewsItem { title: string; link: string; description: string; pubDate: string; }
@@ -34,8 +35,12 @@ export default function NewsPage() {
     };
 
     useEffect(() => {
-        fetchNews(currentGlobalQuery, currentKoreaQuery);
+        void fetchNews(currentGlobalQuery, currentKoreaQuery);
     }, [currentGlobalQuery, currentKoreaQuery]);
+
+    useBackendReadyRetry(() =>
+        fetchNews(currentGlobalQuery, currentKoreaQuery)
+    );
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
