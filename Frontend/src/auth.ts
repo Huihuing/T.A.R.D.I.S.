@@ -191,6 +191,18 @@ export async function refreshAccessToken(): Promise<boolean> {
     return refreshInFlight;
 }
 
+function isSafeReadRequest(
+    input: RequestInfo | URL,
+    init?: RequestInit
+): boolean {
+    const method = (
+        init?.method
+        ?? (input instanceof Request ? input.method : 'GET')
+    ).toUpperCase();
+
+    return method === 'GET' || method === 'HEAD';
+}
+
 export async function authFetch(
     input: RequestInfo | URL,
     init: RequestInit = {}
@@ -212,10 +224,14 @@ export async function authFetch(
         headers
     });
 
-    // If the token expired between request creation and server validation,
-    // refresh once and retry. Business-level 401 responses are not retried
-    // while the current JWT is still valid.
-    if (response.status === 401 && (!token || isTokenExpired(token))) {
+    // If the token expires between request creation and server validation,
+    // only idempotent reads are safe to replay automatically. Writes already
+    // get a preflight refresh above and must never be sent a second time.
+    if (
+        response.status === 401
+        && isSafeReadRequest(input, init)
+        && (!token || isTokenExpired(token))
+    ) {
         const refreshed = await refreshAccessToken();
         const nextToken = getStoredToken();
 
