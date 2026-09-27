@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import { getStoredToken, refreshAccessToken } from './auth';
 import UiFeedbackHost from './components/UiFeedbackHost';
 import BackendWakeStatus from './components/BackendWakeStatus';
+import { BACKEND_READY_EVENT } from './backendWakeup';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -59,7 +60,22 @@ export default function App() {
       syncSessionUi();
     };
 
-    restoreIfNeeded();
+    void restoreIfNeeded();
+
+    const resyncAfterBackendReady = async () => {
+      // The first refresh attempt can fail while Render is still waking.
+      // Once readiness turns UP, retry only when this tab still has no valid
+      // access token. refreshAccessToken() is already single-flight, so this
+      // safely coalesces with an in-progress initial restore.
+      if (!getStoredToken()) {
+        await refreshAccessToken();
+      }
+      syncSessionUi();
+    };
+
+    const handleBackendReady = () => {
+      void resyncAfterBackendReady();
+    };
 
     const refreshForSignedInUser = async () => {
       const username = localStorage.getItem('username');
@@ -75,14 +91,16 @@ export default function App() {
     );
 
     const refreshOnFocus = () => {
-      refreshForSignedInUser();
+      void refreshForSignedInUser();
     };
 
+    window.addEventListener(BACKEND_READY_EVENT, handleBackendReady);
     window.addEventListener('focus', refreshOnFocus);
 
     return () => {
       active = false;
       window.clearInterval(interval);
+      window.removeEventListener(BACKEND_READY_EVENT, handleBackendReady);
       window.removeEventListener('focus', refreshOnFocus);
     };
   }, []);

@@ -1,5 +1,7 @@
 import { WS_URL } from './config';
 
+export const BACKEND_READY_EVENT = 'tardis:backend-ready';
+
 export type BackendWakeStatus =
   | 'checking'
   | 'waking'
@@ -73,11 +75,18 @@ async function runWakeLoop() {
     });
 
     if (await probeReadiness()) {
+      const readyAt = Date.now();
       publish({
         status: 'ready',
-        readyAt: Date.now(),
-        lastCheckedAt: Date.now()
+        readyAt,
+        lastCheckedAt: readyAt
       });
+      window.dispatchEvent(new CustomEvent(BACKEND_READY_EVENT, {
+        detail: {
+          readyAt,
+          attempts: snapshot.attempts
+        }
+      }));
       return;
     }
 
