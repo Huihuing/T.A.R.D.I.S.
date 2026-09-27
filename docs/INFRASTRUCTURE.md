@@ -60,31 +60,71 @@ backend 연결 장애를 일으킬 수 있습니다.
 고정 outbound IP 또는 private networking을 사용할 수 있는 플랜으로 전환할 때
 Aiven IP allowlist를 좁히는 것을 우선 검토합니다.
 
+### 4. Render free 런타임 자원과 cold-start 관측
 
-
-### 4. Render free 런타임 자원 관측
-
-2026-09-22 운영 배포 `f09bc480...`의 Render metrics 기준:
+Render metrics/logs에서 확인된 free 인스턴스의 주요 특성:
 
 - CPU limit: 약 `0.15 CPU`
-- 새 인스턴스 기동 중 CPU usage가 limit에 약 2분 가까이 붙음
-- 메모리 usage: 기동 후 약 `293~297 MB`
 - 메모리 limit: 약 `512 MB`
-- Spring Boot 기동 완료: 약 `159.9초`
-- Hikari의 첫 Aiven MySQL 연결 구간: 약 10초
+- 일반 실행 메모리: 대략 300 MB 전후
+- Aiven MySQL 첫 Hikari 연결: 최근 기동에서 약 5초, 느린 구간에서는 약 10초
+- 가장 큰 병목은 메모리 부족보다 낮은 CPU 한도에서의 Spring/JPA 초기화
 
-따라서 현재 긴 기동시간의 1순위 병목은 메모리 부족이 아니라 free 인스턴스의 낮은 CPU 한도입니다.
-Oregon ↔ Bangalore 리전 차이도 DB round trip 비용을 추가하지만 전체 160초를 설명하는 유일한 원인은 아닙니다.
+JPA repository bootstrap mode A/B 관측 결과는 다음과 같습니다.
 
-운영 안정성을 우선하므로 다음 설정은 벤치마크 없이 임의 적용하지 않습니다.
+- `DEFAULT`: 반복 기동 약 `153.9~165.5초`
+- `LAZY`: 반복 기동 약 `69.1~83.0초`
+- 최근 `LAZY` 기동 예: `71.0초`, `73.3초`, `75.1초`
 
-- `spring.main.lazy-initialization=true`: 기동 실패를 첫 요청 시점으로 미룰 수 있음
-- JPA repository lazy bootstrap: 첫 요청 지연/오류를 늦게 발견할 수 있음
+현재 Render free 환경에서는 이 차이가 커서 repository bootstrap을 `LAZY`로 유지합니다.
+운영 환경변수는 다음 property에 대응합니다.
+
+```text
+SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE=lazy
+```
+
+애플리케이션 설정은 이 값을 명시적으로 노출하되, Render 환경변수가 없는 로컬/기본 실행에서는
+Spring Data의 보수적인 `default` 동작을 유지합니다.
+
+```yaml
+spring:
+  data:
+    jpa:
+      repositories:
+        bootstrap-mode: ${SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE:default}
+```
+
+`LAZY`는 repository proxy 자체의 초기화와 검증을 첫 repository 사용 시점까지 미룰 수 있습니다.
+따라서 `/actuator/health/readiness`가 `UP`이라고 해서 모든 repository query가 이미 초기화·검증되었다는 뜻은 아닙니다.
+이 trade-off는 Render free의 매우 긴 cold-start를 줄이기 위해 의도적으로 허용합니다.
+
+이를 보완하기 위해 다음 안전장치를 유지합니다.
+
+- Render Docker build에서 frontend production build 실행
+- Render Docker build에서 전체 backend test + `bootJar` 실행
+- 배포 후 public/protected API smoke test 사용
+- repository/query 변경은 테스트 없이 운영에 바로 넣지 않음
+- 실제 DB schema는 Flyway baseline 확보 전까지 추측해 변경하지 않음
+
+운영 안정성을 위해 다음 설정은 별도 검증 없이 추가 적용하지 않습니다.
+
+- `spring.main.lazy-initialization=true`: 전체 bean 기동 실패를 첫 요청 시점으로 과도하게 미룰 수 있음
 - JVM tiered compilation 제한: 기동은 빨라질 수 있지만 정상 트래픽 처리량을 낮출 수 있음
 - `ddl-auto=validate` 강제 전환: 실제 Flyway baseline이 아직 없어 스키마 검증 실패 위험이 있음
+- AOT 강제 전환: build-time bean 조건 고정 영향 검증이 선행되어야 함
 
-기동시간 자체가 운영상 문제가 되면 먼저 더 높은 CPU 플랜에서 동일 빌드를 비교하거나,
-별도 staging에서 JVM/JPA 최적화를 A/B 검증한 뒤 적용합니다.
+### 5. Repository LAZY와 readiness의 경계
+
+현재 readiness probe는 Spring `readinessState`를 사용합니다.
+이는 애플리케이션 lifecycle 관점에서 트래픽 수신 가능 여부를 확인하는 용도이며,
+`LAZY` repository 전체를 미리 호출해 검증하는 endpoint가 아닙니다.
+
+따라서 첫 DB 의존 API가 repository 초기화 비용을 일부 부담할 수 있습니다.
+이를 숨기기 위해 readiness endpoint에서 모든 repository에 인위적인 query를 날리지는 않습니다.
+그 방식은 health probe가 실제 비즈니스 DB 부하와 결합되고 장애 시 재시작 루프를 만들 수 있기 때문입니다.
+
+향후 유료 CPU 또는 동일 리전 DB로 이전해 cold-start 여유가 충분해지면
+`DEFAULT`로 되돌린 뒤 기동시간과 첫 요청 latency를 다시 비교합니다.
 
 ## Render 권장 설정
 
@@ -94,6 +134,9 @@ Oregon ↔ Bangalore 리전 차이도 DB round trip 비용을 추가하지만 �
   - DB 상태는 `/actuator/health` 또는 `/actuator/health/db`로 별도 관찰
 - Auto Deploy: main
 - Environment secrets are managed in Render, not Git.
+- `SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE=lazy`
+  - Render free cold-start 완화용 운영 override
+  - 로컬/기본값은 `default`
 - `FLYWAY_ENABLED=false` until the real Aiven schema baseline is verified.
 - Current JPA default remains `ddl-auto=update` until the Flyway transition checklist is completed.
 
