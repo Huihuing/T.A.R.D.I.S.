@@ -17,7 +17,9 @@ WORKDIR /app
 # in the backend runtime image.
 COPY --from=frontend-check /frontend/dist /tmp/frontend-build-check
 
-# Copy gradle wrapper and configs
+# Copy gradle wrapper and configs.
+# Backend/gradle.properties is intentionally not copied because the repository
+# file contains a Windows-only org.gradle.java.home used for local development.
 COPY Backend/gradlew .
 COPY Backend/gradle gradle
 COPY Backend/build.gradle.kts .
@@ -26,10 +28,10 @@ COPY Backend/settings.gradle.kts .
 # Fix Windows CRLF line endings and grant execute permissions
 RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
-# Download dependencies
-RUN ./gradlew dependencies --no-daemon || true
-
-# Copy source code, run backend tests, then build the executable jar
+# Copy source code and let one Gradle invocation resolve dependencies,
+# run the backend test suite, and build the executable jar. Render currently
+# does not reuse the separate `gradlew dependencies` layer reliably, so a
+# dedicated pre-download pass only starts Gradle twice on every deployment.
 COPY Backend/src src
 RUN ./gradlew test bootJar --no-daemon
 
