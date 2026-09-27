@@ -45,6 +45,9 @@ export default function Board() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
+    const fetch: typeof window.fetch = isGuest
+        ? window.fetch.bind(window)
+        : authFetch;
     
     const fetchPosts = async () => {
         if (viewMode !== 'list') return;
