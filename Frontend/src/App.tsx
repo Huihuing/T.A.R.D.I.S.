@@ -37,6 +37,7 @@ function RouteFallback() {
 
 export default function App() {
   const [, setSessionRevision] = useState(0);
+  const [sessionRestoreRevision, setSessionRestoreRevision] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
     return saved !== null ? JSON.parse(saved) : true;
@@ -44,6 +45,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    let remountedAfterRestore = false;
 
     const syncSessionUi = () => {
       if (active) {
@@ -51,9 +53,21 @@ export default function App() {
       }
     };
 
+    const remountAuthenticatedView = () => {
+      if (!active || remountedAfterRestore) return;
+      remountedAfterRestore = true;
+      setSessionRestoreRevision(prev => prev + 1);
+    };
+
     const restoreIfNeeded = async () => {
       if (getStoredToken()) return;
-      await refreshAccessToken();
+      const restored = await refreshAccessToken();
+      if (restored && getStoredToken()) {
+        // Public/mixed routes can mount before a refresh-cookie session is
+        // restored. Remount them once so protected reads that intentionally
+        // skipped while no access token existed run again with the new token.
+        remountAuthenticatedView();
+      }
       // A failed refresh can still be meaningful: an explicit 401 clears
       // stale username/auth state. Re-render consumers such as Board either
       // way so guest/member UI matches the resulting auth state.
@@ -67,8 +81,12 @@ export default function App() {
       // Once readiness turns UP, retry only when this tab still has no valid
       // access token. refreshAccessToken() is already single-flight, so this
       // safely coalesces with an in-progress initial restore.
+      let restored = false;
       if (!getStoredToken()) {
-        await refreshAccessToken();
+        restored = await refreshAccessToken();
+      }
+      if (restored && getStoredToken()) {
+        remountAuthenticatedView();
       }
       syncSessionUi();
     };
@@ -82,6 +100,8 @@ export default function App() {
       if (!username || username === 'Guest') return;
 
       await refreshAccessToken();
+      // Periodic/focus refreshes only update auth UI. They intentionally do
+      // not remount the current route, which could discard in-progress input.
       syncSessionUi();
     };
 
@@ -134,7 +154,10 @@ export default function App() {
           <Route
             path="/*"
             element={
-              <div className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans">
+              <div
+                key={sessionRestoreRevision}
+                className="flex flex-col md:flex-row min-h-screen bg-[#0b1120] overflow-hidden font-sans"
+              >
                 <Sidebar
                   isOpen={isSidebarOpen}
                   toggleSidebar={toggleSidebar}
