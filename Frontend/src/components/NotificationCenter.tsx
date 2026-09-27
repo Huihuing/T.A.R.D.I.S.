@@ -98,8 +98,15 @@ export default function NotificationCenter() {
                     webSocketFactory: () =>
                         new SockJS(`${WS_URL}/ws-stomp`) as any,
                     reconnectDelay: 5000,
-                    beforeConnect: () => {
-                        const latestToken = getStoredToken();
+                    beforeConnect: async () => {
+                        let latestToken = getStoredToken();
+                        if (!latestToken) {
+                            const restored = await refreshAccessToken();
+                            if (restored) {
+                                latestToken = getStoredToken();
+                            }
+                        }
+
                         client.connectHeaders = latestToken
                             ? { Authorization: `Bearer ${latestToken}` }
                             : {};
