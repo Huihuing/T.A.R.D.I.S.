@@ -1,3 +1,4 @@
+import { getStoredToken, refreshAccessToken } from './auth';
 import { API_URL, WS_URL } from './config';
 
 export const BACKEND_READY_EVENT = 'tardis:backend-ready';
@@ -206,6 +207,64 @@ async function retryAfterBackendWake(
   return nativeFetch(input, init);
 }
 
+function latestAuthHeaders(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Headers | null {
+  const token = getStoredToken();
+  if (!token) return null;
+
+  const headers = new Headers(
+    input instanceof Request ? input.headers : undefined
+  );
+  if (init?.headers) {
+    new Headers(init.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
+  headers.set('Authorization', `Bearer ${token}`);
+  return headers;
+}
+
+async function retryAfterAuthRefresh(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response | null> {
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) return null;
+
+  const headers = latestAuthHeaders(input, init);
+  if (!headers) return null;
+
+  return nativeFetch(input, {
+    ...init,
+    headers
+  });
+}
+
+async function recoverBackendRead(
+  response: Response,
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  if (response.status === 401) {
+    return await retryAfterAuthRefresh(input, init) ?? response;
+  }
+
+  if (!RETRYABLE_GATEWAY_STATUSES.has(response.status)) {
+    return response;
+  }
+
+  const retried = await retryAfterBackendWake(input, init);
+  if (!retried) return response;
+
+  if (retried.status === 401) {
+    return await retryAfterAuthRefresh(input, init) ?? retried;
+  }
+
+  return retried;
+}
+
 export function installBackendAwareFetch() {
   if (!import.meta.env.PROD || backendAwareFetchInstalled) return;
   backendAwareFetchInstalled = true;
@@ -220,16 +279,16 @@ export function installBackendAwareFetch() {
 
     try {
       const response = await nativeFetch(input, init);
-      if (!RETRYABLE_GATEWAY_STATUSES.has(response.status)) {
-        return response;
-      }
-
-      const retried = await retryAfterBackendWake(input, init);
-      return retried ?? response;
+      return recoverBackendRead(response, input, init);
     } catch (error) {
       const retried = await retryAfterBackendWake(input, init);
-      if (retried) return retried;
-      throw error;
+      if (!retried) throw error;
+
+      if (retried.status === 401) {
+        return await retryAfterAuthRefresh(input, init) ?? retried;
+      }
+
+      return retried;
     }
   };
 }
