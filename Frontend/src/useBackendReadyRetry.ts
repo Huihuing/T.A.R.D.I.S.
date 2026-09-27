@@ -8,6 +8,15 @@ export function useBackendReadyRetry(retry: BackendReadyRetry) {
   retryRef.current = retry;
 
   useEffect(() => {
+    // Production read recovery is centralized in installBackendAwareFetch(),
+    // which is installed before React renders. Keeping this page-level
+    // readiness listener active there would replay the same GET twice when
+    // Render finishes waking. Retain the hook only as a development fallback,
+    // where the production fetch wrapper is intentionally not installed.
+    if (import.meta.env.PROD) {
+      return;
+    }
+
     const handleBackendReady = () => {
       void retryRef.current();
     };
