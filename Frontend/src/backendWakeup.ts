@@ -173,18 +173,26 @@ function waitForBackendReady(
 
   return new Promise(resolve => {
     let settled = false;
+    let timeout = 0;
+    let unsubscribe: () => void = () => {};
+
     const finish = (ready: boolean) => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timeout);
+      if (timeout) window.clearTimeout(timeout);
       unsubscribe();
       resolve(ready);
     };
 
-    const unsubscribe = subscribeBackendWakeup(current => {
+    unsubscribe = subscribeBackendWakeup(current => {
       if (current.status === 'ready') finish(true);
     });
-    const timeout = window.setTimeout(() => finish(false), timeoutMs);
+    timeout = window.setTimeout(() => finish(false), timeoutMs);
+
+    // subscribeBackendWakeup() immediately publishes the current snapshot.
+    // If that synchronous callback already settled the promise, clean up the
+    // listener returned after the callback finished.
+    if (settled) unsubscribe();
   });
 }
 
