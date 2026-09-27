@@ -1,8 +1,9 @@
-import { API_URL, WS_URL } from '../config';
+import { API_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Crown, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { useBackendReadyRetry } from '../useBackendReadyRetry';
 
 interface Ranker {
     rank: number;
@@ -31,8 +32,10 @@ export default function Leaderboard() {
     };
 
     useEffect(() => {
-        fetchLeaderboard();
+        void fetchLeaderboard();
     }, []);
+
+    useBackendReadyRetry(fetchLeaderboard);
 
     const getRankIcon = (rank: number) => {
         if (rank === 1) return <Crown className="w-8 h-8 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]" />;

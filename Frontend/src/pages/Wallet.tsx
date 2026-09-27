@@ -4,6 +4,7 @@ import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
 import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
+import { useBackendReadyRetry } from '../useBackendReadyRetry';
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
@@ -32,6 +33,11 @@ export default function Wallet() {
             .catch(() => setLedger([]));
     };
 
+    const refreshWalletData = () => {
+        fetchBalance();
+        fetchLedger();
+    };
+
     const formatKstDateTime = (value: string) => {
         if (!value) return '';
         const date = new Date(/[zZ]|[+-]\\d{2}:\\d{2}$/.test(value)
@@ -50,9 +56,10 @@ export default function Wallet() {
     };
 
     useEffect(() => {
-        fetchBalance();
-        fetchLedger();
+        refreshWalletData();
     }, []);
+
+    useBackendReadyRetry(refreshWalletData);
 
     const handleTransfer = async () => {
         if (isTransferring) return;
