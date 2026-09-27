@@ -2,6 +2,17 @@ import { API_URL } from './config';
 
 let refreshInFlight: Promise<boolean> | null = null;
 
+const EXPLICIT_LOGOUT_KEY = 'tardis:explicit-logout';
+const LOGOUT_REQUEST_TIMEOUT_MS = 8_000;
+
+function hasExplicitLogoutIntent(): boolean {
+    return localStorage.getItem(EXPLICIT_LOGOUT_KEY) === '1';
+}
+
+function markExplicitLogout(): void {
+    localStorage.setItem(EXPLICIT_LOGOUT_KEY, '1');
+}
+
 export function clearAuth(): void {
     sessionStorage.removeItem('token');
     localStorage.removeItem('token');
@@ -54,6 +65,10 @@ export function isTokenExpired(
 export function storeAccessToken(token: string): void {
     sessionStorage.setItem('token', token);
     localStorage.removeItem('token');
+    // A successful interactive login or session refresh establishes a new
+    // authenticated session, so an older explicit-logout guard no longer
+    // applies.
+    localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
 }
 
 export function getStoredToken(): string | null {
@@ -99,6 +114,13 @@ export function getAuthHeaders(
 }
 
 async function performAccessTokenRefresh(): Promise<boolean> {
+    // Explicit logout is a user decision. If the backend was asleep and the
+    // logout POST could not clear its HttpOnly refresh cookie, never use that
+    // stale cookie to silently restore the session later.
+    if (hasExplicitLogoutIntent()) {
+        return false;
+    }
+
     try {
         const res = await fetch(`${API_URL}/api/auth/refresh`, {
             method: 'POST',
@@ -131,6 +153,10 @@ async function performAccessTokenRefresh(): Promise<boolean> {
 }
 
 export async function refreshAccessToken(): Promise<boolean> {
+    if (hasExplicitLogoutIntent()) {
+        return false;
+    }
+
     if (refreshInFlight) {
         return refreshInFlight;
     }
@@ -202,14 +228,28 @@ export async function authFetch(
 }
 
 export async function logoutSession(): Promise<void> {
+    // Mark the intent before touching the network so App's backend-ready/focus
+    // recovery cannot race this logout and silently restore the same refresh
+    // session while Render is still waking.
+    markExplicitLogout();
+    clearAuth();
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(
+        () => controller.abort(),
+        LOGOUT_REQUEST_TIMEOUT_MS
+    );
+
     try {
         await fetch(`${API_URL}/api/auth/logout`, {
             method: 'POST',
-            credentials: 'include'
+            credentials: 'include',
+            signal: controller.signal
         });
     } catch {
-        // Local auth state is still cleared even if the server is unreachable.
+        // Local logout remains authoritative. The explicit-logout marker blocks
+        // any stale server refresh cookie from re-authenticating this browser.
     } finally {
-        clearAuth();
+        window.clearTimeout(timeout);
     }
 }
