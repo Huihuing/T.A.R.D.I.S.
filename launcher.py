@@ -10,7 +10,6 @@ import tkinter as tk
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.join(BASE_DIR, "Backend")
 FRONTEND_DIR = os.path.join(BASE_DIR, "Frontend")
-SOCKET_DIR = os.path.join(BASE_DIR, "Socket_Server")
 
 # 서비스 설정
 SERVICES = {
@@ -26,13 +25,6 @@ SERVICES = {
         "port": 5173,
         "dir": FRONTEND_DIR,
         "cmd": f'cmd.exe /k "title TARDIS Frontend && cd /d "{FRONTEND_DIR}" && npm run dev"',
-        "proc": None,
-    },
-    "socket": {
-        "name": "Socket Server (Node.js)",
-        "port": 3000,
-        "dir": SOCKET_DIR,
-        "cmd": f'cmd.exe /k "title TARDIS Socket_Server && cd /d "{SOCKET_DIR}" && node server.js"',
         "proc": None,
     },
 }
@@ -161,7 +153,7 @@ title_label.pack(anchor="w")
 
 sub_label = tk.Label(
     header_frame,
-    text="통합 서버 관리자 (Backend / Frontend / Socket)",
+    text="통합 서버 관리자 (Backend / Frontend)",
     font=("Segoe UI", 9),
     bg="#0f172a",
     fg="#94a3b8"
