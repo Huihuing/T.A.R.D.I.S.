@@ -1,4 +1,4 @@
-import { WS_URL } from './config';
+import { API_URL, WS_URL } from './config';
 
 export const BACKEND_READY_EVENT = 'tardis:backend-ready';
 
@@ -24,6 +24,9 @@ const RETRY_DELAY_MS = 4_000;
 const SLOW_RETRY_DELAY_MS = 8_000;
 const SLOW_AFTER_MS = 180_000;
 const RECHECK_AFTER_READY_MS = 10 * 60_000;
+const BACKEND_RETRY_TIMEOUT_MS = 4 * 60_000;
+const RETRYABLE_GATEWAY_STATUSES = new Set([502, 503, 504]);
+const nativeFetch = window.fetch.bind(window);
 
 let snapshot: BackendWakeSnapshot = {
   status: 'checking',
@@ -31,6 +34,7 @@ let snapshot: BackendWakeSnapshot = {
   startedAt: Date.now()
 };
 let wakePromise: Promise<void> | null = null;
+let backendAwareFetchInstalled = false;
 const listeners = new Set<Listener>();
 
 function publish(next: Partial<BackendWakeSnapshot>) {
@@ -50,7 +54,7 @@ async function probeReadiness(): Promise<boolean> {
   );
 
   try {
-    const response = await fetch(READINESS_URL, {
+    const response = await nativeFetch(READINESS_URL, {
       method: 'GET',
       cache: 'no-store',
       signal: controller.signal
@@ -132,6 +136,102 @@ export function subscribeBackendWakeup(listener: Listener) {
 
 export function getBackendWakeSnapshot() {
   return snapshot;
+}
+
+function requestMethod(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): string {
+  if (init?.method) return init.method.toUpperCase();
+  if (input instanceof Request) return input.method.toUpperCase();
+  return 'GET';
+}
+
+function isBackendApiRead(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): boolean {
+  const method = requestMethod(input, init);
+  if (method !== 'GET' && method !== 'HEAD') return false;
+
+  try {
+    const rawUrl = input instanceof Request ? input.url : input.toString();
+    const url = new URL(rawUrl, window.location.href);
+    const apiBase = new URL(API_URL || window.location.origin, window.location.href);
+
+    return url.origin === apiBase.origin
+      && url.pathname.startsWith('/api/');
+  } catch {
+    return false;
+  }
+}
+
+function waitForBackendReady(
+  timeoutMs = BACKEND_RETRY_TIMEOUT_MS
+): Promise<boolean> {
+  if (snapshot.status === 'ready') return Promise.resolve(true);
+
+  return new Promise(resolve => {
+    let settled = false;
+    let timeout = 0;
+    let unsubscribe: () => void = () => {};
+
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) window.clearTimeout(timeout);
+      unsubscribe();
+      resolve(ready);
+    };
+
+    unsubscribe = subscribeBackendWakeup(current => {
+      if (current.status === 'ready') finish(true);
+    });
+    timeout = window.setTimeout(() => finish(false), timeoutMs);
+
+    // subscribeBackendWakeup() immediately publishes the current snapshot.
+    // If that synchronous callback already settled the promise, clean up the
+    // listener returned after the callback finished.
+    if (settled) unsubscribe();
+  });
+}
+
+async function retryAfterBackendWake(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response | null> {
+  void startBackendWakeup(true);
+  const ready = await waitForBackendReady();
+  if (!ready) return null;
+  return nativeFetch(input, init);
+}
+
+export function installBackendAwareFetch() {
+  if (!import.meta.env.PROD || backendAwareFetchInstalled) return;
+  backendAwareFetchInstalled = true;
+
+  window.fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    if (!isBackendApiRead(input, init)) {
+      return nativeFetch(input, init);
+    }
+
+    try {
+      const response = await nativeFetch(input, init);
+      if (!RETRYABLE_GATEWAY_STATUSES.has(response.status)) {
+        return response;
+      }
+
+      const retried = await retryAfterBackendWake(input, init);
+      return retried ?? response;
+    } catch (error) {
+      const retried = await retryAfterBackendWake(input, init);
+      if (retried) return retried;
+      throw error;
+    }
+  };
 }
 
 export function recheckBackendOnFocus() {
