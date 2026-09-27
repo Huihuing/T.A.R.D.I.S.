@@ -20,6 +20,7 @@ import {
     getStoredToken,
     refreshAccessToken
 } from '../auth';
+import { BACKEND_READY_EVENT } from '../backendWakeup';
 
 type NotificationItem = {
     id: number;
@@ -68,75 +69,102 @@ export default function NotificationCenter() {
 
     useEffect(() => {
         let disposed = false;
+        let starting = false;
         let realtimeClient: Client | null = null;
 
         const start = async () => {
-            if (isGuest) return;
+            if (isGuest || disposed) return;
 
-            let token = getStoredToken();
-            if (!token) {
-                const restored = await refreshAccessToken();
-                if (!restored || disposed) return;
-                token = getStoredToken();
+            if (realtimeClient?.active) {
+                await load();
+                return;
             }
-            if (!token || disposed) return;
+            if (starting) return;
+            starting = true;
 
-            await load();
-            if (disposed) return;
-
-            const client = new Client({
-                webSocketFactory: () =>
-                    new SockJS(`${WS_URL}/ws-stomp`) as any,
-                reconnectDelay: 5000,
-                beforeConnect: () => {
-                    const latestToken = getStoredToken();
-                    client.connectHeaders = latestToken
-                        ? { Authorization: `Bearer ${latestToken}` }
-                        : {};
-                },
-                debug: () => {},
-                onConnect: () => {
-                    client.subscribe(
-                        `/topic/alerts/${username}`,
-                        frame => {
-                            try {
-                                const incoming =
-                                    JSON.parse(frame.body);
-                                setItems(prev => [
-                                    incoming,
-                                    ...prev.filter(
-                                        item =>
-                                            item.id !== incoming.id
-                                    )
-                                ].slice(0, 50));
-                                setUnread(prev => prev + 1);
-                                window.dispatchEvent(
-                                    new CustomEvent(
-                                        'tardis:notification',
-                                        { detail: incoming }
-                                    )
-                                );
-                            } catch {
-                                load();
-                            }
-                        }
-                    );
+            try {
+                let token = getStoredToken();
+                if (!token) {
+                    const restored = await refreshAccessToken();
+                    if (!restored || disposed) return;
+                    token = getStoredToken();
                 }
-            });
+                if (!token || disposed) return;
 
-            realtimeClient = client;
-            clientRef.current = client;
-            client.activate();
+                await load();
+                if (disposed) return;
+
+                const client = new Client({
+                    webSocketFactory: () =>
+                        new SockJS(`${WS_URL}/ws-stomp`) as any,
+                    reconnectDelay: 5000,
+                    beforeConnect: () => {
+                        const latestToken = getStoredToken();
+                        client.connectHeaders = latestToken
+                            ? { Authorization: `Bearer ${latestToken}` }
+                            : {};
+                    },
+                    debug: () => {},
+                    onConnect: () => {
+                        client.subscribe(
+                            `/topic/alerts/${username}`,
+                            frame => {
+                                try {
+                                    const incoming =
+                                        JSON.parse(frame.body);
+                                    setItems(prev => [
+                                        incoming,
+                                        ...prev.filter(
+                                            item =>
+                                                item.id !== incoming.id
+                                        )
+                                    ].slice(0, 50));
+                                    setUnread(prev => prev + 1);
+                                    window.dispatchEvent(
+                                        new CustomEvent(
+                                            'tardis:notification',
+                                            { detail: incoming }
+                                        )
+                                    );
+                                } catch {
+                                    void load();
+                                }
+                            }
+                        );
+                    }
+                });
+
+                realtimeClient = client;
+                clientRef.current = client;
+                client.activate();
+            } finally {
+                starting = false;
+            }
         };
 
-        const onFocus = () => load();
+        const onFocus = () => {
+            if (realtimeClient?.active) {
+                void load();
+            } else {
+                void start();
+            }
+        };
+        const onBackendReady = () => {
+            void start();
+        };
+
         window.addEventListener('focus', onFocus);
-        start();
+        window.addEventListener(BACKEND_READY_EVENT, onBackendReady);
+        void start();
 
         return () => {
             disposed = true;
             window.removeEventListener('focus', onFocus);
-            realtimeClient?.deactivate();
+            window.removeEventListener(
+                BACKEND_READY_EVENT,
+                onBackendReady
+            );
+            void realtimeClient?.deactivate();
             if (clientRef.current === realtimeClient) {
                 clientRef.current = null;
             }
@@ -265,7 +293,7 @@ export default function NotificationCenter() {
                 type="button"
                 onClick={() => {
                     setIsOpen(prev => {
-                        if (!prev) load();
+                        if (!prev) void load();
                         return !prev;
                     });
                 }}
