@@ -9,6 +9,7 @@ import {
     TrendingUp,
     UserRound
 } from 'lucide-react';
+import { useBackendReadyRetry } from '../useBackendReadyRetry';
 
 type PublicProfile = {
     username: string;
@@ -26,39 +27,44 @@ export default function Profile() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        const load = async () => {
-            if (!username) {
-                setError('사용자 아이디가 없습니다.');
-                setIsLoading(false);
+    const loadProfile = async () => {
+        setIsLoading(true);
+        setError('');
+
+        if (!username) {
+            setError('사용자 아이디가 없습니다.');
+            setIsLoading(false);
+            return;
+        }
+
+        try {
+            const res = await fetch(
+                `${API_URL}/api/profile/${encodeURIComponent(username)}`
+            );
+            if (res.status === 404) {
+                setError('존재하지 않는 사용자입니다.');
                 return;
             }
 
-            try {
-                const res = await fetch(
-                    `${API_URL}/api/profile/${encodeURIComponent(username)}`
-                );
-                if (res.status === 404) {
-                    setError('존재하지 않는 사용자입니다.');
-                    return;
-                }
-
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                    setError(data.message || '프로필을 불러오지 못했습니다.');
-                    return;
-                }
-
-                setProfile(data);
-            } catch {
-                setError('프로필을 불러오는 중 오류가 발생했습니다.');
-            } finally {
-                setIsLoading(false);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setError(data.message || '프로필을 불러오지 못했습니다.');
+                return;
             }
-        };
 
-        load();
+            setProfile(data);
+        } catch {
+            setError('프로필을 불러오는 중 오류가 발생했습니다.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void loadProfile();
     }, [username]);
+
+    useBackendReadyRetry(loadProfile);
 
     if (isLoading) {
         return (
