@@ -250,13 +250,13 @@ export async function authFetch(
         headers
     });
 
-    // If the token expires between request creation and server validation,
-    // only idempotent reads are safe to replay automatically. Writes already
-    // get a preflight refresh above and must never be sent a second time.
+    // A protected read can return 401 even when the browser-side JWT expiry
+    // still looks valid (for example after a signing-secret rotation or local
+    // token corruption). Reads are idempotent, so recover the refresh session
+    // and replay them once on any 401. Writes remain never-replayed after send.
     if (
         response.status === 401
         && isSafeReadRequest(input, init)
-        && (!token || isTokenExpired(token))
     ) {
         const refreshed = await refreshAccessToken();
         const nextToken = getStoredToken();
