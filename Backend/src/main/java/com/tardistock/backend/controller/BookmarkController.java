@@ -58,13 +58,28 @@ public class BookmarkController {
                                     "사용자를 찾을 수 없습니다."
                             ));
 
-            String symbol = request.get("symbol") == null ? null : request.get("symbol").toString().trim().toUpperCase();
-            double price = request.containsKey("price") && request.get("price") != null
-                    ? Double.parseDouble(request.get("price").toString())
-                    : 0.0;
+            String symbol = request.get("symbol") == null
+                    ? null
+                    : request.get("symbol").toString().trim().toUpperCase();
+
+            double price = 0.0;
+            if (request.containsKey("price") && request.get("price") != null) {
+                try {
+                    price = Double.parseDouble(request.get("price").toString());
+                } catch (NumberFormatException e) {
+                    return ResponseEntity.badRequest().body(
+                            Map.of("message", "잘못된 가격입니다.")
+                    );
+                }
+            }
 
             if (symbol == null || !symbol.matches("[A-Z0-9.\\-]{1,12}")) {
                 return ResponseEntity.badRequest().body(Map.of("message", "잘못된 종목 코드입니다."));
+            }
+            if (!Double.isFinite(price) || price < 0) {
+                return ResponseEntity.badRequest().body(
+                        Map.of("message", "잘못된 가격입니다.")
+                );
             }
 
             Optional<Bookmark> bookmarkOpt =
