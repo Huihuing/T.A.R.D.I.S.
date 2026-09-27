@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, LayoutDashboard, Wallet, Newspaper, TrendingUp, LogOut, User, ChevronLeft, ChevronRight, Menu, X, Star, MessageCircle, Trophy, ShieldCheck, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getAuthHeaders, logoutSession } from '../auth';
+import { authFetch, logoutSession } from '../auth';
 import { API_URL } from '../config';
 import { useEffect } from 'react';
 
@@ -25,9 +25,10 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
             return;
         }
 
-        fetch(`${API_URL}/api/admin/me`, {
-            headers: getAuthHeaders(false)
-        })
+        // Use the authenticated fetch path so a cold-start refresh failure does
+        // not permanently hide the admin menu. Once the backend is ready,
+        // authFetch can refresh the access token and retry this protected GET.
+        authFetch(`${API_URL}/api/admin/me`)
             .then(res => setIsAdmin(res.ok))
             .catch(() => setIsAdmin(false));
     }, [isGuest]);
