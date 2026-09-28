@@ -13,7 +13,7 @@ CREATE TEMPORARY TABLE `_member_email_dedupe` (
 INSERT INTO `_member_email_dedupe` (`id`, `replacement_email`)
 SELECT
     m.`id`,
-    CONCAT('deduped-member-', m.`id`, '@invalid')
+    CONCAT('deduped-member-', m.`id`, '@example.invalid')
 FROM `member` m
 JOIN (
     SELECT LOWER(`email`) AS `normalized_email`, MAX(`id`) AS `keep_id`
