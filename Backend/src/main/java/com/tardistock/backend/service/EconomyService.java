@@ -11,6 +11,8 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @Service
 public class EconomyService {
 
@@ -177,7 +179,7 @@ public class EconomyService {
         economy.setLastCheckInDate(today);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(roundMoney(wallet.getBalance() + reward));
+        wallet.setBalance(roundCents(wallet.getBalance() + reward));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
@@ -226,12 +228,14 @@ public class EconomyService {
                             + remaining + "시간)");
         }
 
-        double validReward = Math.max(1000.0, Math.min(rewardAmount, 5000.0));
+        double validReward = roundCents(
+                Math.max(1000.0, Math.min(rewardAmount, 5000.0))
+        );
 
         economy.setLastBankruptcyClaim(now);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(roundMoney(wallet.getBalance() + validReward));
+        wallet.setBalance(roundCents(wallet.getBalance() + validReward));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
@@ -319,7 +323,7 @@ public class EconomyService {
         }
 
         userEconomyRepository.save(economy);
-        wallet.setBalance(wallet.getBalance() + reward);
+        wallet.setBalance(roundCents(wallet.getBalance() + reward));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
@@ -338,8 +342,4 @@ public class EconomyService {
                 + " 수령 완료!");
         return res;
     }
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
-    }
-
 }
