@@ -5,7 +5,7 @@ import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import EconomyModal from '../components/EconomyModal';
-import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
 
 interface TradeHistory { id: number; tradeType: string; symbol: string; amount: number; price: number; tradeTime: string; }
@@ -179,11 +179,6 @@ export default function Dashboard() {
     };
 
     const fetchAssetHistory = async (range: '1D' | '1W' | '1M' | 'ALL') => {
-        const token = getStoredToken();
-        if (!token) {
-            setAssetHistory([]);
-            return;
-        }
         setIsAssetHistoryLoading(true);
         try {
             const res = await authFetch(API_URL + '/api/portfolio-history?range=' + range, {
@@ -217,7 +212,6 @@ export default function Dashboard() {
             const resGlobal = await fetch(`${API_URL}/api/news/global?symbol=AAPL`);
             const globalData = await resGlobal.json();
             if (Array.isArray(globalData)) setGlobalNewsList(globalData);
-            
             const resKorea = await fetch(`${API_URL}/api/news/korea?query=증시 특징주`);
             const koreaData = await resKorea.json();
             if (koreaData && koreaData.items) setKoreaNewsList(koreaData.items);
