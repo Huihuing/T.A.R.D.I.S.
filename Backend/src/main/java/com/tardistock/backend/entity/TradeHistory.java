@@ -1,6 +1,7 @@
 package com.tardistock.backend.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.tardistock.backend.util.DecimalMath;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -9,6 +10,10 @@ import java.time.LocalDateTime;
 
 @Entity
 public class TradeHistory {
+
+    private static final int PRICE_PRECISION = 19;
+    private static final int PRICE_SCALE = 6;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -22,14 +27,20 @@ public class TradeHistory {
     private String symbol;
     private int amount;
 
-    @Column(nullable = false, precision = 19, scale = 6)
+    @Column(nullable = false, precision = PRICE_PRECISION, scale = PRICE_SCALE)
     private BigDecimal price;
 
     private LocalDateTime tradeTime;
 
     public TradeHistory() {}
 
-    public TradeHistory(Member member, String tradeType, String symbol, int amount, double price, LocalDateTime tradeTime) {
+    public TradeHistory(
+            Member member,
+            String tradeType,
+            String symbol,
+            int amount,
+            double price,
+            LocalDateTime tradeTime) {
         this.member = member;
         this.tradeType = tradeType;
         this.symbol = symbol;
@@ -46,10 +57,16 @@ public class TradeHistory {
     public double getPrice() { return price.doubleValue(); }
     public LocalDateTime getTradeTime() { return tradeTime; }
 
+    public static boolean isPersistablePrice(double value) {
+        return DecimalMath.fits(value, PRICE_PRECISION, PRICE_SCALE);
+    }
+
     private static BigDecimal price(double value) {
-        if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException("체결 가격은 유한한 숫자여야 합니다.");
+        if (!isPersistablePrice(value)) {
+            throw new IllegalArgumentException(
+                    "체결 가격은 DECIMAL(19,6) 범위의 유한한 숫자여야 합니다."
+            );
         }
-        return BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(value).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }
