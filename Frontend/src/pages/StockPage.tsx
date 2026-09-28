@@ -76,11 +76,6 @@ export default function StockPage() {
     };
 
     const fetchLimitOrders = async () => {
-        const token = getStoredToken();
-        if (!token) {
-            setLimitOrders([]);
-            return;
-        }
         try {
             const res = await authFetch(
                 API_URL + '/api/limit-orders',
