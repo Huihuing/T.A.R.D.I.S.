@@ -27,7 +27,7 @@ public class Member {
     private String name;
 
     @JsonIgnore
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String email;
 
     @JsonIgnore
