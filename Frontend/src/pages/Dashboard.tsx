@@ -212,6 +212,7 @@ export default function Dashboard() {
             const resGlobal = await fetch(`${API_URL}/api/news/global?symbol=AAPL`);
             const globalData = await resGlobal.json();
             if (Array.isArray(globalData)) setGlobalNewsList(globalData);
+            
             const resKorea = await fetch(`${API_URL}/api/news/korea?query=증시 특징주`);
             const koreaData = await resKorea.json();
             if (koreaData && koreaData.items) setKoreaNewsList(koreaData.items);
