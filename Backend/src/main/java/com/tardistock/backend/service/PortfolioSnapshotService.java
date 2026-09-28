@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @Service
 public class PortfolioSnapshotService {
 
@@ -115,9 +117,9 @@ public class PortfolioSnapshotService {
             investedValue += item.getAmount() * currentPrice;
         }
 
-        double cash = roundMoney(wallet.getBalance());
-        investedValue = roundMoney(investedValue);
-        double total = roundMoney(cash + investedValue);
+        double cash = roundCents(wallet.getBalance());
+        investedValue = roundCents(investedValue);
+        double total = roundCents(cash + investedValue);
 
         PortfolioSnapshot snapshot = new PortfolioSnapshot(
                 member,
@@ -144,9 +146,5 @@ public class PortfolioSnapshotService {
             case "ALL" -> null;
             default -> now.minusWeeks(1);
         };
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 }
