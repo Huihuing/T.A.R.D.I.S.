@@ -1,101 +1,143 @@
-# Database Migration Plan / DB 마이그레이션 계획
+# Database Migration / DB 마이그레이션
 
-현재 운영 DB는 기존 Hibernate `ddl-auto=update` 흐름으로 생성·변경되어 왔습니다.
+## 현재 운영 상태
 
-운영 데이터가 존재하는 상태에서 현재 스키마를 확인하지 않고 Flyway 초기 SQL을 강제로 적용하면
-서비스 기동 실패 또는 데이터 손상 위험이 있으므로, 공개 운영 DB에는 즉시 스키마 변경을 강제하지 않습니다.
+T.A.R.D.I.S. 운영 Aiven MySQL은 2026-09-28 Hibernate `ddl-auto=update` 중심 운영에서 Flyway 기반 스키마 관리로 전환했습니다.
 
-## 현재 안전장치
-
-- `JPA_DDL_AUTO` 환경변수로 정책을 변경할 수 있습니다.
-- 기본값은 기존 호환성을 위해 `update`입니다.
-- 운영 전환 시 현재 Aiven MySQL schema dump를 먼저 확보해야 합니다.
-
-## Flyway 전환 절차
-
-1. Aiven MySQL의 현재 테이블/인덱스/제약조건을 schema-only dump로 보관합니다.
-2. dump에서 비밀정보와 실제 사용자 데이터를 제외합니다.
-3. 현재 스키마를 Flyway baseline으로 기록합니다.
-4. 개발/복제 DB에서 `ddl-auto=validate` + Flyway로 기동 테스트합니다.
-5. CI에서 마이그레이션 후 Spring Boot 테스트를 실행합니다.
-6. 운영 DB 백업을 확인한 뒤 Render의 `JPA_DDL_AUTO=validate`로 전환합니다.
-7. 이후 모든 DB 변경은 `V2__...`, `V3__...` 식 migration으로 관리합니다.
-
-## 아직 자동 전환하지 않은 이유
-
-현재 연결된 관리 도구에서는 운영 MySQL의 실제 DDL을 안전하게 읽어 baseline과 비교할 수 없습니다.
-따라서 스키마를 추측해 migration을 작성하는 것보다 기존 데이터를 보존하는 것이 우선입니다.
-
-
-## 코드 준비 상태
-
-Flyway 전환을 위해 애플리케이션 의존성과 설정 골격은 추가되어 있습니다.
-기본값은 운영 호환성을 위해 다음과 같이 유지합니다.
+현재 정책은 다음과 같습니다.
 
 ```text
-FLYWAY_ENABLED=false
-JPA_DDL_AUTO=update
+Flyway: enabled
+Flyway schema version: 2
+baseline-on-migrate: false
+Hibernate ddl-auto: validate
+Database: Aiven MySQL 8.4.x
 ```
 
-따라서 현재 배포에서는 Flyway가 스키마를 변경하지 않습니다.
-운영 DB의 schema-only dump를 확보하고 baseline SQL을 검증한 뒤에만 아래처럼 전환합니다.
+즉, 이제 Hibernate가 운영 테이블을 자동 생성/수정하지 않습니다. 애플리케이션 시작 시 Flyway가 migration 이력을 검증하고 필요한 새 migration만 실행한 뒤 Hibernate가 엔티티와 DB 스키마의 정합성을 검증합니다.
+
+## 2026-09-28 전환 기록
+
+Aiven 관리 커넥터에 임의 MySQL SQL 실행 기능이 없어, Render 백엔드의 기존 DB 연결을 이용하는 일회성 schema-only 진단 Runner로 운영 DDL을 수집했습니다. 이 Runner는 행 데이터를 조회하지 않고 `information_schema`와 `SHOW CREATE TABLE`만 사용했으며, 전환 완료 후 제거했습니다.
+
+확인된 pre-Flyway 운영 테이블은 17개였습니다.
+
+- `member`
+- `post`
+- `comment`
+- `bookmark`
+- `community_report`
+- `email_verification`
+- `ledger_entry`
+- `limit_order`
+- `notifications`
+- `password_reset_code`
+- `portfolio`
+- `portfolio_snapshot`
+- `price_alert`
+- `refresh_token`
+- `trade_history`
+- `user_economy`
+- `wallet`
+
+실제 DDL을 기준으로 `V1__baseline.sql`을 작성했습니다. V1은 Flyway 도입 직전 운영 구조를 그대로 기록하며, 당시 존재하던 legacy 제약도 의도적으로 보존합니다.
+
+운영 DB에는 기존 데이터와 테이블이 이미 있었으므로 최초 Flyway 실행에서 schema history table을 생성하고 version 1로 baseline했습니다. 이후 V2를 실행했습니다.
+
+실제 운영 로그에서 다음 순서를 확인했습니다.
+
+1. Flyway가 Aiven MySQL 8.4에 연결
+2. migration 검증 성공
+3. `flyway_schema_history` 생성
+4. `Successfully baselined schema with version: 1`
+5. `V2__align_guest_community_schema.sql` 실행
+6. `Successfully applied 1 migration ... now at version v2`
+7. Hibernate `ddl-auto=validate` 성공
+8. 애플리케이션 정상 기동
+9. 후속 재배포에서 `Current version ...: 2` 및 `Schema ... is up to date. No migration necessary.` 확인
+10. `baseline-on-migrate=false`로 잠금
+
+## V2: 게스트 커뮤니티 스키마 정합성
+
+운영 DDL을 직접 확인하면서 애플리케이션 모델과 DB 사이의 실제 불일치를 발견했습니다.
+
+- `post.member_id`가 DB에서 `NOT NULL`이어서 게스트 게시글 모델과 충돌
+- `comment.member_id`가 DB에서 `NOT NULL`이어서 게스트 댓글 모델과 충돌
+- `comment.content`가 `VARCHAR(255)`인데 API는 댓글을 최대 3,000자까지 허용
+
+V2는 데이터 삭제나 타입 축소 없이 다음 widening/relaxing 변경만 수행합니다.
+
+```sql
+ALTER TABLE post
+    MODIFY COLUMN member_id bigint NULL;
+
+ALTER TABLE comment
+    MODIFY COLUMN member_id bigint NULL;
+
+ALTER TABLE comment
+    MODIFY COLUMN content text NOT NULL;
+```
+
+`Comment.content` JPA 매핑도 `TEXT` 기대값으로 맞췄고, 이후 Hibernate validate가 통과했습니다.
+
+## 앞으로의 migration 규칙
+
+운영에 적용된 `V1__baseline.sql`과 `V2__align_guest_community_schema.sql`은 수정하지 않습니다. Flyway checksum이 운영 이력에 기록되어 있기 때문입니다.
+
+앞으로는 다음 원칙을 적용합니다.
+
+1. 모든 DB 스키마 변경은 새 Flyway migration으로 추가합니다.
+2. 다음 migration은 `V3__...`부터 시작합니다.
+3. 운영에서 Hibernate `ddl-auto=update/create/create-drop`를 사용하지 않습니다.
+4. migration 적용 전 변경의 데이터 손실 가능성과 lock 시간을 검토합니다.
+5. 타입 축소, 컬럼 삭제, 대량 데이터 재작성은 Aiven 백업과 별도 검증 후 진행합니다.
+6. migration SQL에 비밀정보나 실제 사용자 데이터를 하드코딩하지 않습니다.
+7. 이미 적용된 migration 파일을 고치는 대신 새 보정 migration을 추가합니다.
+
+## 이메일 UNIQUE 제약 — 현재 보류
+
+`member.email`은 애플리케이션에서 중복 사용을 막는 정책이지만 pre-Flyway 실제 DB에는 UNIQUE 제약이 없었습니다.
+
+DB UNIQUE 추가 전 개인정보를 출력하지 않는 aggregate audit을 수행한 결과는 다음과 같습니다.
 
 ```text
-FLYWAY_ENABLED=true
-JPA_DDL_AUTO=validate
+totalMembers=2
+distinctEmails(case-insensitive)=1
+duplicateGroups=1
+emailCollation=utf8mb4_0900_ai_ci
 ```
 
-### 전환 체크리스트
+즉 현재 운영 데이터에는 같은 이메일로 간주되는 기존 회원 행이 1개 그룹 존재합니다. 따라서 지금 `UNIQUE(email)`을 추가하면 migration이 실패할 수 있으므로 V3로 바로 추가하지 않습니다.
 
-- 현재 Aiven MySQL schema-only dump 확보
-- 테이블/인덱스/FK/unique/default/charset/collation 비교
-- 개발용 복제 DB에 baseline 적용
-- 애플리케이션을 `ddl-auto=validate`로 기동
-- 전체 백엔드 테스트 통과 확인
-- 운영 DB 백업 확인
-- Render 환경변수 전환
-- 이후 스키마 변경은 버전 migration만 사용
+주의 사항:
 
-### 금지 사항
+- 기존 두 계정을 자동 삭제/병합하지 않습니다.
+- 어느 계정의 이메일을 변경할지 시스템이 임의 결정하지 않습니다.
+- 사용자 데이터 정리 후 중복이 0인지 다시 aggregate로 확인합니다.
+- 그 다음 별도 migration으로 DB UNIQUE 제약을 추가합니다.
 
-- 운영 DB 스키마를 추측해서 `V1__baseline.sql`을 작성하지 않습니다.
-- 실제 dump 확인 전 `FLYWAY_ENABLED=true`로 전환하지 않습니다.
-- Flyway와 Hibernate `ddl-auto=update`를 동시에 스키마 변경 도구로 사용하지 않습니다.
+일반 이메일 회원가입 경로는 `email_verification`의 이메일 unique row와 pessimistic lock을 사용해 인증 consume을 직렬화하므로 현재 코드에서도 동시 가입 race가 상당히 완화되어 있습니다. 그래도 최종 불변조건은 DB UNIQUE가 담당하는 것이 바람직하므로 기존 중복 정리 후 반드시 다시 검토합니다.
 
+## 금액/가격 정밀도 — 후속 migration
 
-## 인덱스 후보 / Index candidates — 아직 적용 금지
+현재 여러 금액/가격 필드는 Java `double` 및 MySQL `DOUBLE`을 사용합니다. 현금 흐름 일부는 코드에서 센트 단위 반올림을 하지만 장기적으로는 정밀 금액 타입으로 전환하는 편이 안전합니다.
 
-아래 항목은 현재 JPA Repository 조회 패턴을 기준으로 찾은 **후보**입니다.
-현재 운영 DB에는 `JPA_DDL_AUTO=update`가 사용되고 있으므로 엔티티의
-`@Index`를 바로 추가하지 않습니다. 실제 Aiven schema-only dump 또는
-`SHOW INDEX` 결과를 확인한 뒤, 이미 존재하는 인덱스를 제외하고 Flyway
-migration으로만 추가합니다.
+후속 후보:
 
-적용 전 반드시 확인할 것:
+- `wallet.balance`: `DECIMAL(19,2)` + `BigDecimal`
+- `ledger_entry.amount`: `DECIMAL(19,2)` + `BigDecimal`
+- `ledger_entry.balance_after`: `DECIMAL(19,2)` + `BigDecimal`
+- `portfolio.average_price`: 주가 정밀도 정책에 맞춘 `DECIMAL(19,4~6)` + `BigDecimal`
+- `trade_history.price`: 동일 주가 정밀도 정책 적용
+- `limit_order.limit_price` / `fill_price`: 동일 주가 정밀도 정책 적용
+- `price_alert.target_price`: 동일 주가 정밀도 정책 적용
+- `portfolio_snapshot.cash_balance` / `invested_value` / `total_assets`: 현금/평가액 도메인 규칙을 먼저 정한 뒤 적용
 
-1. 운영 Aiven의 실제 index 목록 확인
-2. 중복/유사 prefix index 확인
-3. 주요 쿼리의 `EXPLAIN` 확인
-4. clone/staging DB에서 migration 및 회귀 테스트
-5. write 비용 증가 대비 read 이득 확인
+이 작업은 단순 DB 타입 변경으로 끝내지 않습니다. Java DTO/API 직렬화, 반올림 모드, 소수점 자리수, 기존 DOUBLE 데이터 변환 정책을 먼저 정의한 뒤 별도 migration과 코드 변경을 한 의미 단위로 진행합니다.
 
-### 후보
+## 인덱스 후속 후보
 
-| 테이블/엔티티 | 후보 인덱스 | 근거 |
-| --- | --- | --- |
-| `notifications` | `(member_id, created_at)` | 사용자별 최근 50개 알림 조회 |
-| `notifications` | `(member_id, type, created_at)` | 사용자+유형별 최근 알림 조회 |
-| `notifications` | `(member_id, read_at)` | 미읽음 count/list |
-| `price_alert` | `(member_id, created_at)` | 사용자별 알림 목록 |
-| `price_alert` | `(member_id, active)` | 사용자별 활성 알림 개수 |
-| `price_alert` | `(active, created_at)` | 스케줄러의 활성 알림 oldest-first batch |
-| `post` | `(created_at)` | 게시글 최신순 pagination |
-| `post` | `(member_id, created_at)` | 사용자 활동/기간 exists 조회 |
-| `comment` | `(post_id, created_at)` | 게시글별 댓글 시간순 조회 |
-| `comment` | `(member_id, created_at)` | 사용자 활동/기간 exists 조회 |
-| `trade_history` | `(member_id, trade_type, trade_time)` | 일일 BUY/SELL 활동 exists 조회 |
-
-### 이미 코드상 정의된 주요 인덱스
+실제 baseline에서 이미 존재함을 확인한 주요 인덱스는 다음과 같습니다.
 
 - `refresh_token(token_hash)` unique
 - `refresh_token(member_id)`
@@ -103,45 +145,38 @@ migration으로만 추가합니다.
 - `limit_order(member_id, created_at)`
 - `price_alert(active, symbol)`
 - `portfolio_snapshot(member_id, captured_at)`
+- `ledger_entry(member_id, created_at)`
 
-### 검색 쿼리 주의
+다음은 Repository 조회 패턴상 추가 검토 후보이며 아직 적용하지 않습니다.
 
-게시판 검색은 title/content에 `%검색어%` 형태의 contains 검색을 사용하므로
-일반 B-tree index만 추가해도 큰 효과를 기대하기 어렵습니다.
-데이터가 충분히 커진 뒤 실제 병목이 확인되면 MySQL FULLTEXT 또는 별도 검색
-구조를 검토합니다. 현재 단계에서는 임의로 FULLTEXT를 추가하지 않습니다.
+| 테이블 | 후보 인덱스 | 사용 패턴 |
+| --- | --- | --- |
+| `notifications` | `(member_id, created_at)` | 사용자별 최근 알림 |
+| `notifications` | `(member_id, type, created_at)` | 사용자+유형 최근 알림 |
+| `notifications` | `(member_id, read_at)` | 미읽음 조회/count |
+| `price_alert` | `(member_id, created_at)` | 사용자별 가격 알림 목록 |
+| `price_alert` | `(member_id, active)` | 사용자별 활성 알림 |
+| `price_alert` | `(active, created_at)` | 스케줄러 batch |
+| `post` | `(created_at)` | 최신순 pagination |
+| `post` | `(member_id, created_at)` | 사용자 활동 조회 |
+| `comment` | `(post_id, created_at)` | 게시글 댓글 시간순 |
+| `comment` | `(member_id, created_at)` | 사용자 활동 조회 |
+| `trade_history` | `(member_id, trade_type, trade_time)` | 일일 거래 활동 조회 |
 
+인덱스는 데이터 규모와 실제 실행계획을 확인한 뒤 추가합니다. 특히 게시판의 `%검색어%` contains 검색은 일반 B-tree 인덱스로 큰 이득을 보기 어렵기 때문에, 병목이 확인될 때 MySQL FULLTEXT나 별도 검색 구조를 검토합니다.
 
-## 스키마 일관성 확인 후보 / Schema consistency checks
+## 운영 체크리스트
 
-Flyway baseline 전에 실제 Aiven schema를 덤프한 뒤 아래 항목을 반드시 대조합니다.
-이 항목들은 **현재 운영 DB에 즉시 적용하지 않습니다.**
+새 DB migration을 추가할 때는 다음을 확인합니다.
 
-### 댓글 본문 길이
+- migration 이름과 버전이 기존 이력과 충돌하지 않는지
+- 기존 V1/V2 파일을 수정하지 않았는지
+- SQL이 데이터 삭제/축소를 포함하는지
+- 필요한 경우 Aiven 최신 백업이 존재하는지
+- Render 빌드에서 backend tests와 bootJar가 통과하는지
+- 새 인스턴스에서 Flyway validate/migrate가 성공하는지
+- Hibernate `ddl-auto=validate`가 성공하는지
+- Render가 최종 `live`가 되는지
+- 배포 구간에 error/fatal 로그가 없는지
 
-현재 API는 댓글을 최대 3,000자까지 허용하지만 `Comment.content` 엔티티는
-명시적인 `length` 또는 `TEXT` 타입을 지정하지 않습니다.
-
-확인 항목:
-
-- 실제 Aiven `comment.content` 컬럼이 `VARCHAR(255)`인지 `TEXT`인지
-- 3,000자 댓글 insert가 staging clone에서 정상 동작하는지
-- 실제 컬럼이 짧다면 Flyway migration으로 `TEXT` 또는 충분한 길이의 VARCHAR로 변경
-
-운영 schema 확인 전에는 `@Column(columnDefinition = "TEXT")`를 바로 추가하지 않습니다.
-현재 `ddl-auto=update`가 운영 DB를 자동 변경할 수 있기 때문입니다.
-
-### 금액 컬럼 정밀도
-
-현재 애플리케이션은 Wallet 및 거래/원장 금액 일부를 Java `double`로 보관합니다.
-코드에서는 현금 흐름을 센트 단위로 반올림해 부동소수점 잔여값 누적을 줄이고 있지만,
-장기적으로는 DB/Java 양쪽을 정밀 금액 타입으로 전환하는 것이 더 안전합니다.
-
-Flyway 전환 이후 검토 후보:
-
-- 지갑/원장/송금 금액: `DECIMAL(19,2)`
-- 주가/평단가/체결가: 필요 정밀도에 맞춘 `DECIMAL(19,4~6)`
-- Java 도메인: `BigDecimal`
-
-이 전환은 기존 double 데이터의 반올림 규칙과 API 호환성을 먼저 정의한 뒤
-별도 migration으로 수행합니다. 현재 운영 DB에는 자동 적용하지 않습니다.
+현재 DB 스키마 관리의 기준은 Flyway이며 Hibernate는 검증 전용입니다.
