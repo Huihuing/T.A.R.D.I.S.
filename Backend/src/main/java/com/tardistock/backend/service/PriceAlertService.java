@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @Service
 public class PriceAlertService {
 
@@ -67,7 +69,7 @@ public class PriceAlertService {
             );
         }
 
-        double normalizedTargetPrice = roundMoney(targetPrice);
+        double normalizedTargetPrice = roundCents(targetPrice);
         if (normalizedTargetPrice < 0.01) {
             throw new IllegalArgumentException(
                     "목표 가격은 $0.01 이상이어야 합니다."
@@ -178,9 +180,5 @@ public class PriceAlertService {
             );
         }
         return direction;
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 }
