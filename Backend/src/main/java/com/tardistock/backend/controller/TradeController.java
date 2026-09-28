@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.tardistock.backend.util.MoneyMath.fitsCents;
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @RestController
 @RequestMapping("/api/trade")
 public class TradeController {
@@ -103,22 +106,43 @@ public class TradeController {
         }
 
         Wallet wallet = walletRepository.findForUpdateByMember(member).orElse(null);
-        double totalCost = roundMoney(price * amount);
-        if (!Double.isFinite(totalCost) || wallet == null || wallet.getBalance() < totalCost) {
+        if (wallet == null) {
+            return fail(response, "지갑을 찾을 수 없습니다.");
+        }
+
+        double rawTotalCost = price * amount;
+        if (!Double.isFinite(rawTotalCost)) {
+            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        }
+        double totalCost = roundCents(rawTotalCost);
+        if (!fitsCents(totalCost)) {
+            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        }
+        if (wallet.getBalance() < totalCost) {
             return fail(response, "잔액이 부족합니다!");
         }
 
         Portfolio portfolio = portfolioRepository.findForUpdateByMemberAndSymbol(member, symbol)
                 .orElse(new Portfolio(member, symbol, 0, 0.0));
 
-        wallet.setBalance(roundMoney(wallet.getBalance() - totalCost));
-        walletRepository.save(wallet);
+        double newBalance = roundCents(wallet.getBalance() - totalCost);
+        if (!fitsCents(newBalance)) {
+            return fail(response, "거래 후 잔액이 허용 범위를 초과합니다.");
+        }
 
         double newTotalValue =
                 (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
         int newAmount = portfolio.getAmount() + amount;
+        double newAveragePrice = newTotalValue / newAmount;
+        if (!Portfolio.isPersistablePrice(newAveragePrice)) {
+            return fail(response, "평균 매입가가 허용 범위를 초과합니다.");
+        }
+
+        wallet.setBalance(newBalance);
+        walletRepository.save(wallet);
+
         portfolio.setAmount(newAmount);
-        portfolio.setAveragePrice(newTotalValue / newAmount);
+        portfolio.setAveragePrice(newAveragePrice);
         portfolioRepository.save(portfolio);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -182,6 +206,20 @@ public class TradeController {
             return fail(response, "보유 주식이 부족합니다!");
         }
 
+        double rawProceeds = price * amount;
+        if (!Double.isFinite(rawProceeds)) {
+            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        }
+        double proceeds = roundCents(rawProceeds);
+        if (!fitsCents(proceeds)) {
+            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        }
+
+        double newBalance = roundCents(wallet.getBalance() + proceeds);
+        if (!fitsCents(newBalance)) {
+            return fail(response, "거래 후 잔액이 허용 범위를 초과합니다.");
+        }
+
         Portfolio portfolio = portfolioOpt.get();
         int newAmount = portfolio.getAmount() - amount;
         if (newAmount == 0) {
@@ -191,8 +229,7 @@ public class TradeController {
             portfolioRepository.save(portfolio);
         }
 
-        double proceeds = roundMoney(price * amount);
-        wallet.setBalance(roundMoney(wallet.getBalance() + proceeds));
+        wallet.setBalance(newBalance);
         walletRepository.save(wallet);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -257,10 +294,6 @@ public class TradeController {
         } catch (NumberFormatException e) {
             return -1;
         }
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 
     private Map<String, String> fail(Map<String, String> response, String message) {
