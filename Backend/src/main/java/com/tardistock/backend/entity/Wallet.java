@@ -1,5 +1,6 @@
 package com.tardistock.backend.entity;
 
+import com.tardistock.backend.util.MoneyMath;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -17,7 +18,11 @@ public class Wallet {
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(
+            nullable = false,
+            precision = MoneyMath.MONEY_PRECISION,
+            scale = MoneyMath.MONEY_SCALE
+    )
     private BigDecimal balance; // 잔고
 
     public Wallet() {}
@@ -32,9 +37,12 @@ public class Wallet {
     public Member getMember() { return member; }
 
     private static BigDecimal money(double value) {
-        if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException("잔액은 유한한 숫자여야 합니다.");
+        if (!MoneyMath.fitsCents(value)) {
+            throw new IllegalArgumentException(
+                    "잔액은 DECIMAL(19,2) 범위의 유한한 숫자여야 합니다."
+            );
         }
-        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(value)
+                .setScale(MoneyMath.MONEY_SCALE, RoundingMode.HALF_UP);
     }
 }
