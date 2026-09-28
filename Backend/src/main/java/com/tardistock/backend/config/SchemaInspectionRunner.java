@@ -21,7 +21,8 @@ import java.util.List;
 @ConditionalOnProperty(
         prefix = "app.schema-inspection",
         name = "enabled",
-        havingValue = "true"
+        havingValue = "true",
+        matchIfMissing = true
 )
 public class SchemaInspectionRunner implements ApplicationRunner {
 
