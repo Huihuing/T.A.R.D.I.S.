@@ -104,13 +104,13 @@ spring:
 - Render Docker build에서 전체 backend test + `bootJar` 실행
 - 배포 후 public/protected API smoke test 사용
 - repository/query 변경은 테스트 없이 운영에 바로 넣지 않음
-- 실제 DB schema는 Flyway baseline 확보 전까지 추측해 변경하지 않음
+- 실제 DB schema 변경은 이미 적용된 Flyway migration을 수정하지 않고 새 migration으로만 수행
 
 운영 안정성을 위해 다음 설정은 별도 검증 없이 추가 적용하지 않습니다.
 
 - `spring.main.lazy-initialization=true`: 전체 bean 기동 실패를 첫 요청 시점으로 과도하게 미룰 수 있음
-- JVM tiered compilation 제한: 기동은 빨라질 수 있지만 정상 트래픽 처리량을 낮출 수 있음
-- `ddl-auto=validate` 강제 전환: 실제 Flyway baseline이 아직 없어 스키마 검증 실패 위험이 있음
+- JVM tiered compilation 제한 추가/변경: 기동은 빨라질 수 있지만 정상 트래픽 처리량을 낮출 수 있음
+- Hibernate `ddl-auto=update/create/create-drop` 복귀: 현재 Flyway + `ddl-auto=validate` 운영 원칙을 깨뜨림
 - AOT 강제 전환: build-time bean 조건 고정 영향 검증이 선행되어야 함
 
 ### 5. Repository LAZY와 readiness의 경계
@@ -137,8 +137,13 @@ spring:
 - `SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE=lazy`
   - Render free cold-start 완화용 운영 override
   - 로컬/기본값은 `default`
-- `FLYWAY_ENABLED=false` until the real Aiven schema baseline is verified.
-- Current JPA default remains `ddl-auto=update` until the Flyway transition checklist is completed.
+- Flyway: enabled
+- Flyway schema version: `7`
+- Flyway `baseline-on-migrate`: `false`
+- Hibernate `ddl-auto`: `validate`
+- 이미 적용된 `V1`~`V7` migration은 수정하지 않고 다음 스키마 변경은 `V8__...` 이상의 새 migration으로 추가
+
+DB 마이그레이션의 상세 기준은 `docs/DB_MIGRATION.md`를 우선합니다.
 
 ## Vercel 상태
 
@@ -148,13 +153,15 @@ When this occurs:
 - Render backend deployments continue independently.
 - Do not treat the Vercel check failure as a frontend compile failure without inspecting the deployment.
 - Frontend/CSP changes are not considered production-active until a READY Vercel production deployment contains the target Git commit.
+- 사용자 명시 승인 전에는 Vercel Production deployment를 생성하지 않습니다.
 
 ## 다음 인프라 작업
 
 1. Render Dashboard에서 Health Check Path를 `/actuator/health/readiness`로 지정
-2. 프론트 변경 묶음이 준비되고 Vercel build-rate-limit이 허용될 때만 수동 Production deployment
-3. 최신 프론트에서 CSP Report-Only violation 수집
-4. 위반이 없거나 필요한 source가 정리된 뒤 enforced CSP 전환 검토
-5. 실제 트래픽/비용 요구가 생기면 Render CPU 플랜 또는 리전 재배치를 staging에서 비교
-6. 장기적으로 backend와 DB 리전을 동일하거나 가까운 지역으로 통합
-7. 실제 Aiven schema dump를 확보한 뒤 Flyway baseline 작업 진행
+2. Render Build Filter를 검토해 문서-only 변경이 불필요한 backend deployment를 만들지 않도록 설정 가능한지 확인
+3. 프론트 변경 묶음이 준비되고 사용자가 승인했을 때만 수동 Vercel Production deployment
+4. 최신 프론트에서 CSP Report-Only violation 수집
+5. 위반이 없거나 필요한 source가 정리된 뒤 enforced CSP 전환 검토
+6. 실제 트래픽/비용 요구가 생기면 Render CPU 플랜 또는 리전 재배치를 staging에서 비교
+7. 장기적으로 backend와 DB 리전을 동일하거나 가까운 지역으로 통합
+8. DB 스키마 후속 변경은 `docs/DB_MIGRATION.md` 규칙에 따라 `V8+` migration으로 진행
