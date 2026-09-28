@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @Service
 public class LedgerService {
 
@@ -54,8 +56,8 @@ public class LedgerService {
         return ledgerEntryRepository.save(new LedgerEntry(
                 member,
                 type,
-                roundMoney(amount),
-                roundMoney(balanceAfter),
+                roundCents(amount),
+                roundCents(balanceAfter),
                 normalize(counterparty),
                 normalize(symbol),
                 normalize(description),
@@ -69,10 +71,6 @@ public class LedgerService {
                 .orElseThrow(() ->
                         new IllegalArgumentException("사용자를 찾을 수 없습니다."));
         return ledgerEntryRepository.findTop100ByMemberOrderByCreatedAtDesc(member);
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 
     private String normalize(String value) {
