@@ -76,11 +76,6 @@ export default function StockPage() {
     };
 
     const fetchLimitOrders = async () => {
-        const token = getStoredToken();
-        if (!token) {
-            setLimitOrders([]);
-            return;
-        }
         try {
             const res = await authFetch(
                 API_URL + '/api/limit-orders',
@@ -217,7 +212,6 @@ export default function StockPage() {
             console.error("북마크 변경 오류:", error);
         }
     };
-
     const createLimitOrder = async () => {
         if (!selectedStock?.symbol) return;
         if (!orderAmount || orderAmount <= 0) {
