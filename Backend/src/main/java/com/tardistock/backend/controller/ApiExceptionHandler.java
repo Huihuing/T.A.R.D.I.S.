@@ -2,6 +2,7 @@ package com.tardistock.backend.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -55,6 +56,16 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(413).body(Map.of(
                 "message",
                 "업로드 파일은 5MB 이하만 허용됩니다."
+        ));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<?> handleDataIntegrityViolation(
+            DataIntegrityViolationException e) {
+        log.warn("Database integrity conflict: {}", e.getClass().getSimpleName());
+        return ResponseEntity.status(409).body(Map.of(
+                "message",
+                "이미 사용 중인 정보이거나 요청 상태가 충돌합니다."
         ));
     }
 

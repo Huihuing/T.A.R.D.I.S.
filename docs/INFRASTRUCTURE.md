@@ -138,10 +138,10 @@ spring:
   - Render free cold-start 완화용 운영 override
   - 로컬/기본값은 `default`
 - Flyway: enabled
-- Flyway schema version: `7`
+- Flyway schema version: `8`
 - Flyway `baseline-on-migrate`: `false`
 - Hibernate `ddl-auto`: `validate`
-- 이미 적용된 `V1`~`V7` migration은 수정하지 않고 다음 스키마 변경은 `V8__...` 이상의 새 migration으로 추가
+- 이미 적용된 `V1`~`V8` migration은 수정하지 않고 다음 스키마 변경은 `V9__...` 이상의 새 migration으로 추가
 
 DB 마이그레이션의 상세 기준은 `docs/DB_MIGRATION.md`를 우선합니다.
 
@@ -164,4 +164,4 @@ When this occurs:
 5. 위반이 없거나 필요한 source가 정리된 뒤 enforced CSP 전환 검토
 6. 실제 트래픽/비용 요구가 생기면 Render CPU 플랜 또는 리전 재배치를 staging에서 비교
 7. 장기적으로 backend와 DB 리전을 동일하거나 가까운 지역으로 통합
-8. DB 스키마 후속 변경은 `docs/DB_MIGRATION.md` 규칙에 따라 `V8+` migration으로 진행
+8. DB 스키마 후속 변경은 `docs/DB_MIGRATION.md` 규칙에 따라 `V9+` migration으로 진행
