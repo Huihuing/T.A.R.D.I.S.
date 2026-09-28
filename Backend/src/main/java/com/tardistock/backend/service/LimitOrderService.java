@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import static com.tardistock.backend.util.MoneyMath.fitsCents;
 import static com.tardistock.backend.util.MoneyMath.roundCents;
 
 @Service
@@ -143,7 +144,9 @@ public class LimitOrderService {
 
     @Transactional
     public int processSymbol(String symbol, double marketPrice) {
-        if (!Double.isFinite(marketPrice) || marketPrice <= 0) {
+        if (!Double.isFinite(marketPrice)
+                || marketPrice <= 0
+                || !TradeHistory.isPersistablePrice(marketPrice)) {
             return 0;
         }
 
@@ -198,9 +201,24 @@ public class LimitOrderService {
             Wallet wallet,
             double marketPrice) {
 
-        double totalCost = roundCents(marketPrice * order.getAmount());
-        if (!Double.isFinite(totalCost)
-                || wallet.getBalance() < totalCost) {
+        double rawTotalCost = marketPrice * order.getAmount();
+        if (!Double.isFinite(rawTotalCost)) {
+            reject(
+                    order,
+                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+
+        double totalCost = roundCents(rawTotalCost);
+        if (!fitsCents(totalCost)) {
+            reject(
+                    order,
+                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+        if (wallet.getBalance() < totalCost) {
             reject(order, "체결 시점의 잔액이 부족하여 주문이 취소되었습니다.");
             return;
         }
@@ -217,17 +235,34 @@ public class LimitOrderService {
                         0.0
                 ));
 
-        wallet.setBalance(roundCents(wallet.getBalance() - totalCost));
-        walletRepository.save(wallet);
+        double newBalance = roundCents(wallet.getBalance() - totalCost);
+        if (!fitsCents(newBalance)) {
+            reject(
+                    order,
+                    "체결 후 잔액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
 
         double newTotalValue =
                 portfolio.getAmount() * portfolio.getAveragePrice()
                         + totalCost;
         int newAmount =
                 portfolio.getAmount() + order.getAmount();
+        double newAveragePrice = newTotalValue / newAmount;
+        if (!Portfolio.isPersistablePrice(newAveragePrice)) {
+            reject(
+                    order,
+                    "평균 매입가가 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+
+        wallet.setBalance(newBalance);
+        walletRepository.save(wallet);
 
         portfolio.setAmount(newAmount);
-        portfolio.setAveragePrice(newTotalValue / newAmount);
+        portfolio.setAveragePrice(newAveragePrice);
         portfolioRepository.save(portfolio);
 
         recordFill(
@@ -259,6 +294,33 @@ public class LimitOrderService {
             return;
         }
 
+        double rawProceeds = marketPrice * order.getAmount();
+        if (!Double.isFinite(rawProceeds)) {
+            reject(
+                    order,
+                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+
+        double proceeds = roundCents(rawProceeds);
+        if (!fitsCents(proceeds)) {
+            reject(
+                    order,
+                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+
+        double newBalance = roundCents(wallet.getBalance() + proceeds);
+        if (!fitsCents(newBalance)) {
+            reject(
+                    order,
+                    "체결 후 잔액이 허용 범위를 초과하여 주문이 취소되었습니다."
+            );
+            return;
+        }
+
         int newAmount =
                 portfolio.getAmount() - order.getAmount();
 
@@ -269,8 +331,7 @@ public class LimitOrderService {
             portfolioRepository.save(portfolio);
         }
 
-        double proceeds = roundCents(marketPrice * order.getAmount());
-        wallet.setBalance(roundCents(wallet.getBalance() + proceeds));
+        wallet.setBalance(newBalance);
         walletRepository.save(wallet);
 
         recordFill(
