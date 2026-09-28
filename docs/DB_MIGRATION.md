@@ -133,7 +133,7 @@ emailCollation=utf8mb4_0900_ai_ci
 V8 처리 방식:
 
 1. case-insensitive 이메일별 `MAX(member.id)`를 유지 계정으로 선택
-2. 그보다 오래된 중복 계정은 삭제하지 않고 이메일만 `deduped-member-<id>@invalid` 형태의 비활성 고유값으로 변경
+2. 그보다 오래된 중복 계정은 삭제하지 않고 이메일만 `deduped-member-<id>@example.invalid` 형태의 비활성 고유값으로 변경
 3. 지갑, 거래, 원장, 게시글, 댓글, 알림 등 기존 계정 데이터는 그대로 보존
 4. `member.email`에 `uk_member_email` UNIQUE 제약 추가
 5. Java `Member.email`도 `@Column(unique = true)`로 DB 계약과 정렬
