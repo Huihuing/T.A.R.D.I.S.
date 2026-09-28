@@ -21,6 +21,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.tardistock.backend.util.MoneyMath.fitsCents;
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @RestController
 @RequestMapping("/api/account")
 public class AccountController {
@@ -605,10 +608,19 @@ public class AccountController {
                         "message", "잔고가 부족합니다."));
             }
 
-            fromWallet.setBalance(
-                    roundMoney(fromWallet.getBalance() - amount));
-            toWallet.setBalance(
-                    roundMoney(toWallet.getBalance() + amount));
+            double newFromBalance =
+                    roundCents(fromWallet.getBalance() - amount);
+            double newToBalance =
+                    roundCents(toWallet.getBalance() + amount);
+            if (!fitsCents(newFromBalance)
+                    || !fitsCents(newToBalance)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "송금 후 잔액이 허용 범위를 초과합니다."
+                ));
+            }
+
+            fromWallet.setBalance(newFromBalance);
+            toWallet.setBalance(newToBalance);
             walletRepository.save(fromWallet);
             walletRepository.save(toWallet);
 
@@ -686,8 +698,7 @@ public class AccountController {
                 throw new IllegalArgumentException(
                         "금액을 올바르게 입력하세요.");
             }
-            double rounded =
-                    Math.round(parsed * 100.0) / 100.0;
+            double rounded = roundCents(parsed);
             if (rounded <= 0) {
                 throw new IllegalArgumentException(
                         "금액을 올바르게 입력하세요.");
@@ -697,9 +708,6 @@ public class AccountController {
             throw new IllegalArgumentException(
                     "금액을 올바르게 입력하세요.");
         }
-    }
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 
 }
