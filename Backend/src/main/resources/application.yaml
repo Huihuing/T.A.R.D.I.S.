@@ -42,7 +42,7 @@ spring:
         bootstrap-mode: ${SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE:default}
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: validate
     open-in-view: false
     show-sql: ${JPA_SHOW_SQL:false}
     properties:
