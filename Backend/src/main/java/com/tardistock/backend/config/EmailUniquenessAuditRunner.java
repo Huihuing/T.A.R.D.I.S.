@@ -43,12 +43,23 @@ public class EmailUniquenessAuditRunner implements ApplicationRunner {
                     ) duplicate_email_groups
                     """
             );
+            String emailCollation = textScalar(
+                    connection,
+                    """
+                    SELECT COLLATION_NAME
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'member'
+                      AND COLUMN_NAME = 'email'
+                    """
+            );
 
             log.info(
-                    "EMAIL_UNIQUENESS_AUDIT totalMembers={} distinctEmails={} duplicateGroups={}",
+                    "EMAIL_UNIQUENESS_AUDIT totalMembers={} distinctEmails={} duplicateGroups={} emailCollation={}",
                     totalMembers,
                     distinctEmails,
-                    duplicateGroups
+                    duplicateGroups,
+                    emailCollation
             );
         }
     }
@@ -60,6 +71,16 @@ public class EmailUniquenessAuditRunner implements ApplicationRunner {
                 throw new IllegalStateException("Aggregate audit returned no row");
             }
             return resultSet.getLong(1);
+        }
+    }
+
+    private String textScalar(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            if (!resultSet.next()) {
+                throw new IllegalStateException("Schema audit returned no row");
+            }
+            return resultSet.getString(1);
         }
     }
 }
