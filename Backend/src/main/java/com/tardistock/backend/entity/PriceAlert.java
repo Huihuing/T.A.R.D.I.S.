@@ -19,6 +19,9 @@ import java.time.LocalDateTime;
 )
 public class PriceAlert {
 
+    private static final int PRICE_PRECISION = 19;
+    private static final int PRICE_SCALE = 2;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -34,7 +37,7 @@ public class PriceAlert {
     @Column(nullable = false, length = 10)
     private String direction;
 
-    @Column(nullable = false, precision = 19, scale = 2)
+    @Column(nullable = false, precision = PRICE_PRECISION, scale = PRICE_SCALE)
     private BigDecimal targetPrice;
 
     @Column(nullable = false)
@@ -75,10 +78,23 @@ public class PriceAlert {
         this.triggeredAt = triggeredAt;
     }
 
-    private static BigDecimal money(double value) {
+    public static boolean isPersistablePrice(double value) {
         if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException("목표 가격은 유한한 숫자여야 합니다.");
+            return false;
         }
-        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+        return normalizeMoney(value).precision() <= PRICE_PRECISION;
+    }
+
+    private static BigDecimal money(double value) {
+        if (!isPersistablePrice(value)) {
+            throw new IllegalArgumentException(
+                    "목표 가격은 DECIMAL(19,2) 범위의 유한한 숫자여야 합니다."
+            );
+        }
+        return normalizeMoney(value);
+    }
+
+    private static BigDecimal normalizeMoney(double value) {
+        return BigDecimal.valueOf(value).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }
