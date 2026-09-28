@@ -85,6 +85,13 @@ public class LimitOrderService {
             );
         }
 
+        double normalizedLimitPrice = roundMoney(limitPrice);
+        if (normalizedLimitPrice < 0.01) {
+            throw new IllegalArgumentException(
+                    "지정가는 $0.01 이상이어야 합니다."
+            );
+        }
+
         if ("SELL".equals(side)) {
             int owned = portfolioRepository
                     .findByMemberAndSymbol(member, symbol)
@@ -102,7 +109,7 @@ public class LimitOrderService {
                 side,
                 symbol,
                 amount,
-                roundMoney(limitPrice),
+                normalizedLimitPrice,
                 LocalDateTime.now(KST)
         ));
     }
