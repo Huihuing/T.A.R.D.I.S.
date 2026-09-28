@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import static com.tardistock.backend.util.MoneyMath.roundCents;
+
 @Service
 public class LimitOrderService {
 
@@ -85,7 +87,7 @@ public class LimitOrderService {
             );
         }
 
-        double normalizedLimitPrice = roundMoney(limitPrice);
+        double normalizedLimitPrice = roundCents(limitPrice);
         if (normalizedLimitPrice < 0.01) {
             throw new IllegalArgumentException(
                     "지정가는 $0.01 이상이어야 합니다."
@@ -196,7 +198,7 @@ public class LimitOrderService {
             Wallet wallet,
             double marketPrice) {
 
-        double totalCost = roundMoney(marketPrice * order.getAmount());
+        double totalCost = roundCents(marketPrice * order.getAmount());
         if (!Double.isFinite(totalCost)
                 || wallet.getBalance() < totalCost) {
             reject(order, "체결 시점의 잔액이 부족하여 주문이 취소되었습니다.");
@@ -215,7 +217,7 @@ public class LimitOrderService {
                         0.0
                 ));
 
-        wallet.setBalance(roundMoney(wallet.getBalance() - totalCost));
+        wallet.setBalance(roundCents(wallet.getBalance() - totalCost));
         walletRepository.save(wallet);
 
         double newTotalValue =
@@ -267,8 +269,8 @@ public class LimitOrderService {
             portfolioRepository.save(portfolio);
         }
 
-        double proceeds = roundMoney(marketPrice * order.getAmount());
-        wallet.setBalance(roundMoney(wallet.getBalance() + proceeds));
+        double proceeds = roundCents(marketPrice * order.getAmount());
+        wallet.setBalance(roundCents(wallet.getBalance() + proceeds));
         walletRepository.save(wallet);
 
         recordFill(
@@ -315,7 +317,7 @@ public class LimitOrderService {
                                 : "매도")
         );
 
-        order.fill(roundMoney(marketPrice), now);
+        order.fill(roundCents(marketPrice), now);
         limitOrderRepository.save(order);
 
         notificationService.create(
@@ -380,9 +382,5 @@ public class LimitOrderService {
             );
         }
         return symbol;
-    }
-
-    private double roundMoney(double value) {
-        return Math.round(value * 100.0) / 100.0;
     }
 }
