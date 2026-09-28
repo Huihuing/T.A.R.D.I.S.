@@ -27,7 +27,7 @@ public class Comment {
     @Column(nullable = true, length = 100)
     private String guestPasswordHash;
 
-    @Column(nullable = false)
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
     private LocalDateTime createdAt;
