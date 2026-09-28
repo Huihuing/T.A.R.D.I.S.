@@ -28,6 +28,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import static com.tardistock.backend.util.TransactionRollbackSupport.markRollbackOnlyIfActive;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -264,9 +266,11 @@ public class AuthController {
 
             return completeLogin(locked);
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(401).body(
                     Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(503).body(
                     Map.of("message", e.getMessage()));
         }
@@ -394,6 +398,7 @@ public class AuthController {
                             : "종료할 다른 로그인 세션이 없습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(401).body(
                     Map.of("message", e.getMessage()));
         }

@@ -72,6 +72,9 @@ spring:
 app:
   frontend-url: ${FRONTEND_URL:https://tardis-neon.vercel.app}
 
+security:
+  trusted-proxy-secret: ${TRUSTED_PROXY_SECRET:}
+
 finnhub:
   api:
     key: ${FINNHUB_API_KEY:}

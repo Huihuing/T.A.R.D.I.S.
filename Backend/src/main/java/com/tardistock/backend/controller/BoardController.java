@@ -18,6 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
@@ -191,6 +192,7 @@ public class BoardController {
     }
 
     @PostMapping("/comments")
+    @Transactional
     public ResponseEntity<?> createComment(
             @RequestBody Map<String, Object> request,
             jakarta.servlet.http.HttpServletRequest httpRequest,
@@ -289,6 +291,7 @@ public class BoardController {
     }
 
     @DeleteMapping("/posts/{id}")
+    @Transactional
     public ResponseEntity<?> deletePost(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> request,
