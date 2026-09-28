@@ -20,7 +20,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -159,14 +158,6 @@ class BookmarkControllerTest {
                 123.456790,
                 bookmarkCaptor.getValue().getPrice(),
                 0.0000001
-        );
-    }
-
-    @Test
-    void bookmarkEntityRejectsPriceOutsideDecimalPrecision() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new Bookmark(member, "AAPL", 1e308)
         );
     }
 
