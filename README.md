@@ -45,6 +45,14 @@ T.A.R.D.I.S.는 **실시간 시장 데이터 기반 모의투자, 가상 자산 
 - **External APIs**: Finnhub, Naver Open API, FreeImage, Google Identity Services, TradingView
 - **Deployment**: Vercel + Render + Aiven
 
+## 프로젝트 명칭 및 공개 저장소 안내
+
+- 이 저장소는 개인 학습·포트폴리오 목적의 비공식 프로젝트이며 BBC, BBC Studios, Doctor Who 또는 관련 권리자와 제휴·후원·승인 관계가 없습니다.
+- `T.A.R.D.I.S.` 명칭은 이 프로젝트의 식별자로 사용하며, 제3자의 상표·브랜드·저작물에 대한 권리를 주장하지 않습니다.
+- 공개 저장소에는 API 키, JWT 서명키, DB/SMTP 비밀번호 같은 운영 비밀값을 포함하지 않고 환경변수로 주입합니다.
+- 제3자 이미지·로고·리소스는 직접 제작했거나 사용 권한을 확인한 경우에만 저장소에 포함해야 합니다.
+- 현재 저장소에는 별도의 오픈소스 `LICENSE` 파일을 두지 않았습니다. 공개 열람 가능 상태와 재사용 라이선스 부여는 별개의 사항입니다.
+
 ## CI / 배포 검증
 
 - **Vercel**: 프론트 작업 묶음 완료 시에만 수동 Production 빌드/배포 검증
