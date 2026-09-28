@@ -3,6 +3,8 @@ package com.tardistock.backend.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -39,8 +41,8 @@ public class LimitOrder {
     @Column(nullable = false)
     private int amount;
 
-    @Column(nullable = false)
-    private double limitPrice;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal limitPrice;
 
     @Column(nullable = false, length = 16)
     private String status;
@@ -49,7 +51,9 @@ public class LimitOrder {
     private LocalDateTime createdAt;
 
     private LocalDateTime completedAt;
-    private Double fillPrice;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal fillPrice;
 
     @Column(length = 255)
     private String resultMessage;
@@ -67,7 +71,7 @@ public class LimitOrder {
         this.side = side;
         this.symbol = symbol;
         this.amount = amount;
-        this.limitPrice = limitPrice;
+        this.limitPrice = money(limitPrice);
         this.createdAt = createdAt;
         this.status = "PENDING";
     }
@@ -77,11 +81,13 @@ public class LimitOrder {
     public String getSide() { return side; }
     public String getSymbol() { return symbol; }
     public int getAmount() { return amount; }
-    public double getLimitPrice() { return limitPrice; }
+    public double getLimitPrice() { return limitPrice.doubleValue(); }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }
-    public Double getFillPrice() { return fillPrice; }
+    public Double getFillPrice() {
+        return fillPrice == null ? null : fillPrice.doubleValue();
+    }
     public String getResultMessage() { return resultMessage; }
 
     public boolean isPending() {
@@ -90,7 +96,7 @@ public class LimitOrder {
 
     public void fill(double fillPrice, LocalDateTime completedAt) {
         this.status = "FILLED";
-        this.fillPrice = fillPrice;
+        this.fillPrice = money(fillPrice);
         this.completedAt = completedAt;
         this.resultMessage = "체결 완료";
     }
@@ -105,5 +111,12 @@ public class LimitOrder {
         this.status = "REJECTED";
         this.completedAt = completedAt;
         this.resultMessage = message;
+    }
+
+    private static BigDecimal money(double value) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException("주문 가격은 유한한 숫자여야 합니다.");
+        }
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
     }
 }
