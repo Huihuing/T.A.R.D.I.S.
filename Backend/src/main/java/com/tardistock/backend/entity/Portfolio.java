@@ -1,6 +1,7 @@
 package com.tardistock.backend.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.tardistock.backend.util.DecimalMath;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -8,6 +9,10 @@ import java.math.RoundingMode;
 
 @Entity
 public class Portfolio {
+
+    private static final int PRICE_PRECISION = 19;
+    private static final int PRICE_SCALE = 6;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -20,7 +25,7 @@ public class Portfolio {
     private String symbol;
     private int amount;
 
-    @Column(nullable = false, precision = 19, scale = 6)
+    @Column(nullable = false, precision = PRICE_PRECISION, scale = PRICE_SCALE)
     private BigDecimal averagePrice;
 
     public Portfolio() {}
@@ -40,10 +45,16 @@ public class Portfolio {
     public double getAveragePrice() { return averagePrice.doubleValue(); }
     public void setAveragePrice(double averagePrice) { this.averagePrice = price(averagePrice); }
 
+    public static boolean isPersistablePrice(double value) {
+        return DecimalMath.fits(value, PRICE_PRECISION, PRICE_SCALE);
+    }
+
     private static BigDecimal price(double value) {
-        if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException("평균 매입가는 유한한 숫자여야 합니다.");
+        if (!isPersistablePrice(value)) {
+            throw new IllegalArgumentException(
+                    "평균 매입가는 DECIMAL(19,6) 범위의 유한한 숫자여야 합니다."
+            );
         }
-        return BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(value).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }

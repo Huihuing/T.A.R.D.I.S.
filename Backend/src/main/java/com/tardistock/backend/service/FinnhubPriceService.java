@@ -1,6 +1,7 @@
 package com.tardistock.backend.service;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
+import com.tardistock.backend.util.DecimalMath;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,8 @@ public class FinnhubPriceService {
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int CACHE_SECONDS = 60;
     private static final int MAX_CACHE_ENTRIES = 500;
+    private static final int MARKET_PRICE_PRECISION = 19;
+    private static final int MARKET_PRICE_SCALE = 6;
 
     @Value("${finnhub.api.key}")
     private String apiKey;
@@ -109,7 +112,12 @@ public class FinnhubPriceService {
                 double currentPrice =
                         Double.parseDouble(cVal.toString());
 
-                if (currentPrice > 0) {
+                if (currentPrice > 0
+                        && DecimalMath.fits(
+                                currentPrice,
+                                MARKET_PRICE_PRECISION,
+                                MARKET_PRICE_SCALE
+                        )) {
                     putBounded(
                             normalized,
                             new CachedPrice(
@@ -123,6 +131,11 @@ public class FinnhubPriceService {
                     );
                     return currentPrice;
                 }
+
+                log.warn(
+                        "Finnhub returned an unsupported price for {}",
+                        normalized
+                );
             }
         } catch (Exception e) {
             log.warn(
