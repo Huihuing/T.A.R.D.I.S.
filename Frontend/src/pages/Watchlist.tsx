@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star, Bell, Trash2 } from 'lucide-react';
-import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
 
 export default function Watchlist() {
@@ -57,12 +57,6 @@ export default function Watchlist() {
     };
 
     const fetchAlerts = async () => {
-        const token = getStoredToken();
-        if (!token) {
-            setAlerts([]);
-            return;
-        }
-
         try {
             const res = await authFetch(`${API_URL}/api/price-alerts`, {
                 headers: getAuthHeaders(false)
