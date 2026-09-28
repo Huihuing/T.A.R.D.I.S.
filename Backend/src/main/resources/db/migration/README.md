@@ -9,13 +9,13 @@
 현재 운영 기준:
 
 - Database: Aiven MySQL 8.4.8 / `defaultdb`
-- Flyway schema version: `7`
+- Flyway schema version: `8`
 - `spring.flyway.enabled=true`
 - `spring.flyway.baseline-on-migrate=false`
 - `spring.jpa.hibernate.ddl-auto=validate`
 - Render 배포에서 backend tests + `bootJar` 실행 후 새 인스턴스를 기동
 
-운영 DB는 version 1로 baseline된 뒤 V2~V7을 순차 적용했습니다. V7 배포 로그에서 기존 version 6 확인 후 `7 - bookmark price decimal` migration이 성공했고, schema version이 v7이 된 것을 확인했습니다.
+운영 DB는 version 1로 baseline된 뒤 V2~V8을 순차 적용합니다. V8은 pre-Flyway 시절 남은 case-insensitive 이메일 중복에서 가장 큰 `member.id`를 최신 계정으로 보존하고, 오래된 중복 계정의 이메일만 비활성 고유값으로 격리한 뒤 `member.email` UNIQUE 제약을 추가합니다. 계정/지갑/거래/게시글/원장 데이터는 삭제하지 않습니다.
 
 ## 적용된 migration
 
@@ -39,19 +39,18 @@
   - `trade_history.price` → `DECIMAL(19,6)`
 - `V7__bookmark_price_decimal.sql`
   - `bookmark.price` → `DECIMAL(19,6)`
+- `V8__dedupe_member_email_and_add_unique.sql`
+  - case-insensitive 중복 이메일 그룹마다 가장 큰 `member.id` 유지
+  - 오래된 중복 계정 이메일을 `deduped-member-<id>@invalid` 형태의 비활성 고유값으로 격리
+  - 사용자/자산/거래/커뮤니티 데이터 삭제 없음
+  - `member.email`에 `uk_member_email` UNIQUE 제약 추가
 
-Java 엔티티의 해당 저장 필드는 `BigDecimal`을 사용합니다. 기존 프론트/API 호환성을 위해 일부 public getter/constructor는 `double` 계약을 유지하되 저장 시 도메인별 scale과 HALF_UP 반올림 규칙을 적용합니다.
-
-## 현재 보류 항목
-
-`member.email`에는 아직 DB UNIQUE 제약을 추가하지 않았습니다. 기존 운영 데이터 aggregate audit에서 case-insensitive 기준 중복 이메일 1그룹이 확인되어, 자동 삭제/병합 없이 기존 데이터를 먼저 정리해야 합니다.
-
-중복이 0임을 다시 확인하기 전에는 `UNIQUE(email)` migration을 추가하지 않습니다.
+Java 엔티티의 해당 저장 필드는 DB 제약과 같은 UNIQUE 계약을 선언합니다. 일반 회원가입은 사전 case-insensitive 중복 검사와 DB UNIQUE를 함께 사용하며, 동시 요청으로 DB 무결성 충돌이 발생하면 API는 409 Conflict로 처리합니다.
 
 ## 규칙
 
 - 운영에 적용된 기존 migration 파일은 수정하지 않습니다. Flyway checksum이 이미 운영 이력에 기록되어 있습니다.
-- 이후 스키마 변경은 반드시 `V8__...`처럼 새 migration으로 추가합니다.
+- 이후 스키마 변경은 반드시 `V9__...`처럼 새 migration으로 추가합니다.
 - Hibernate `ddl-auto=update/create/create-drop`로 운영 스키마를 변경하지 않습니다.
 - migration에는 비밀정보나 실제 사용자 데이터를 포함하지 않습니다.
 - 파괴적 변경, 타입 축소, 대량 데이터 변환은 사전 백업/검증 후 별도 migration으로 진행합니다.
