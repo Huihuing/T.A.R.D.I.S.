@@ -41,7 +41,7 @@
   - `bookmark.price` → `DECIMAL(19,6)`
 - `V8__dedupe_member_email_and_add_unique.sql`
   - case-insensitive 중복 이메일 그룹마다 가장 큰 `member.id` 유지
-  - 오래된 중복 계정 이메일을 `deduped-member-<id>@invalid` 형태의 비활성 고유값으로 격리
+  - 오래된 중복 계정 이메일을 `deduped-member-<id>@example.invalid` 형태의 비활성 고유값으로 격리
   - 사용자/자산/거래/커뮤니티 데이터 삭제 없음
   - `member.email`에 `uk_member_email` UNIQUE 제약 추가
 
