@@ -3,6 +3,8 @@ package com.tardistock.backend.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -26,11 +28,11 @@ public class LedgerEntry {
     @Column(nullable = false, length = 40)
     private String type;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
-    @Column(nullable = false)
-    private double balanceAfter;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
 
     @Column(length = 80)
     private String counterparty;
@@ -57,8 +59,8 @@ public class LedgerEntry {
             LocalDateTime createdAt) {
         this.member = member;
         this.type = type;
-        this.amount = amount;
-        this.balanceAfter = balanceAfter;
+        this.amount = money(amount);
+        this.balanceAfter = money(balanceAfter);
         this.counterparty = counterparty;
         this.symbol = symbol;
         this.description = description;
@@ -67,10 +69,17 @@ public class LedgerEntry {
 
     public Long getId() { return id; }
     public String getType() { return type; }
-    public double getAmount() { return amount; }
-    public double getBalanceAfter() { return balanceAfter; }
+    public double getAmount() { return amount.doubleValue(); }
+    public double getBalanceAfter() { return balanceAfter.doubleValue(); }
     public String getCounterparty() { return counterparty; }
     public String getSymbol() { return symbol; }
     public String getDescription() { return description; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    private static BigDecimal money(double value) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException("원장 금액은 유한한 숫자여야 합니다.");
+        }
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    }
 }

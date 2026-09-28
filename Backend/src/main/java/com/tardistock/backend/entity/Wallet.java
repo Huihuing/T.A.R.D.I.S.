@@ -2,6 +2,9 @@ package com.tardistock.backend.entity;
 
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 @Entity
 public class Wallet {
 
@@ -14,16 +17,24 @@ public class Wallet {
     @JoinColumn(name = "member_id", nullable = false)
     private Member member;
 
-    private double balance; // 잔고
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balance; // 잔고
 
     public Wallet() {}
 
     public Wallet(Member member, double balance) {
         this.member = member;
-        this.balance = balance;
+        this.balance = money(balance);
     }
 
-    public double getBalance() { return balance; }
-    public void setBalance(double balance) { this.balance = balance; }
+    public double getBalance() { return balance.doubleValue(); }
+    public void setBalance(double balance) { this.balance = money(balance); }
     public Member getMember() { return member; }
+
+    private static BigDecimal money(double value) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException("잔액은 유한한 숫자여야 합니다.");
+        }
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    }
 }
