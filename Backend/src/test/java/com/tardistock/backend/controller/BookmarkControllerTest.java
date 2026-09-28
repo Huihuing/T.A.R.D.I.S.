@@ -108,6 +108,28 @@ class BookmarkControllerTest {
         assertEquals(123.456789, saved.getPrice(), 0.0000001);
     }
 
+    @Test
+    void roundsBookmarkPriceToSixDecimalsHalfUp() {
+        when(bookmarkRepository.findByMemberAndSymbol(member, "AAPL"))
+                .thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = controller.toggleBookmark(
+                Map.of("symbol", "AAPL", "price", 123.4567895),
+                authentication
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+
+        ArgumentCaptor<Bookmark> bookmarkCaptor =
+                ArgumentCaptor.forClass(Bookmark.class);
+        verify(bookmarkRepository).save(bookmarkCaptor.capture());
+        assertEquals(
+                123.456790,
+                bookmarkCaptor.getValue().getPrice(),
+                0.0000001
+        );
+    }
+
     private String responseMessage(ResponseEntity<?> response) {
         Object body = response.getBody();
         if (!(body instanceof Map<?, ?> map)) {
