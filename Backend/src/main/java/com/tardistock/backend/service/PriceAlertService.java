@@ -67,11 +67,18 @@ public class PriceAlertService {
             );
         }
 
+        double normalizedTargetPrice = roundMoney(targetPrice);
+        if (normalizedTargetPrice < 0.01) {
+            throw new IllegalArgumentException(
+                    "목표 가격은 $0.01 이상이어야 합니다."
+            );
+        }
+
         return priceAlertRepository.save(new PriceAlert(
                 member,
                 symbol,
                 direction,
-                roundMoney(targetPrice),
+                normalizedTargetPrice,
                 LocalDateTime.now(KST)
         ));
     }
