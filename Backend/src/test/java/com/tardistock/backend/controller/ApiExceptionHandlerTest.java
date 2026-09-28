@@ -1,6 +1,7 @@
 package com.tardistock.backend.controller;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
@@ -37,6 +38,22 @@ class ApiExceptionHandlerTest {
                 );
 
         assertEquals(413, response.getStatusCode().value());
+    }
+
+    @Test
+    void dataIntegrityViolationReturnsConflictWithoutDatabaseDetail() {
+        ResponseEntity<?> response =
+                handler.handleDataIntegrityViolation(
+                        new DataIntegrityViolationException(
+                                "Duplicate entry sensitive@example.test for key uk_member_email"
+                        )
+                );
+
+        assertEquals(409, response.getStatusCode().value());
+        assertEquals(
+                "이미 사용 중인 정보이거나 요청 상태가 충돌합니다.",
+                ((Map<?, ?>) response.getBody()).get("message")
+        );
     }
 
     @Test
