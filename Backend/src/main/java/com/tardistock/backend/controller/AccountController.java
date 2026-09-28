@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import static com.tardistock.backend.util.MoneyMath.fitsCents;
 import static com.tardistock.backend.util.MoneyMath.roundCents;
+import static com.tardistock.backend.util.TransactionRollbackSupport.markRollbackOnlyIfActive;
 
 @RestController
 @RequestMapping("/api/account")
@@ -108,6 +109,7 @@ public class AccountController {
                     "message", "계좌 PIN 설정이 완료되었습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         }
@@ -221,9 +223,11 @@ public class AccountController {
                     "message", "송금 PIN을 재설정했습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(410).body(
                     Map.of("message", e.getMessage()));
         }
@@ -275,9 +279,11 @@ public class AccountController {
                     "message", "일반 비밀번호 로그인을 사용할 수 있게 되었습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(410).body(
                     Map.of("message", e.getMessage()));
         }
@@ -348,6 +354,7 @@ public class AccountController {
                     "비밀번호가 변경되었습니다. 다시 로그인해주세요."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         }
@@ -405,6 +412,7 @@ public class AccountController {
                     "message", "송금 PIN이 변경되었습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         }
@@ -473,9 +481,11 @@ public class AccountController {
                     "message", "Google 계정 연결이 완료되었습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(401).body(
                     Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(503).body(
                     Map.of("message", e.getMessage()));
         }
@@ -519,6 +529,7 @@ public class AccountController {
                     "message", "Google 계정 연결을 해제했습니다."
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         }
@@ -663,9 +674,11 @@ public class AccountController {
                     "newBalance", fromWallet.getBalance()
             ));
         } catch (IllegalArgumentException e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
         } catch (Exception e) {
+            markRollbackOnlyIfActive();
             return ResponseEntity.status(500).body(
                     Map.of("message",
                             "송금 중 오류가 발생했습니다."));
