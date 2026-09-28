@@ -212,6 +212,7 @@ export default function StockPage() {
             console.error("북마크 변경 오류:", error);
         }
     };
+
     const createLimitOrder = async () => {
         if (!selectedStock?.symbol) return;
         if (!orderAmount || orderAmount <= 0) {
