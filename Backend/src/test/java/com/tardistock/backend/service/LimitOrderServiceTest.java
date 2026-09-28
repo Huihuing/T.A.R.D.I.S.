@@ -194,4 +194,40 @@ class LimitOrderServiceTest {
         assertEquals("CANCELLED", order.getStatus());
         verify(limitOrderRepository).save(order);
     }
+
+    @Test
+    void rejectsLimitPriceThatRoundsBelowOneCent() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(limitOrderRepository.countByMemberAndStatus(member, "PENDING"))
+                .thenReturn(0L);
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.create("alice", "BUY", "AAPL", 1, 0.004)
+        );
+
+        assertEquals("지정가는 $0.01 이상이어야 합니다.", error.getMessage());
+        verify(limitOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void halfCentLimitPriceRoundsUpToOneCent() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(limitOrderRepository.countByMemberAndStatus(member, "PENDING"))
+                .thenReturn(0L);
+        when(limitOrderRepository.save(any(LimitOrder.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        LimitOrder order = service.create(
+                "alice",
+                "BUY",
+                "AAPL",
+                1,
+                0.005
+        );
+
+        assertEquals(0.01, order.getLimitPrice(), 0.0000001);
+    }
 }

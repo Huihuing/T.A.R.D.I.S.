@@ -85,6 +85,41 @@ class PriceAlertServiceTest {
     }
 
     @Test
+    void rejectsTargetPriceThatRoundsBelowOneCent() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(priceAlertRepository.countByMemberAndActiveTrue(member))
+                .thenReturn(0L);
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.create("alice", "AAPL", "ABOVE", 0.004)
+        );
+
+        assertEquals("목표 가격은 $0.01 이상이어야 합니다.", error.getMessage());
+        verify(priceAlertRepository, never()).save(any());
+    }
+
+    @Test
+    void halfCentTargetPriceRoundsUpToOneCent() {
+        when(memberRepository.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        when(priceAlertRepository.countByMemberAndActiveTrue(member))
+                .thenReturn(0L);
+        when(priceAlertRepository.save(any(PriceAlert.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PriceAlert alert = service.create(
+                "alice",
+                "AAPL",
+                "ABOVE",
+                0.005
+        );
+
+        assertEquals(0.01, alert.getTargetPrice(), 0.0000001);
+    }
+
+    @Test
     void aboveAlertTriggersOnceWhenPriceReached() {
         PriceAlert alert = new PriceAlert(
                 member,
