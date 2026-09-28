@@ -76,7 +76,7 @@ public class BookmarkController {
             if (symbol == null || !symbol.matches("[A-Z0-9.\\-]{1,12}")) {
                 return ResponseEntity.badRequest().body(Map.of("message", "잘못된 종목 코드입니다."));
             }
-            if (!Double.isFinite(price) || price < 0) {
+            if (!Bookmark.isPersistablePrice(price)) {
                 return ResponseEntity.badRequest().body(
                         Map.of("message", "잘못된 가격입니다.")
                 );

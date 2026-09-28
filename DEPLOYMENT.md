@@ -57,7 +57,7 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `MAIL_HOST` | `smtp.gmail.com` | SMTP 서버 |
 | `MAIL_PORT` | `587` | SMTP 포트 |
 | `JPA_SHOW_SQL` | `false` | SQL 로그 출력 여부 |
-| `JPA_DDL_AUTO` | `update` | Hibernate 스키마 정책. 마이그레이션 도입 후 `validate` 전환 권장 |
+| `SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE` | `default` | Render free cold-start 완화 시 `lazy` 사용 |
 | `JWT_EXPIRATION_MS` | `900000` | access JWT 유효시간(ms), 기본 15분. refresh cookie로 로그인 유지 |
 | `DB_POOL_MAX_SIZE` | `5` | Hikari 최대 DB 연결 수. Aiven free 1GB 단일 노드 기준 |
 | `DB_POOL_MIN_IDLE` | `1` | 유휴 상태에서 유지할 최소 연결 수 |
@@ -69,6 +69,17 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `DB_KEEPALIVE_TIME_MS` | `120000` | 장시간 유휴 연결 keepalive 주기 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
+
+현재 운영 스키마 정책은 코드에서 다음과 같이 고정합니다.
+
+```text
+Flyway: enabled
+Flyway schema version: 7
+baseline-on-migrate: false
+Hibernate ddl-auto: validate
+```
+
+`JPA_DDL_AUTO=update` 같은 운영 override를 사용하지 않습니다. 이미 적용된 `V1`~`V7` migration은 수정하지 않고, 다음 스키마 변경은 `V8__...` 이상의 새 migration으로 추가합니다. 상세 기준은 `docs/DB_MIGRATION.md`를 참고합니다.
 
 ### Render health check
 
@@ -186,7 +197,7 @@ GitHub Actions 사용량을 줄이기 위해 일반 push/PR에서는 Actions CI�
 3. Render가 `main` 커밋마다 루트 `Dockerfile`에서 frontend build와 `./gradlew test bootJar --no-daemon`을 검증
 4. 테스트가 통과한 경우에만 Render 이미지 빌드·기동 진행
 5. Render가 `live`이고 런타임 로그에 DB/JPA 기동 오류가 없는지 확인
-6. Vercel은 Git 자동 배포를 하지 않고, 프론트 변경 묶음이 완성됐을 때만 수동 Production deployment 생성
+6. Vercel은 Git 자동 배포를 하지 않고, 프론트 변경 묶음이 완성되고 **사용자가 명시적으로 승인했을 때만** 수동 Production deployment 생성
 7. 문제가 있으면 각 플랫폼의 build/runtime log를 기준으로 수정
 
 GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
@@ -204,7 +215,7 @@ GitHub Actions의 `CI (Manual Fallback)`과 `Deployment Smoke Test`는
 
 - GitHub 커밋 횟수에는 제한을 두지 않음
 - Render는 커밋마다 frontend build + backend test를 계속 검증
-- Vercel은 프론트 기능/UX 작업 묶음이 완료됐을 때만 수동 Production deployment 생성
+- Vercel은 프론트 기능/UX 작업 묶음이 완료되고 사용자가 승인했을 때만 수동 Production deployment 생성
 - 프론트 묶음 도중의 중간 커밋은 Vercel build quota를 소비하지 않음
 - 수동 deployment를 만든 뒤 `READY` 상태와 실제 페이지를 확인하고 다음 프론트 묶음으로 이동
 
@@ -227,7 +238,7 @@ CSP 위반 보고는 same-origin `/api/security/csp-report`로 보내고 Vercel 
 
 강제 정책으로 전환하기 전 확인 순서:
 
-1. 프론트 작업 묶음을 수동 Production deployment
+1. 프론트 작업 묶음을 사용자의 명시적 승인 후 수동 Production deployment
 2. 로그인/Google 로그인, Dashboard TradingView, 뉴스 이미지, WebSocket 알림, 게시판 주요 화면 확인
 3. Render 로그에서 CSP 위반을 확인하고 필요한 출처만 최소 추가
 4. 정상 트래픽에서 의미 있는 위반이 없을 때 `Content-Security-Policy-Report-Only`를 `Content-Security-Policy`로 전환

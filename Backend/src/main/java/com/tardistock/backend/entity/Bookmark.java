@@ -8,6 +8,9 @@ import java.math.RoundingMode;
 @Entity
 public class Bookmark {
 
+    private static final int PRICE_PRECISION = 19;
+    private static final int PRICE_SCALE = 6;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,7 +22,7 @@ public class Bookmark {
     @Column(nullable = false)
     private String symbol;
 
-    @Column(nullable = false, precision = 19, scale = 6)
+    @Column(nullable = false, precision = PRICE_PRECISION, scale = PRICE_SCALE)
     private BigDecimal price;
 
     public Bookmark() {}
@@ -38,10 +41,23 @@ public class Bookmark {
     public double getPrice() { return price.doubleValue(); }
     public void setPrice(double price) { this.price = price(price); }
 
-    private static BigDecimal price(double value) {
-        if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException("북마크 가격은 유한한 숫자여야 합니다.");
+    public static boolean isPersistablePrice(double value) {
+        if (!Double.isFinite(value) || value < 0) {
+            return false;
         }
-        return BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP);
+        return normalizePrice(value).precision() <= PRICE_PRECISION;
+    }
+
+    private static BigDecimal price(double value) {
+        if (!isPersistablePrice(value)) {
+            throw new IllegalArgumentException(
+                    "북마크 가격은 DECIMAL(19,6) 범위의 0 이상 유한한 숫자여야 합니다."
+            );
+        }
+        return normalizePrice(value);
+    }
+
+    private static BigDecimal normalizePrice(double value) {
+        return BigDecimal.valueOf(value).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }

@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,6 +88,37 @@ class BookmarkControllerTest {
         verify(bookmarkRepository, never()).save(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"10000000000000", "1e308"})
+    void rejectsPriceOutsideDecimalPrecision(String price) {
+        ResponseEntity<?> response = controller.toggleBookmark(
+                Map.of("symbol", "AAPL", "price", price),
+                authentication
+        );
+
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("잘못된 가격입니다.", responseMessage(response));
+        verify(bookmarkRepository, never()).save(any());
+    }
+
+    @Test
+    void acceptsLargestWholeNumberThatFitsDecimalPrecision() {
+        when(bookmarkRepository.findByMemberAndSymbol(member, "AAPL"))
+                .thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = controller.toggleBookmark(
+                Map.of("symbol", "AAPL", "price", 9_999_999_999_999d),
+                authentication
+        );
+
+        assertEquals(200, response.getStatusCode().value());
+
+        ArgumentCaptor<Bookmark> bookmarkCaptor =
+                ArgumentCaptor.forClass(Bookmark.class);
+        verify(bookmarkRepository).save(bookmarkCaptor.capture());
+        assertEquals(9_999_999_999_999d, bookmarkCaptor.getValue().getPrice(), 0.0);
+    }
+
     @Test
     void acceptsFiniteNonNegativePriceWithoutChangingApiContract() {
         when(bookmarkRepository.findByMemberAndSymbol(member, "AAPL"))
@@ -127,6 +159,14 @@ class BookmarkControllerTest {
                 123.456790,
                 bookmarkCaptor.getValue().getPrice(),
                 0.0000001
+        );
+    }
+
+    @Test
+    void bookmarkEntityRejectsPriceOutsideDecimalPrecision() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new Bookmark(member, "AAPL", 1e308)
         );
     }
 
