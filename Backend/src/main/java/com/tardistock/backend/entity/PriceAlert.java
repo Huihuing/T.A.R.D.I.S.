@@ -3,6 +3,8 @@ package com.tardistock.backend.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 @Entity
@@ -32,8 +34,8 @@ public class PriceAlert {
     @Column(nullable = false, length = 10)
     private String direction;
 
-    @Column(nullable = false)
-    private double targetPrice;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal targetPrice;
 
     @Column(nullable = false)
     private boolean active = true;
@@ -54,7 +56,7 @@ public class PriceAlert {
         this.member = member;
         this.symbol = symbol;
         this.direction = direction;
-        this.targetPrice = targetPrice;
+        this.targetPrice = money(targetPrice);
         this.createdAt = createdAt;
         this.active = true;
     }
@@ -63,7 +65,7 @@ public class PriceAlert {
     public Member getMember() { return member; }
     public String getSymbol() { return symbol; }
     public String getDirection() { return direction; }
-    public double getTargetPrice() { return targetPrice; }
+    public double getTargetPrice() { return targetPrice.doubleValue(); }
     public boolean isActive() { return active; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getTriggeredAt() { return triggeredAt; }
@@ -71,5 +73,12 @@ public class PriceAlert {
     public void trigger(LocalDateTime triggeredAt) {
         this.active = false;
         this.triggeredAt = triggeredAt;
+    }
+
+    private static BigDecimal money(double value) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException("목표 가격은 유한한 숫자여야 합니다.");
+        }
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
     }
 }
