@@ -5,7 +5,16 @@
 -- non-routable unique placeholder before the database UNIQUE constraint is
 -- added. No account, wallet, trade, post, or ledger data is deleted.
 
-UPDATE `member` m
+CREATE TEMPORARY TABLE `_member_email_dedupe` (
+    `id` BIGINT NOT NULL PRIMARY KEY,
+    `replacement_email` VARCHAR(255) NOT NULL UNIQUE
+);
+
+INSERT INTO `_member_email_dedupe` (`id`, `replacement_email`)
+SELECT
+    m.`id`,
+    CONCAT('deduped-member-', m.`id`, '@invalid')
+FROM `member` m
 JOIN (
     SELECT LOWER(`email`) AS `normalized_email`, MAX(`id`) AS `keep_id`
     FROM `member`
@@ -13,8 +22,14 @@ JOIN (
     HAVING COUNT(*) > 1
 ) duplicate_group
     ON LOWER(m.`email`) = duplicate_group.`normalized_email`
-SET m.`email` = CONCAT('deduped-', m.`id`, '@invalid.local')
 WHERE m.`id` <> duplicate_group.`keep_id`;
+
+UPDATE `member` m
+JOIN `_member_email_dedupe` duplicate_member
+    ON duplicate_member.`id` = m.`id`
+SET m.`email` = duplicate_member.`replacement_email`;
 
 ALTER TABLE `member`
     ADD CONSTRAINT `uk_member_email` UNIQUE (`email`);
+
+DROP TEMPORARY TABLE `_member_email_dedupe`;
