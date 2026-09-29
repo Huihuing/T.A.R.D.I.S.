@@ -99,7 +99,10 @@ public class EmailVerificationService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {
+            VerificationCodeRejectedException.class,
+            VerificationCodeExpiredException.class
+    })
     public void verifyCode(String rawEmail, String rawCode) {
         String email = normalizeEmail(rawEmail);
         String code = rawCode == null ? "" : rawCode.trim();
@@ -117,18 +120,19 @@ public class EmailVerificationService {
         LocalDateTime now = LocalDateTime.now(KST);
         if (verification.getExpiresAt() == null
                 || now.isAfter(verification.getExpiresAt())) {
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호가 만료되었습니다. 다시 요청해주세요.");
         }
         if (verification.getAttempts() >= 5) {
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호 입력 횟수를 초과했습니다. 다시 요청해주세요.");
         }
 
         verification.setAttempts(verification.getAttempts() + 1);
         if (!passwordEncoder.matches(code, verification.getCodeHash())) {
             verificationRepository.save(verification);
-            throw new IllegalArgumentException("인증번호가 일치하지 않습니다.");
+            throw new VerificationCodeRejectedException(
+                    "인증번호가 일치하지 않습니다.");
         }
 
         verification.setVerifiedAt(now);

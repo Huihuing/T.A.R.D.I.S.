@@ -9,6 +9,8 @@ import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.PasswordResetService;
 import com.tardistock.backend.service.RefreshTokenService;
+import com.tardistock.backend.service.VerificationCodeExpiredException;
+import com.tardistock.backend.service.VerificationCodeRejectedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -222,6 +224,14 @@ public class AccountController {
                     "status", "SUCCESS",
                     "message", "송금 PIN을 재설정했습니다."
             ));
+        } catch (VerificationCodeRejectedException e) {
+            // Commit the failed-attempt counter; nothing else was changed.
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (VerificationCodeExpiredException e) {
+            // Commit the stale code cleanup; nothing else was changed.
+            return ResponseEntity.status(410).body(
+                    Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(
@@ -278,6 +288,14 @@ public class AccountController {
                     "passwordLoginEnabled", true,
                     "message", "일반 비밀번호 로그인을 사용할 수 있게 되었습니다."
             ));
+        } catch (VerificationCodeRejectedException e) {
+            // Commit the failed-attempt counter; nothing else was changed.
+            return ResponseEntity.badRequest().body(
+                    Map.of("message", e.getMessage()));
+        } catch (VerificationCodeExpiredException e) {
+            // Commit the stale code cleanup; nothing else was changed.
+            return ResponseEntity.status(410).body(
+                    Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             markRollbackOnlyIfActive();
             return ResponseEntity.badRequest().body(

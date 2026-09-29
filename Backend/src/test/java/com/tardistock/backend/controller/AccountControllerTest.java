@@ -10,6 +10,8 @@ import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.PasswordResetService;
 import com.tardistock.backend.service.RefreshTokenService;
+import com.tardistock.backend.service.VerificationCodeRejectedException;
+import com.tardistock.backend.support.RecordingTransactionManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -473,6 +475,60 @@ class AccountControllerTest {
                 "SECURITY",
                 "일반 비밀번호 로그인이 추가되었습니다."
         );
+    }
+
+    @Test
+    void wrongSecurityCodeCommitsAttemptWithoutChangingPin() {
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        NotificationService notifications = mock(NotificationService.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
+        RecordingTransactionManager transactions =
+                new RecordingTransactionManager();
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsernameForUpdate("alice"))
+                .thenReturn(Optional.of(member));
+        doThrow(new VerificationCodeRejectedException("wrong code"))
+                .when(passwordReset)
+                .consumeSecurityCode(member, "000000");
+
+        AccountController controller = transactions.proxy(
+                new AccountController(
+                        mock(WalletRepository.class),
+                        members,
+                        encoder,
+                        notifications,
+                        mock(LedgerService.class),
+                        mock(RefreshTokenService.class),
+                        mock(GoogleIdentityService.class),
+                        passwordReset
+                )
+        );
+
+        ResponseEntity<?> response = controller.resetPin(
+                Map.of(
+                        "code", "000000",
+                        "newPin", "5678"
+                ),
+                auth("alice")
+        );
+
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("encoded-pin", member.getPin());
+        verify(members, never()).save(any(Member.class));
+        verifyNoInteractions(notifications);
+        // The failed-attempt counter written by consumeSecurityCode must
+        // survive, otherwise the 5-attempt limit is never reached.
+        assertEquals(1, transactions.commits());
+        assertEquals(0, transactions.rollbacks());
     }
 
     private static UsernamePasswordAuthenticationToken auth(
