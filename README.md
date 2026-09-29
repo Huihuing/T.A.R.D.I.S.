@@ -53,10 +53,43 @@ T.A.R.D.I.S.는 **실시간 시장 데이터 기반 모의투자, 가상 자산 
 - 제3자 이미지·로고·리소스는 직접 제작했거나 사용 권한을 확인한 경우에만 저장소에 포함해야 합니다.
 - 현재 저장소에는 별도의 오픈소스 `LICENSE` 파일을 두지 않았습니다. 공개 열람 가능 상태와 재사용 라이선스 부여는 별개의 사항입니다.
 
+## 현재 상태
+
+- 모의투자·송금·보상·지정가 주문·커뮤니티·랭킹 핵심 기능 운영 중
+- 운영 DB 스키마는 Flyway로 관리 (Hibernate는 검증 전용)
+- 보안 후속 작업(신뢰 프록시 기반 client IP, CSP 강제 전환) 진행 예정
+
+## 아키텍처
+
+```text
+Browser → Vercel (React) → /api/* rewrite → Render (Spring Boot) → Aiven MySQL
+                                                              → Finnhub / Naver / FreeImage / Google
+```
+
+## 실행 / 테스트
+
+Java 21, Node.js가 필요합니다.
+
+```powershell
+# Backend 테스트 + 빌드
+cd Backend
+.\gradlew.bat test bootJar --no-daemon
+
+# Backend 로컬 실행
+.\gradlew.bat bootRun
+
+# Frontend
+cd Frontend
+npm install
+npm run dev
+```
+
+로컬 비밀 설정은 `Backend/src/main/resources/application-api.example.yaml`을 복사해 `application-api.yaml`로 만들어 사용합니다. `application-api.yaml`과 `.env*` 파일은 Git에 커밋하지 않습니다. 환경변수와 배포 설정은 [DEPLOYMENT.md](DEPLOYMENT.md)를 참고하세요.
+
 ## CI / 배포 검증
 
-- **Vercel**: 프론트 작업 묶음 완료 시에만 수동 Production 빌드/배포 검증
-- **Render**: Spring Boot Docker 빌드/기동 검증
+- **Render**: `main` 반영 시 Docker 빌드에서 frontend build + backend 테스트를 통과해야 기동
+- **Vercel**: 프론트 작업 묶음 완료 시에만 수동 Production 배포
 - **GitHub Actions**: 자동 실행하지 않고 필요할 때만 수동 fallback으로 사용
 
 ## 라이브 서비스
@@ -64,14 +97,10 @@ T.A.R.D.I.S.는 **실시간 시장 데이터 기반 모의투자, 가상 자산 
 - Frontend: https://tardis-neon.vercel.app
 - Backend: https://t-a-r-d-i-s.onrender.com
 
-## 로컬 개발 및 배포
+## 문서
 
-설정 값과 실행 방법은 [DEPLOYMENT.md](DEPLOYMENT.md)를 참고하세요.
-
-> `Backend/src/main/resources/application-api.yaml`과 `.env*` 파일은 로컬 전용이며 Git에 커밋하지 않습니다.
-
-
-## 운영 문서 / Operations
-
+- [로컬 개발 및 배포](DEPLOYMENT.md)
+- [보안 정책](SECURITY.md)
 - [운영 인프라 및 리전 계획](docs/INFRASTRUCTURE.md)
-- [DB 마이그레이션 / Flyway 전환 가이드](docs/DB_MIGRATION.md)
+- [DB 마이그레이션 / Flyway](docs/DB_MIGRATION.md)
+- [AI 코딩 에이전트 작업 기준](AGENTS.md)
