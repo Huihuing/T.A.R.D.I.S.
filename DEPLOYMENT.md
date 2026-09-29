@@ -67,6 +67,7 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `DB_IDLE_TIMEOUT_MS` | `300000` | 최소 연결 수를 초과한 유휴 연결 정리 시간 |
 | `DB_MAX_LIFETIME_MS` | `1500000` | 풀 연결 최대 수명 |
 | `DB_KEEPALIVE_TIME_MS` | `120000` | 장시간 유휴 연결 keepalive 주기 |
+| `TRUSTED_PROXY_SECRET` | 빈 값 | Vercel → Render 신뢰 프록시 secret. 비어 있으면 `TrustedProxyHeaderFilter` 비활성. 아래 활성화 순서 참고 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
 
@@ -74,12 +75,12 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 
 ```text
 Flyway: enabled
-Flyway schema version: 7
+Flyway schema version: 9
 baseline-on-migrate: false
 Hibernate ddl-auto: validate
 ```
 
-`JPA_DDL_AUTO=update` 같은 운영 override를 사용하지 않습니다. 이미 적용된 `V1`~`V7` migration은 수정하지 않고, 다음 스키마 변경은 `V8__...` 이상의 새 migration으로 추가합니다. 상세 기준은 `docs/DB_MIGRATION.md`를 참고합니다.
+`JPA_DDL_AUTO=update` 같은 운영 override를 사용하지 않습니다. 이미 적용된 `V1`~`V9` migration은 수정하지 않고, 다음 스키마 변경은 `V10__...` 이상의 새 migration으로 추가합니다. 상세 기준은 `docs/DB_MIGRATION.md`를 참고합니다.
 
 ### Render health check
 
@@ -116,6 +117,17 @@ VITE_GOOGLE_CLIENT_ID=<Google OAuth Web Client ID>
 ```
 
 `VITE_*` 값은 브라우저 번들에 포함됩니다. **비밀번호, API secret, JWT secret은 절대 VITE 변수에 넣지 않습니다.**
+
+`TRUSTED_PROXY_SECRET`은 `VITE_` 접두사 없이 Vercel Project Environment에만 설정합니다. 브라우저 번들에는 포함되지 않고 `vercel.json`의 `/api/*` route가 Render로 보내는 요청 헤더(`X-Tardis-Proxy-Secret`)로만 주입됩니다.
+
+### Trusted proxy 활성화 순서
+
+Render에 secret을 먼저 넣으면 아직 헤더를 보내지 않는 Vercel 경유 요청이 모두 같은 IP로 취급되어 rate limit이 공유됩니다. 반드시 아래 순서를 지킵니다.
+
+1. 충분히 긴 무작위 값을 생성해 Vercel Project Environment(Production)에 `TRUSTED_PROXY_SECRET`으로 저장
+2. 사용자 승인 후 Vercel Production 배포로 현재 `vercel.json` 반영
+3. Render Environment에 같은 값을 `TRUSTED_PROXY_SECRET`으로 저장하고 재배포
+4. 운영에서 rate limit/게시판 IP 기록이 사용자별로 분리되는지 확인
 
 Google OAuth Web Client ID는 공개 식별자이므로 프론트와 백엔드가 같은 값을 사용해도 됩니다. Google Cloud Console의 해당 Web Client에는 운영 Origin으로 `https://tardis-neon.vercel.app`을 등록합니다.
 

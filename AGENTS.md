@@ -98,7 +98,7 @@ GitHub commit/PR
 
 ```text
 Flyway: enabled
-Schema version: 7
+Schema version: 9
 baseline-on-migrate: false
 Hibernate ddl-auto: validate
 Database: Aiven MySQL 8.4.x / defaultdb
@@ -106,8 +106,8 @@ Database: Aiven MySQL 8.4.x / defaultdb
 
 핵심 규칙:
 
-- 이미 운영 적용된 `V1`~`V7` migration은 수정하지 않습니다.
-- 다음 스키마 변경은 반드시 `V8__...` 이상의 새 migration으로 추가합니다.
+- 이미 운영 적용된 `V1`~`V9` migration은 수정하지 않습니다.
+- 다음 스키마 변경은 반드시 `V10__...` 이상의 새 migration으로 추가합니다.
 - 운영에서 `ddl-auto=update/create/create-drop`를 사용하지 않습니다.
 - migration에 실제 사용자 데이터나 비밀값을 하드코딩하지 않습니다.
 - 타입 축소, 컬럼 삭제, 대량 rewrite는 백업/lock 영향 검토 없이 수행하지 않습니다.
@@ -119,15 +119,11 @@ Database: Aiven MySQL 8.4.x / defaultdb
 - Portfolio average price / TradeHistory / Bookmark 시장 가격: `DECIMAL(19,6)`
 - 현금 센트 반올림은 `MoneyMath.roundCents`의 HALF_UP 규칙을 사용합니다.
 
-### member.email UNIQUE 보류
+### V8 / V9 적용 이력
 
-운영 데이터 aggregate audit에서 case-insensitive 중복 이메일 그룹이 존재합니다.
-
-- 기존 계정을 자동 삭제/병합하지 않습니다.
-- 어느 계정의 이메일을 바꿀지 시스템이 임의로 결정하지 않습니다.
-- 사용자 데이터 정리 후 `duplicateGroups=0`을 다시 확인한 다음 별도 `V8+` migration으로 UNIQUE를 검토합니다.
-
-관련 추적: GitHub issue `#104`.
+- `V8`: case-insensitive 중복 이메일을 비파괴적으로 격리한 뒤 `member.email` UNIQUE(`uk_member_email`) 적용. issue `#104` 종료.
+- `V9`: 사용자 명시 승인(2026-09-28)에 따른 1회성 운영 데이터 전체 초기화. 스키마와 Flyway history는 유지.
+- `V9`는 이미 운영에 적용된 1회성 migration입니다. 같은 성격의 데이터 삭제 migration을 다시 추가하지 않습니다. 데이터 삭제/초기화는 §13에 따라 매번 별도 사용자 승인이 필요합니다.
 
 ## 7. 인증 / 프론트 규칙
 
@@ -135,16 +131,29 @@ Database: Aiven MySQL 8.4.x / defaultdb
 - 보호 API는 서버가 JWT 사용자 정보만 신뢰합니다.
 - 프론트의 보호 GET은 중앙 `authFetch` refresh 경로를 거치게 합니다.
 - 401 후 POST/PATCH/DELETE 같은 변경 요청을 자동 재실행하지 않습니다.
-- 현재 `Watchlist.tsx`, `StockPage.tsx`, `Dashboard.tsx`의 일부 보호 GET 앞에 access-token 선행 차단이 남아 있으며 issue `#79`에서 추적합니다.
-- 이 수정 때문에 20~50KB TSX 파일 전체를 위험하게 다시 쓰지 않습니다.
+- 보호 GET 앞의 access-token 선행 차단은 제거되었습니다(issue `#79` 종료). 새 보호 GET을 추가할 때도 선행 차단을 다시 넣지 않습니다.
+- 20~50KB TSX 파일 전체를 위험하게 다시 쓰지 않습니다.
+- `@Transactional` 경로에서 예외를 catch해 오류 응답을 반환할 때는 `TransactionRollbackSupport.markRollbackOnlyIfActive()`로 부분 변경을 롤백합니다.
+- 단, 이메일 인증번호 실패 시도 횟수/만료 코드 정리처럼 **실패해도 커밋되어야 하는 기록**은 `VerificationCodeRejectedException` / `VerificationCodeExpiredException`으로 던지고 `noRollbackFor`로 커밋합니다. 이 기록이 롤백되면 5회 입력 제한이 무력화됩니다.
 
 ## 8. 프록시 / 클라이언트 IP 규칙
 
 `X-Forwarded-For`를 단순히 첫 값/마지막 값으로 신뢰하도록 바꾸지 않습니다.
 
-Vercel -> Render trusted proxy 경계를 검증한 뒤에만 client IP 해석 정책을 변경합니다. Cloudflare를 아직 운영 경로에 넣지 않았으므로 Cloudflare 전용 가정을 미리 하드코딩하지 않습니다.
+현재 준비된 구조(issue `#78`, 아직 운영 비활성):
 
-관련 추적: GitHub issue `#78`.
+- `Frontend/vercel.json`의 `/api/*` route가 Vercel 환경변수 `TRUSTED_PROXY_SECRET`을 `X-Tardis-Proxy-Secret` 요청 헤더로 주입합니다.
+- 백엔드 `TrustedProxyHeaderFilter`는 Render 환경변수 `TRUSTED_PROXY_SECRET`이 **비어 있으면 아무 일도 하지 않습니다.**
+- 값이 설정되면 secret이 일치하는 요청만 `X-Forwarded-For` 첫 값을 신뢰하고, 그 외 직접 요청은 `CF-Connecting-IP`(Render edge) 또는 socket 주소를 사용합니다.
+
+활성화 순서(순서가 바뀌면 모든 Vercel 경유 사용자가 같은 IP로 rate limit됩니다):
+
+1. Vercel Project Environment에 `TRUSTED_PROXY_SECRET` 설정
+2. 사용자 승인 후 Vercel Production 배포(새 `vercel.json` 반영)
+3. Render에 같은 `TRUSTED_PROXY_SECRET` 설정 후 재배포
+4. 운영에서 client IP 해석과 rate limit 동작 확인
+
+Render edge의 `CF-Connecting-IP`가 외부 요청에서 덮어써지는지는 아직 운영 검증 전입니다. 그 외 Cloudflare 전용 가정은 추가하지 않습니다.
 
 ## 9. 비밀정보 / 보안
 
@@ -198,9 +207,7 @@ Java 기준은 21입니다.
 
 새 세션에서 무작정 재설계하지 말고 아래 추적 이슈를 먼저 확인합니다.
 
-- `#104` — 기존 중복 이메일 정리 후 `member.email UNIQUE`
-- `#79` — 보호 GET의 access-token 선행 차단 제거
-- `#78` — Vercel -> Render trusted proxy / client IP 경계
+- `#78` — Vercel -> Render trusted proxy / client IP 경계. 코드 준비 완료, 위 §8 순서로 활성화 필요
 - `#76` — Vercel Production rollout / CSP 후속. **사용자 승인 필요**
 - `#26` — Render Health Check Path / Build Filter 등 Dashboard 수동 설정
 
