@@ -18,3 +18,7 @@ Backend/src/main/resources/application-secret.yml
 .idea/
 
 Backend/src/main/resources/application-api.yaml
+
+# Claude Code local-only state
+.claude/worktrees/
+.claude/settings.local.json
