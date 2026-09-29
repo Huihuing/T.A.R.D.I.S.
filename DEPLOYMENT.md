@@ -67,6 +67,7 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 | `DB_IDLE_TIMEOUT_MS` | `300000` | 최소 연결 수를 초과한 유휴 연결 정리 시간 |
 | `DB_MAX_LIFETIME_MS` | `1500000` | 풀 연결 최대 수명 |
 | `DB_KEEPALIVE_TIME_MS` | `120000` | 장시간 유휴 연결 keepalive 주기 |
+| `EMAIL_CODE_DAILY_SEND_LIMIT` | `10` | 이메일 주소당 24시간 인증번호 발송 한도(회원가입·비밀번호 재설정·계정 보안 합산) |
 | `TRUSTED_PROXY_SECRET` | 빈 값 | Vercel → Render 신뢰 프록시 secret. 비어 있으면 `TrustedProxyHeaderFilter` 비활성. 아래 활성화 순서 참고 |
 
 비밀값은 Render Environment에만 저장하고 GitHub에는 입력하지 않습니다.
@@ -75,12 +76,12 @@ Render Web Service는 저장소 루트의 `Dockerfile`을 사용합니다.
 
 ```text
 Flyway: enabled
-Flyway schema version: 9
+Flyway schema version: 10
 baseline-on-migrate: false
 Hibernate ddl-auto: validate
 ```
 
-`JPA_DDL_AUTO=update` 같은 운영 override를 사용하지 않습니다. 이미 적용된 `V1`~`V9` migration은 수정하지 않고, 다음 스키마 변경은 `V10__...` 이상의 새 migration으로 추가합니다. 상세 기준은 `docs/DB_MIGRATION.md`를 참고합니다.
+`JPA_DDL_AUTO=update` 같은 운영 override를 사용하지 않습니다. 이미 적용된 `V1`~`V10` migration은 수정하지 않고, 다음 스키마 변경은 `V11__...` 이상의 새 migration으로 추가합니다. 상세 기준은 `docs/DB_MIGRATION.md`를 참고합니다.
 
 ### Render health check
 
@@ -186,6 +187,7 @@ Google로 새로 생성된 SNS 전용 계정은 별도의 이메일 인증이나
 - 인증번호 유효시간: 10분
 - 잘못된 인증번호 입력 제한: 5회
 - 재발송 제한: 1분
+- 이메일 주소당 발송 한도: 24시간 동안 회원가입·비밀번호 재설정·계정 보안 인증번호 합산 10회(`EMAIL_CODE_DAILY_SEND_LIMIT`). 초과 시 회원가입/계정 보안은 429, 비밀번호 재설정은 계정 존재 여부 노출 방지를 위해 동일한 성공 응답
 - 비밀번호 재설정용 코드와 계정 보안용 코드는 목적이 분리되어 서로 교차 사용할 수 없음
 - 비밀번호/PIN/Google 연결 변경은 `SECURITY` 알림으로 기록
 

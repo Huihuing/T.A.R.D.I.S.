@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.security.JwtTokenProvider;
+import com.tardistock.backend.service.EmailCodeSendLimitException;
 import com.tardistock.backend.service.EmailVerificationService;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
@@ -81,6 +82,9 @@ public class AuthController {
                     "status", "SUCCESS",
                     "message", "인증번호를 이메일로 전송했습니다."
             ));
+        } catch (EmailCodeSendLimitException e) {
+            return ResponseEntity.status(429).body(
+                    Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));
