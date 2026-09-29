@@ -8,7 +8,7 @@ T.A.R.D.I.S. 운영 Aiven MySQL은 2026-09-28 Hibernate `ddl-auto=update` 중심
 
 ```text
 Flyway: enabled
-Flyway schema version: 9
+Flyway schema version: 10
 baseline-on-migrate: false
 Hibernate ddl-auto: validate
 Database: Aiven MySQL 8.4.8 / defaultdb
@@ -42,7 +42,7 @@ Aiven 관리 커넥터에는 MySQL 임의 SQL 실행 기능이 없어, Render �
 
 실제 DDL을 기준으로 `V1__baseline.sql`을 작성했습니다. V1은 Flyway 도입 직전 운영 구조를 그대로 기록하며 당시 존재하던 legacy 제약도 의도적으로 보존합니다.
 
-기존 운영 DB는 schema history table 생성 후 version 1로 baseline했고, 이후 V2~V9을 순차 적용합니다.
+기존 운영 DB는 schema history table 생성 후 version 1로 baseline했고, 이후 V2~V10을 순차 적용합니다.
 
 ## 적용된 migration
 
@@ -155,6 +155,15 @@ V8 처리 방식:
 
 V9은 이미 적용된 1회성 작업입니다. 앞으로 데이터 삭제/초기화가 필요하면 새 migration을 만들기 전에 반드시 사용자 승인과 Aiven 백업을 먼저 확인합니다.
 
+### V10: 이메일 인증번호 발송 한도
+
+인증번호 재발송은 해당 코드의 실패 시도 횟수를 0으로 되돌리므로, 재발송을 반복하면 5회 입력 제한을 우회해 계속 추측할 수 있었습니다. 이를 막기 위해 이메일 주소당 24시간 발송 횟수를 기록하는 테이블을 추가했습니다.
+
+- 새 테이블 `email_code_send_quota(email UNIQUE, send_count, window_started_at)`
+- 회원가입 인증·비밀번호 재설정·계정 보안 인증번호가 한도를 공유
+- `password_reset_code`는 만료/횟수 초과 시 행이 삭제되므로 한도를 별도 테이블에 보관
+- 추가 전용 migration이며 기존 테이블/행은 변경하지 않음
+
 ## 금액/가격 정밀도 정책
 
 현재 persistence 기준은 다음과 같습니다.
@@ -206,8 +215,8 @@ Repository 조회 패턴상 추가 검토 후보:
 
 ## 앞으로의 migration 규칙
 
-1. 운영에 적용된 V1~V9 파일은 수정하지 않습니다.
-2. 모든 DB 스키마 변경은 `V10__...` 이상의 새 migration으로 추가합니다.
+1. 운영에 적용된 V1~V10 파일은 수정하지 않습니다.
+2. 모든 DB 스키마 변경은 `V11__...` 이상의 새 migration으로 추가합니다.
 3. 운영에서 Hibernate `ddl-auto=update/create/create-drop`를 사용하지 않습니다.
 4. migration 적용 전 데이터 손실 가능성과 lock 시간을 검토합니다.
 5. 타입 축소, 컬럼 삭제, 대량 데이터 재작성은 Aiven 백업과 별도 검증 후 진행합니다.

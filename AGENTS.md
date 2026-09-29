@@ -98,7 +98,7 @@ GitHub commit/PR
 
 ```text
 Flyway: enabled
-Schema version: 9
+Schema version: 10
 baseline-on-migrate: false
 Hibernate ddl-auto: validate
 Database: Aiven MySQL 8.4.x / defaultdb
@@ -106,8 +106,8 @@ Database: Aiven MySQL 8.4.x / defaultdb
 
 핵심 규칙:
 
-- 이미 운영 적용된 `V1`~`V9` migration은 수정하지 않습니다.
-- 다음 스키마 변경은 반드시 `V10__...` 이상의 새 migration으로 추가합니다.
+- 이미 운영 적용된 `V1`~`V10` migration은 수정하지 않습니다.
+- 다음 스키마 변경은 반드시 `V11__...` 이상의 새 migration으로 추가합니다.
 - 운영에서 `ddl-auto=update/create/create-drop`를 사용하지 않습니다.
 - migration에 실제 사용자 데이터나 비밀값을 하드코딩하지 않습니다.
 - 타입 축소, 컬럼 삭제, 대량 rewrite는 백업/lock 영향 검토 없이 수행하지 않습니다.
@@ -119,11 +119,12 @@ Database: Aiven MySQL 8.4.x / defaultdb
 - Portfolio average price / TradeHistory / Bookmark 시장 가격: `DECIMAL(19,6)`
 - 현금 센트 반올림은 `MoneyMath.roundCents`의 HALF_UP 규칙을 사용합니다.
 
-### V8 / V9 적용 이력
+### V8 ~ V10 적용 이력
 
 - `V8`: case-insensitive 중복 이메일을 비파괴적으로 격리한 뒤 `member.email` UNIQUE(`uk_member_email`) 적용. issue `#104` 종료.
 - `V9`: 사용자 명시 승인(2026-09-28)에 따른 1회성 운영 데이터 전체 초기화. 스키마와 Flyway history는 유지.
 - `V9`는 이미 운영에 적용된 1회성 migration입니다. 같은 성격의 데이터 삭제 migration을 다시 추가하지 않습니다. 데이터 삭제/초기화는 §13에 따라 매번 별도 사용자 승인이 필요합니다.
+- `V10`: 이메일 인증번호 발송 한도 테이블 `email_code_send_quota` 추가(추가 전용).
 
 ## 7. 인증 / 프론트 규칙
 
@@ -135,6 +136,7 @@ Database: Aiven MySQL 8.4.x / defaultdb
 - 20~50KB TSX 파일 전체를 위험하게 다시 쓰지 않습니다.
 - `@Transactional` 경로에서 예외를 catch해 오류 응답을 반환할 때는 `TransactionRollbackSupport.markRollbackOnlyIfActive()`로 부분 변경을 롤백합니다.
 - 단, 이메일 인증번호 실패 시도 횟수/만료 코드 정리처럼 **실패해도 커밋되어야 하는 기록**은 `VerificationCodeRejectedException` / `VerificationCodeExpiredException`으로 던지고 `noRollbackFor`로 커밋합니다. 이 기록이 롤백되면 5회 입력 제한이 무력화됩니다.
+- 인증번호 재발송은 attempts를 0으로 되돌리므로, 새 인증번호 발송 경로를 추가할 때는 반드시 `EmailCodeSendQuotaService.tryConsume`(이메일당 24시간 한도)을 거칩니다.
 
 ## 8. 프록시 / 클라이언트 IP 규칙
 

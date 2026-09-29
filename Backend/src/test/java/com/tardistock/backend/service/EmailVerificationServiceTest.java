@@ -35,7 +35,8 @@ class EmailVerificationServiceTest {
                         members,
                         encoder,
                         sender,
-                        "noreply@example.com"
+                        "noreply@example.com",
+                        SendQuotaTestSupport.unlimited()
                 );
 
         service.sendCode(" Alice@Example.COM ");
@@ -69,7 +70,8 @@ class EmailVerificationServiceTest {
                         members,
                         encoder,
                         sender,
-                        "noreply@example.com"
+                        "noreply@example.com",
+                        SendQuotaTestSupport.unlimited()
                 );
 
         IllegalStateException error = assertThrows(
@@ -100,7 +102,8 @@ class EmailVerificationServiceTest {
                         members,
                         encoder,
                         sender,
-                        "noreply@example.com"
+                        "noreply@example.com",
+                        SendQuotaTestSupport.unlimited()
                 );
 
         assertFalse(service.consumeVerified("alice@example.com"));

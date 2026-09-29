@@ -4,6 +4,7 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
+import com.tardistock.backend.service.EmailCodeSendLimitException;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
@@ -170,6 +171,9 @@ public class AccountController {
                     "message",
                     "계정 이메일로 6자리 보안 인증번호를 전송했습니다."
             ));
+        } catch (EmailCodeSendLimitException e) {
+            return ResponseEntity.status(429).body(
+                    Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(
                     Map.of("message", e.getMessage()));

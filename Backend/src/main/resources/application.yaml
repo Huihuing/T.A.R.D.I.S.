@@ -106,6 +106,10 @@ limit-order:
   initial-delay-ms: ${LIMIT_ORDER_INITIAL_DELAY_MS:90000}
 
 
+email-code:
+  daily-send-limit: ${EMAIL_CODE_DAILY_SEND_LIMIT:10}
+
+
 refresh-token:
   ttl-days: ${REFRESH_TOKEN_TTL_DAYS:30}
   cookie-secure: ${REFRESH_COOKIE_SECURE:true}

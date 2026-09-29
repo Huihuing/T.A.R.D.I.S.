@@ -9,13 +9,13 @@
 현재 운영 기준:
 
 - Database: Aiven MySQL 8.4.8 / `defaultdb`
-- Flyway schema version: `9`
+- Flyway schema version: `10`
 - `spring.flyway.enabled=true`
 - `spring.flyway.baseline-on-migrate=false`
 - `spring.jpa.hibernate.ddl-auto=validate`
 - Render 배포에서 backend tests + `bootJar` 실행 후 새 인스턴스를 기동
 
-운영 DB는 version 1로 baseline된 뒤 V2~V9을 순차 적용합니다. V8에서 `member.email` UNIQUE 불변조건을 확립했고, V9은 사용자 명시 승인에 따라 기존 테스트/운영성 데이터를 전부 비우고 깨끗한 초기 상태로 되돌리는 1회성 데이터 reset migration입니다. 스키마와 Flyway history는 유지합니다.
+운영 DB는 version 1로 baseline된 뒤 V2~V10을 순차 적용합니다. V8에서 `member.email` UNIQUE 불변조건을 확립했고, V9은 사용자 명시 승인에 따라 기존 테스트/운영성 데이터를 전부 비우고 깨끗한 초기 상태로 되돌리는 1회성 데이터 reset migration입니다. 스키마와 Flyway history는 유지합니다. V10은 이메일 인증번호 발송 한도 테이블을 추가합니다.
 
 ## 적용된 migration
 
@@ -53,12 +53,16 @@
 
 Java 엔티티의 `member.email` 저장 필드는 DB UNIQUE 계약과 동일하게 유지합니다. 일반 회원가입은 사전 case-insensitive 중복 검사와 DB UNIQUE를 함께 사용하며, 동시 요청으로 DB 무결성 충돌이 발생하면 API는 409 Conflict로 처리합니다.
 
+- `V10__email_code_send_quota.sql`
+  - 이메일 주소당 24시간 인증번호 발송 횟수를 기록하는 `email_code_send_quota` 테이블 추가
+  - `email` UNIQUE(`uk_email_code_send_quota_email`), 기존 테이블/행 변경 없음
+
 관리자 권한은 DB role 컬럼이 아니라 Render의 `admin.usernames` 설정과 로그인 username 일치 여부로 판정하므로, V9 reset 후 해당 username으로 새 계정을 정상 가입하면 다시 관리자 권한을 사용할 수 있습니다.
 
 ## 규칙
 
 - 운영에 적용된 기존 migration 파일은 수정하지 않습니다. Flyway checksum이 이미 운영 이력에 기록되어 있습니다.
-- 이후 스키마 변경은 반드시 `V10__...`처럼 새 migration으로 추가합니다.
+- 이후 스키마 변경은 반드시 `V11__...`처럼 새 migration으로 추가합니다.
 - Hibernate `ddl-auto=update/create/create-drop`로 운영 스키마를 변경하지 않습니다.
 - migration에는 비밀정보나 실제 사용자 데이터를 포함하지 않습니다.
 - 파괴적 변경, 타입 축소, 대량 데이터 변환은 사용자 승인과 백업/검증 후 별도 migration으로 진행합니다.

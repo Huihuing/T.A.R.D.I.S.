@@ -30,18 +30,21 @@ public class EmailVerificationService {
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final String mailUsername;
+    private final EmailCodeSendQuotaService sendQuotaService;
 
     public EmailVerificationService(
             EmailVerificationRepository verificationRepository,
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
             JavaMailSender mailSender,
-            @Value("${spring.mail.username:}") String mailUsername) {
+            @Value("${spring.mail.username:}") String mailUsername,
+            EmailCodeSendQuotaService sendQuotaService) {
         this.verificationRepository = verificationRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
         this.mailUsername = mailUsername;
+        this.sendQuotaService = sendQuotaService;
     }
 
     @Transactional
@@ -64,6 +67,9 @@ public class EmailVerificationService {
                 && now.isBefore(verification.getLastSentAt().plusMinutes(1))) {
             throw new IllegalStateException(
                     "인증번호는 1분 후 다시 요청할 수 있습니다.");
+        }
+        if (!sendQuotaService.tryConsume(email, now)) {
+            throw new EmailCodeSendLimitException();
         }
 
         String code = String.format(

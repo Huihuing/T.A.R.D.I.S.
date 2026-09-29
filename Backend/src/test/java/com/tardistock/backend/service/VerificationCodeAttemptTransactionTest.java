@@ -132,7 +132,8 @@ class VerificationCodeAttemptTransactionTest {
                         memberRepository,
                         passwordEncoder,
                         mock(JavaMailSender.class),
-                        "sender@example.test"
+                        "sender@example.test",
+                        SendQuotaTestSupport.unlimited()
                 )
         );
 
@@ -154,7 +155,8 @@ class VerificationCodeAttemptTransactionTest {
                 mock(RefreshTokenService.class),
                 mock(NotificationService.class),
                 mock(JavaMailSender.class),
-                "sender@example.test"
+                "sender@example.test",
+                SendQuotaTestSupport.unlimited()
         ));
     }
 

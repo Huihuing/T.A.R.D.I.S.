@@ -35,6 +35,7 @@ public class PasswordResetService {
     private final NotificationService notificationService;
     private final JavaMailSender mailSender;
     private final String mailUsername;
+    private final EmailCodeSendQuotaService sendQuotaService;
 
     public PasswordResetService(
             PasswordResetCodeRepository resetRepository,
@@ -43,7 +44,8 @@ public class PasswordResetService {
             RefreshTokenService refreshTokenService,
             NotificationService notificationService,
             JavaMailSender mailSender,
-            @Value("${spring.mail.username:}") String mailUsername) {
+            @Value("${spring.mail.username:}") String mailUsername,
+            EmailCodeSendQuotaService sendQuotaService) {
         this.resetRepository = resetRepository;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
@@ -51,6 +53,7 @@ public class PasswordResetService {
         this.notificationService = notificationService;
         this.mailSender = mailSender;
         this.mailUsername = mailUsername;
+        this.sendQuotaService = sendQuotaService;
     }
 
     @Transactional
@@ -75,9 +78,12 @@ public class PasswordResetService {
                 .findByEmailForUpdate(email)
                 .orElseGet(() -> new PasswordResetCode(email));
 
-        // 재발송 쿨다운 중에는 동일한 성공 응답을 유지합니다.
+        // 재발송 쿨다운/발송 한도 초과 중에도 동일한 성공 응답을 유지합니다.
         if (reset.getLastSentAt() != null
                 && now.isBefore(reset.getLastSentAt().plusMinutes(1))) {
+            return;
+        }
+        if (!sendQuotaService.tryConsume(email, now)) {
             return;
         }
 
@@ -137,6 +143,9 @@ public class PasswordResetService {
         if (reset.getLastSentAt() != null
                 && now.isBefore(reset.getLastSentAt().plusMinutes(1))) {
             return;
+        }
+        if (!sendQuotaService.tryConsume(email, now)) {
+            throw new EmailCodeSendLimitException();
         }
 
         String code = String.format(

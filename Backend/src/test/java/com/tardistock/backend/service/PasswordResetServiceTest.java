@@ -63,7 +63,8 @@ class PasswordResetServiceTest {
                 refreshTokenService,
                 notificationService,
                 mailSender,
-                "sender@example.test"
+                "sender@example.test",
+                SendQuotaTestSupport.unlimited()
         );
 
         IllegalStateException error = assertThrows(
@@ -119,7 +120,8 @@ class PasswordResetServiceTest {
                 refreshTokenService,
                 notificationService,
                 mailSender,
-                "sender@example.test"
+                "sender@example.test",
+                SendQuotaTestSupport.unlimited()
         );
 
         service.consumeSecurityCode(member, "123456");
@@ -178,7 +180,8 @@ class PasswordResetServiceTest {
                 refreshTokenService,
                 notificationService,
                 mailSender,
-                "sender@example.test"
+                "sender@example.test",
+                SendQuotaTestSupport.unlimited()
         );
 
         service.resetPassword(

@@ -5,6 +5,7 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.entity.Wallet;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.repository.WalletRepository;
+import com.tardistock.backend.service.EmailCodeSendLimitException;
 import com.tardistock.backend.service.GoogleIdentityService;
 import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
@@ -529,6 +530,42 @@ class AccountControllerTest {
         // survive, otherwise the 5-attempt limit is never reached.
         assertEquals(1, transactions.commits());
         assertEquals(0, transactions.rollbacks());
+    }
+
+    @Test
+    void securityCodeSendLimitReturnsTooManyRequests() {
+        MemberRepository members = mock(MemberRepository.class);
+        PasswordResetService passwordReset = mock(PasswordResetService.class);
+
+        Member member = new Member(
+                "alice",
+                "encoded-password",
+                "Alice",
+                "alice@example.test",
+                "encoded-pin"
+        );
+
+        when(members.findByUsername("alice"))
+                .thenReturn(Optional.of(member));
+        doThrow(new EmailCodeSendLimitException())
+                .when(passwordReset)
+                .sendSecurityCode(member);
+
+        AccountController controller = new AccountController(
+                mock(WalletRepository.class),
+                members,
+                mock(PasswordEncoder.class),
+                mock(NotificationService.class),
+                mock(LedgerService.class),
+                mock(RefreshTokenService.class),
+                mock(GoogleIdentityService.class),
+                passwordReset
+        );
+
+        ResponseEntity<?> response =
+                controller.sendSecurityCode(auth("alice"));
+
+        assertEquals(429, response.getStatusCode().value());
     }
 
     private static UsernamePasswordAuthenticationToken auth(
