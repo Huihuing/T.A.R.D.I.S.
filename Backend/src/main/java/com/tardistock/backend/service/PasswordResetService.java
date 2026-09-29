@@ -23,6 +23,8 @@ public class PasswordResetService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String INVALID_REQUEST_MESSAGE =
+            "인증번호 또는 요청 정보가 올바르지 않습니다.";
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
@@ -170,7 +172,10 @@ public class PasswordResetService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {
+            VerificationCodeRejectedException.class,
+            VerificationCodeExpiredException.class
+    })
     public void consumeSecurityCode(
             Member member,
             String rawCode) {
@@ -194,13 +199,13 @@ public class PasswordResetService {
         if (reset.getExpiresAt() == null
                 || now.isAfter(reset.getExpiresAt())) {
             resetRepository.delete(reset);
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호가 만료되었습니다. 다시 요청해주세요.");
         }
 
         if (reset.getAttempts() >= 5) {
             resetRepository.delete(reset);
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호 입력 횟수를 초과했습니다. 다시 요청해주세요.");
         }
 
@@ -209,13 +214,17 @@ public class PasswordResetService {
                 code + ":ACCOUNT_SECURITY",
                 reset.getCodeHash())) {
             resetRepository.save(reset);
-            throw invalidRequest();
+            throw new VerificationCodeRejectedException(
+                    INVALID_REQUEST_MESSAGE);
         }
 
         resetRepository.delete(reset);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {
+            VerificationCodeRejectedException.class,
+            VerificationCodeExpiredException.class
+    })
     public void resetPassword(
             String rawEmail,
             String rawCode,
@@ -247,13 +256,13 @@ public class PasswordResetService {
         if (reset.getExpiresAt() == null
                 || now.isAfter(reset.getExpiresAt())) {
             resetRepository.delete(reset);
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호가 만료되었습니다. 다시 요청해주세요.");
         }
 
         if (reset.getAttempts() >= 5) {
             resetRepository.delete(reset);
-            throw new IllegalStateException(
+            throw new VerificationCodeExpiredException(
                     "인증번호 입력 횟수를 초과했습니다. 다시 요청해주세요.");
         }
 
@@ -262,7 +271,8 @@ public class PasswordResetService {
                 code + ":PASSWORD_RESET",
                 reset.getCodeHash())) {
             resetRepository.save(reset);
-            throw invalidRequest();
+            throw new VerificationCodeRejectedException(
+                    INVALID_REQUEST_MESSAGE);
         }
 
         member.setPassword(passwordEncoder.encode(newPassword));
@@ -290,7 +300,6 @@ public class PasswordResetService {
     }
 
     private IllegalArgumentException invalidRequest() {
-        return new IllegalArgumentException(
-                "인증번호 또는 요청 정보가 올바르지 않습니다.");
+        return new IllegalArgumentException(INVALID_REQUEST_MESSAGE);
     }
 }
