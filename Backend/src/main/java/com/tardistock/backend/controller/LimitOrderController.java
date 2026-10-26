@@ -1,20 +1,28 @@
 package com.tardistock.backend.controller;
 
 import com.tardistock.backend.service.LimitOrderService;
+import com.tardistock.backend.service.MutationRequestService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Locale;
+import java.math.BigDecimal;
+
+import static com.tardistock.backend.util.MoneyMath.roundCents;
 
 @RestController
 @RequestMapping("/api/limit-orders")
 public class LimitOrderController {
 
     private final LimitOrderService limitOrderService;
+    private final MutationRequestService mutationRequests;
 
-    public LimitOrderController(LimitOrderService limitOrderService) {
+    public LimitOrderController(LimitOrderService limitOrderService,
+                                MutationRequestService mutationRequests) {
         this.limitOrderService = limitOrderService;
+        this.mutationRequests = mutationRequests;
     }
 
     @GetMapping
@@ -32,6 +40,21 @@ public class LimitOrderController {
     }
 
     @PostMapping
+    public ResponseEntity<?> createRequest(@RequestBody Map<String, Object> request,
+            Authentication authentication,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key) {
+        String side = stringValue(request.get("side"));
+        String symbol = stringValue(request.get("symbol"));
+        Map<String, ?> semanticPayload = Map.of(
+                "side", side == null ? "" : side.trim().toUpperCase(Locale.ROOT),
+                "symbol", symbol == null ? "" : symbol.trim().toUpperCase(Locale.ROOT),
+                "amount", parseAmount(request.get("amount")),
+                "limitPrice", roundCents(BigDecimal.valueOf(parsePrice(request.get("limitPrice"))))
+                        .toPlainString());
+        return mutationRequests.execute(requireUsername(authentication), key, "LIMIT_ORDER_CREATE",
+                semanticPayload, () -> create(request, authentication));
+    }
+
     public ResponseEntity<?> create(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {

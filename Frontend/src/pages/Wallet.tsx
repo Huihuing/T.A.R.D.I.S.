@@ -1,10 +1,14 @@
 import { API_URL } from '../config';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Gift, Send, History } from 'lucide-react';
 import EconomyModal from '../components/EconomyModal';
 import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
 import { useBackendReadyRetry } from '../useBackendReadyRetry';
+import { mutationIntent } from '../mutationIntent';
+
+interface LedgerItem { id: number; description: string; type: string; amount: number; balanceAfter: number; createdAt: string; counterparty?: string; symbol?: string; }
+interface TransferReceipt { transactionId: number; transferredAt: string; fromUser: string; toUser: string; amount: number; newBalance: number; }
 
 export default function Wallet() {
     const [balance, setBalance] = useState<number>(0);
@@ -12,31 +16,39 @@ export default function Wallet() {
     const [targetUser, setTargetUser] = useState<string>('');
     const [accountPassword, setAccountPassword] = useState<string>('');
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
-    const [ledger, setLedger] = useState<any[]>([]);
-    const [lastReceipt, setLastReceipt] = useState<any | null>(null);
+    const [ledger, setLedger] = useState<LedgerItem[]>([]);
+    const [lastReceipt, setLastReceipt] = useState<TransferReceipt | null>(null);
     const [isTransferring, setIsTransferring] = useState(false);
+    const transferInFlight = useRef(false);
+    const [balanceError, setBalanceError] = useState('');
+    const [ledgerError, setLedgerError] = useState('');
+    const [hasBalance, setHasBalance] = useState(false);
 
-    const fetchBalance = () => {
+    const fetchBalance = useCallback(() => {
         authFetch(`${API_URL}/api/trade/balance`, { headers: getAuthHeaders() })
-            .then(res => res.ok ? res.text() : '0')
-            .then(bal => setBalance(Number(bal) || 0))
-            .catch(() => setBalance(0));
-    };
+            .then(res => { if (!res.ok) throw new Error('잔액 조회 실패'); return res.text(); })
+            .then(bal => {
+                if (!bal.trim() || !Number.isFinite(Number(bal))) throw new Error('잘못된 잔액 응답');
+                setBalance(Number(bal)); setHasBalance(true); setBalanceError('');
+            })
+            .catch(() => setBalanceError('잔액을 갱신하지 못했습니다. 이전 조회값이 있으면 유지합니다.'));
+    }, []);
 
-    const fetchLedger = () => {
+    const fetchLedger = useCallback(() => {
         authFetch(`${API_URL}/api/account/ledger`, { headers: getAuthHeaders() })
             .then(async res => {
-                const data = await res.json().catch(() => []);
-                return res.ok && Array.isArray(data) ? data : [];
+                const data = await res.json();
+                if (!res.ok || !Array.isArray(data)) throw new Error('원장 조회 실패');
+                return data;
             })
-            .then(setLedger)
-            .catch(() => setLedger([]));
-    };
+            .then(data => { setLedger(data); setLedgerError(''); })
+            .catch(() => setLedgerError('거래 원장을 갱신하지 못했습니다. 이전 조회값이 있으면 유지합니다.'));
+    }, []);
 
-    const refreshWalletData = () => {
+    const refreshWalletData = useCallback(() => {
         fetchBalance();
         fetchLedger();
-    };
+    }, [fetchBalance, fetchLedger]);
 
     const formatKstDateTime = (value: string) => {
         if (!value) return '';
@@ -57,21 +69,24 @@ export default function Wallet() {
 
     useEffect(() => {
         refreshWalletData();
-    }, []);
+    }, [refreshWalletData]);
 
     useBackendReadyRetry(refreshWalletData);
 
     const handleTransfer = async () => {
-        if (isTransferring) return;
-        if (!amount || amount <= 0) { notify('올바른 금액을 입력하세요.', 'warning'); return; }
+        if (transferInFlight.current) return;
+        if (!amount || !Number.isFinite(amount) || amount <= 0) { notify('올바른 금액을 입력하세요.', 'warning'); return; }
         if (!accountPassword) { notify('계좌 PIN을 입력해 주세요.', 'warning'); return; }
         if (!targetUser) { notify('송금 대상 유저명을 입력하세요.', 'warning'); return; }
 
+        transferInFlight.current = true;
         setIsTransferring(true);
         try {
-            const res = await authFetch(`${API_URL}/api/account/transfer`, {
+            const endpoint = `${API_URL}/api/account/transfer`;
+            const intent = await mutationIntent(endpoint, JSON.stringify({ toUser: targetUser, amount: Number(amount) }));
+            const res = await authFetch(endpoint, {
                 method: 'POST',
-                headers: getAuthHeaders(),
+                headers: { ...getAuthHeaders(), 'Idempotency-Key': intent.key },
                 body: JSON.stringify({
                     toUser: targetUser,
                     amount: Number(amount),
@@ -79,6 +94,7 @@ export default function Wallet() {
                 })
             });
             const data = await res.json();
+            intent.settle(res);
             if (res.ok && data.status === 'SUCCESS') {
                 setLastReceipt(data);
                 notify(
@@ -94,14 +110,16 @@ export default function Wallet() {
                 notify(data.message || '송금에 실패했습니다.', 'error');
             }
         } catch {
-            notify('서버와 통신 오류가 발생했습니다.', 'error');
+            notify('송금 응답을 확인하지 못했습니다. 원장을 확인하거나 같은 송금을 다시 시도해 주세요.', 'error');
         } finally {
+            transferInFlight.current = false;
             setIsTransferring(false);
         }
     };
 
     return (
         <div className="min-h-screen bg-[#0b1120] text-slate-200 p-6 md:p-8 font-sans">
+            {(balanceError || ledgerError) && <div role="alert" className="mb-4 p-3 rounded-xl bg-rose-500/10 text-rose-300 text-sm">{balanceError} {ledgerError}<button type="button" className="ml-3 underline" onClick={refreshWalletData}>다시 조회</button></div>}
             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400 mb-8 pb-4 border-b border-slate-800">
                 💳 My Wallet
             </h1>
@@ -110,7 +128,7 @@ export default function Wallet() {
                 <div className="bg-slate-800/50 p-8 rounded-3xl border border-slate-700/50 shadow-xl flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
                     <p className="text-slate-400 font-bold mb-2">총 보유 가상 현금 (Cash Balance)</p>
-                    <div className="text-5xl font-mono font-black text-white">${balance.toFixed(2)}</div>
+                    <div className="text-5xl font-mono font-black text-white">{hasBalance ? `$${balance.toFixed(2)}` : '조회 대기'}</div>
 
                     <button
                         onClick={() => setIsEconomyModalOpen(true)}
@@ -120,7 +138,7 @@ export default function Wallet() {
                         일일 출석 · 활동 보상 · 긴급 지원
                     </button>
 
-                    {balance < 100 && (
+                    {hasBalance && balance < 100 && (
                         <div
                             onClick={() => setIsEconomyModalOpen(true)}
                             className="mt-3 p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-between cursor-pointer hover:bg-rose-500/30 transition-colors"
@@ -134,7 +152,13 @@ export default function Wallet() {
                 <EconomyModal
                     isOpen={isEconomyModalOpen}
                     onClose={() => setIsEconomyModalOpen(false)}
-                    onBalanceUpdate={(newBal) => setBalance(newBal)}
+                    onBalanceUpdate={(newBal) => {
+                        if (!Number.isFinite(newBal) || newBal < 0) return;
+                        setBalance(newBal);
+                        setHasBalance(true);
+                        setBalanceError('');
+                        fetchLedger();
+                    }}
                     currentBalance={balance}
                 />
 
@@ -227,7 +251,7 @@ export default function Wallet() {
 
                 {ledger.length === 0 ? (
                     <p className="text-sm text-slate-500 py-6 text-center">
-                        아직 기록된 거래 내역이 없습니다.
+                        {ledgerError ? '거래 원장을 확인할 수 없습니다.' : '아직 기록된 거래 내역이 없습니다.'}
                     </p>
                 ) : (
                     <div className="flex flex-col gap-2">

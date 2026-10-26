@@ -10,7 +10,8 @@
   - Runtime: Docker
   - Single instance
   - Actuator probes: `/actuator/health/liveness`, `/actuator/health/readiness`
-  - Render Health Check Path: 현재 미설정(TCP check 상태)
+  - Render Health Check Path: `/actuator/health/readiness` (2026-10-26 API 조회 확인)
+  - Build Filters Included Paths: `Backend/**`, `Frontend/**`, `Dockerfile`, `.dockerignore` (설정 확인, 실제 deploy/skip 검증은 후속)
 - Database: Aiven MySQL 8.4
   - Service: `mysql-211993d1`
   - Cloud: DigitalOcean Bangalore (`do-blr`)
@@ -131,7 +132,8 @@ spring:
 - Health Check Path: `/actuator/health/readiness`
   - readiness는 Spring `readinessState`만 확인
   - 공유 외부 DB 장애가 Render의 실행 중 재시작 루프로 이어지지 않도록 DB는 단일 Render health check에서 제외
-  - DB 상태는 `/actuator/health` 또는 `/actuator/health/db`로 별도 관찰
+  - `/actuator/health`는 DB 외에 SMTP 등도 합산하므로 DOWN을 DB 장애로 단정하지 않음
+  - 2026-10-26 조회: readiness `200 UP`, 전체 health `503 DOWN`; Render 로그에서 SMTP 비밀번호 미지정으로 `MailHealthIndicator` 실패 확인
 - Auto Deploy: main
 - Environment secrets are managed in Render, not Git.
 - `SPRING_DATA_JPA_REPOSITORIES_BOOTSTRAP_MODE=lazy`
@@ -157,8 +159,8 @@ When this occurs:
 
 ## 다음 인프라 작업
 
-1. Render Dashboard에서 Health Check Path를 `/actuator/health/readiness`로 지정
-2. Render Build Filter를 검토해 문서-only 변경이 불필요한 backend deployment를 만들지 않도록 설정 가능한지 확인
+1. Render `MAIL_USERNAME`/`MAIL_PASSWORD`를 Secret 설정에서 복구하고 승인된 운영 반영 후 실제 메일 발송과 전체 health를 확인
+2. 설정된 Render Build Filters의 backend/frontend/Dockerfile deploy 및 docs-only skip을 다음 자연스러운 변경에서 확인
 3. 프론트 변경 묶음이 준비되고 사용자가 승인했을 때만 수동 Vercel Production deployment
 4. 최신 프론트에서 CSP Report-Only violation 수집
 5. 위반이 없거나 필요한 source가 정리된 뒤 enforced CSP 전환 검토

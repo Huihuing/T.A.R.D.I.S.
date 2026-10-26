@@ -175,6 +175,11 @@ Google 로그인은 백엔드의 `GOOGLE_CLIENT_ID`와 프론트 Vercel의
 `MAIL_USERNAME`, `MAIL_PASSWORD`를 설정합니다. 실제 비밀번호나 앱 비밀번호는
 GitHub에 커밋하지 않습니다.
 
+2026-10-26 운영 조회에서는 `MailHealthIndicator`가 SMTP 비밀번호 미지정으로 실패했습니다.
+Render Secret에서 유효한 자격증명을 설정하고 승인된 반영 후 실제 인증메일 발송을 확인해야 합니다.
+전체 `/actuator/health`는 SMTP도 합산하므로 `503 DOWN`만으로 DB 장애로 판단하지 않습니다.
+readiness probe에서 SMTP 실패를 숨기는 방식으로 이 문제를 우회하지 않습니다.
+
 Google로 새로 생성된 SNS 전용 계정은 별도의 이메일 인증이나 로컬 비밀번호
 재설정을 요구하지 않습니다.
 

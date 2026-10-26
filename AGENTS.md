@@ -79,7 +79,7 @@ cd Backend; .\gradlew.bat bootRun
 cd Frontend; npm install; npm run build
 ```
 
-로컬 비밀 설정은 `Backend/src/main/resources/application-api.example.yaml`을 복사한 `application-api.yaml`(Git 제외)을 사용합니다. 백엔드 테스트는 DB 없이 Mockito로 돌아가므로 Hibernate schema validate는 Render 배포에서 처음 확인됩니다.
+로컬 비밀 설정은 `Backend/src/main/resources/application-api.example.yaml`을 복사한 `application-api.yaml`(Git 제외)을 사용합니다. 일반 unit test는 DB 없이 실행합니다. `TARDIS_TEST_DB_*`를 지정하면 별도 로컬 MySQL의 Flyway/Hibernate 및 거래 동시성 통합 테스트도 실행합니다. 운영 DB를 테스트에 사용하지 않습니다. 상세 명령은 `docs/TRADE_INTEGRITY.md`를 봅니다.
 
 ## Development Rules
 
@@ -188,18 +188,19 @@ Claude Code용 정의는 `.claude/agents/`(ledger-reviewer, auth-community-revie
 
 ### Current
 
-- 진행 중인 코드 작업 없음
-- 최근 main 반영분의 Render 배포(Flyway migration 적용, Hibernate validate) 확인 필요
+- 거래 시세 신선도·정밀 계산·멱등성·Dashboard 요청 정리 코드가 작업 브랜치에서 검증됨. V11은 운영 미적용
+- 운영 main/Vercel/Render는 `123aea3`; readiness는 UP이나 SMTP 비밀번호 미지정으로 전체 health DOWN (2026-10-26 확인)
 
 ### Next
 
 - `#78` trusted proxy 활성화 — 코드 준비 완료, 위 프록시 규칙의 순서로 진행
 - `#76` Vercel Production 배포 후 CSP Report-Only 위반 확인 → 강제 전환 검토
-- `#26` Render Health Check Path(`/actuator/health/readiness`), Build Filter 설정
+- `#26` readiness 및 Build Filter 4개 경로 설정 확인 완료; 다음 자연스러운 변경에서 실제 deploy/skip 확인
+- Render SMTP 비밀값 복구와 실제 인증메일 발송 확인
 - Dependabot 프론트 의존성 PR은 Vercel 배포 묶음과 함께 처리
 - `Docker/docker-compose.yml`, `Data_Worker/`는 현재 구성과 맞지 않는 legacy — 유지/삭제 결정 필요
 
 ### Blocked
 
 - `#78`, `#76`: Vercel Production 배포에 사용자 승인 필요
-- `#26`: Render Dashboard 수동 설정 필요(자동화 권한 없음)
+- 운영 SMTP 복구: 사용자가 Render Secret에 유효한 메일 자격증명 설정 필요

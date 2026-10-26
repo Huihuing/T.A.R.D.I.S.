@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -179,13 +180,13 @@ public class EconomyService {
         economy.setLastCheckInDate(today);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(roundCents(wallet.getBalance() + reward));
+        wallet.setBalanceAmount(wallet.getBalanceAmount().add(BigDecimal.valueOf(reward)));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
                 "CHECK_IN_REWARD",
-                reward,
-                wallet.getBalance(),
+                BigDecimal.valueOf(reward),
+                wallet.getBalanceAmount(),
                 "출석 체크 보상"
         );
 
@@ -210,7 +211,7 @@ public class EconomyService {
         UserEconomy economy = getOrCreateEconomyForUpdate(member);
         LocalDateTime now = LocalDateTime.now(KST);
 
-        if (wallet.getBalance() >= 100.0) {
+        if (wallet.getBalanceAmount().compareTo(BigDecimal.valueOf(100)) >= 0) {
             throw new IllegalStateException(
                     "파산 구제 지원금은 보유 현금이 $100 미만일 때만 신청 가능합니다.");
         }
@@ -235,13 +236,13 @@ public class EconomyService {
         economy.setLastBankruptcyClaim(now);
         userEconomyRepository.save(economy);
 
-        wallet.setBalance(roundCents(wallet.getBalance() + validReward));
+        wallet.setBalanceAmount(wallet.getBalanceAmount().add(BigDecimal.valueOf(validReward)));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
                 "BANKRUPTCY_RELIEF",
-                validReward,
-                wallet.getBalance(),
+                BigDecimal.valueOf(validReward),
+                wallet.getBalanceAmount(),
                 "긴급 지원금"
         );
 
@@ -323,13 +324,13 @@ public class EconomyService {
         }
 
         userEconomyRepository.save(economy);
-        wallet.setBalance(roundCents(wallet.getBalance() + reward));
+        wallet.setBalanceAmount(wallet.getBalanceAmount().add(BigDecimal.valueOf(reward)));
         walletRepository.save(wallet);
         ledgerService.record(
                 member,
                 "QUEST_REWARD",
-                reward,
-                wallet.getBalance(),
+                BigDecimal.valueOf(reward),
+                wallet.getBalanceAmount(),
                 questName + " 보상"
         );
 

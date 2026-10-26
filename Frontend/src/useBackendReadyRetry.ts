@@ -1,11 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { BACKEND_READY_EVENT } from './backendWakeup';
 
 type BackendReadyRetry = () => void | Promise<void>;
 
 export function useBackendReadyRetry(retry: BackendReadyRetry) {
-  const retryRef = useRef(retry);
-  retryRef.current = retry;
+  const retryOnReady = useEffectEvent(retry);
 
   useEffect(() => {
     // Production read recovery is centralized in installBackendAwareFetch(),
@@ -18,7 +17,7 @@ export function useBackendReadyRetry(retry: BackendReadyRetry) {
     }
 
     const handleBackendReady = () => {
-      void retryRef.current();
+      void retryOnReady();
     };
 
     window.addEventListener(BACKEND_READY_EVENT, handleBackendReady);

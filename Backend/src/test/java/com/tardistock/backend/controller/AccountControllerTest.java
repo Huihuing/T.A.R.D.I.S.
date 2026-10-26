@@ -19,6 +19,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -71,8 +72,8 @@ class AccountControllerTest {
         when(ledger.record(
                 eq(sender),
                 eq("TRANSFER_OUT"),
-                eq(-750.0),
-                eq(4250.0),
+                eq(new BigDecimal("-750.00")),
+                eq(new BigDecimal("4250.00")),
                 eq("bob"),
                 isNull(),
                 anyString()

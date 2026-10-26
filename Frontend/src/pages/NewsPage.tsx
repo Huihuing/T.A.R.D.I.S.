@@ -35,7 +35,9 @@ export default function NewsPage() {
     };
 
     useEffect(() => {
-        void fetchNews(currentGlobalQuery, currentKoreaQuery);
+        let active = true;
+        queueMicrotask(() => { if (active) void fetchNews(currentGlobalQuery, currentKoreaQuery); });
+        return () => { active = false; };
     }, [currentGlobalQuery, currentKoreaQuery]);
 
     useBackendReadyRetry(() =>

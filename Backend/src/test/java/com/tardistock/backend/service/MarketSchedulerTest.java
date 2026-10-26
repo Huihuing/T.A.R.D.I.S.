@@ -1,11 +1,13 @@
 package com.tardistock.backend.service;
 
-import com.tardistock.backend.entity.LimitOrder;
 import com.tardistock.backend.entity.PriceAlert;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.function.DoubleSupplier;
+import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 class MarketSchedulerTest {
@@ -15,14 +17,10 @@ class MarketSchedulerTest {
         LimitOrderService orders = mock(LimitOrderService.class);
         FinnhubPriceService prices = mock(FinnhubPriceService.class);
 
-        LimitOrder first = mock(LimitOrder.class);
-        LimitOrder second = mock(LimitOrder.class);
-        when(first.getSymbol()).thenReturn("AAPL");
-        when(second.getSymbol()).thenReturn("MSFT");
-        when(orders.pendingBatch()).thenReturn(List.of(first, second));
-        when(prices.getPrice("AAPL")).thenReturn(100.0);
-        when(prices.getPrice("MSFT")).thenReturn(200.0);
-        when(orders.processSymbol("AAPL", 100.0))
+        when(orders.pendingSymbolsAfter("", 40)).thenReturn(List.of("AAPL", "MSFT"));
+        when(prices.getTradingPrice("AAPL")).thenReturn(100.0);
+        when(prices.getTradingPrice("MSFT")).thenReturn(200.0);
+        when(orders.processSymbol(eq("AAPL"), any(DoubleSupplier.class)))
                 .thenThrow(new IllegalStateException("db failure"));
 
         LimitOrderScheduler scheduler =
@@ -30,8 +28,44 @@ class MarketSchedulerTest {
 
         scheduler.processPendingOrders();
 
-        verify(orders).processSymbol("AAPL", 100.0);
-        verify(orders).processSymbol("MSFT", 200.0);
+        verify(orders).processSymbol(eq("AAPL"), any(DoubleSupplier.class));
+        verify(orders).processSymbol(eq("MSFT"), any(DoubleSupplier.class));
+    }
+
+    @Test
+    void nextRunReachesSymbolsBeyondFirstFortyEvenWhenPricesAreUnavailable() {
+        LimitOrderService orders = mock(LimitOrderService.class);
+        FinnhubPriceService prices = mock(FinnhubPriceService.class);
+        List<String> firstPage = IntStream.range(0, 40)
+                .mapToObj(i -> String.format("S%02d", i)).toList();
+        when(orders.pendingSymbolsAfter("", 40)).thenReturn(firstPage);
+        when(orders.pendingSymbolsAfter("S39", 40)).thenReturn(List.of("S40", "S41"));
+        when(orders.pendingSymbolsAfter("", 38)).thenReturn(firstPage.subList(0, 38));
+
+        LimitOrderScheduler scheduler = new LimitOrderScheduler(orders, prices);
+        scheduler.processPendingOrders();
+        scheduler.processPendingOrders();
+
+        verify(prices).getTradingPrice("S40");
+        verify(prices).getTradingPrice("S41");
+        verify(prices, times(80)).getTradingPrice(anyString());
+        verify(orders, never()).processSymbol(anyString(), any(DoubleSupplier.class));
+    }
+
+    @Test
+    void wrappedSmallSymbolSetIsNotScannedTwiceInOneRun() {
+        LimitOrderService orders = mock(LimitOrderService.class);
+        FinnhubPriceService prices = mock(FinnhubPriceService.class);
+        when(orders.pendingSymbolsAfter("", 40)).thenReturn(List.of("AAPL", "MSFT"));
+        when(orders.pendingSymbolsAfter("MSFT", 40)).thenReturn(List.of());
+
+        LimitOrderScheduler scheduler = new LimitOrderScheduler(orders, prices);
+        scheduler.processPendingOrders();
+        scheduler.processPendingOrders();
+
+        verify(prices, times(2)).getTradingPrice("AAPL");
+        verify(prices, times(2)).getTradingPrice("MSFT");
+        verify(prices, never()).getPrice(anyString());
     }
 
     @Test

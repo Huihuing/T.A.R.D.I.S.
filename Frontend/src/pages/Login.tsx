@@ -1,7 +1,7 @@
 import { API_URL } from '../config';
 import { storeAccessToken } from '../auth';
 import { notify } from '../uiFeedback';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
 
@@ -38,7 +38,7 @@ export default function Login() {
     const googleClientId =
         import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
-    const finishLogin = (data: any) => {
+    const finishLogin = useCallback((data: { token: string; username?: string; dailyReward?: boolean; needsPinSetup?: boolean }) => {
         storeAccessToken(data.token);
         localStorage.setItem(
             'username',
@@ -60,9 +60,9 @@ export default function Login() {
 
         localStorage.removeItem('needsPinSetup');
         navigate('/dashboard');
-    };
+    }, [navigate, username]);
 
-    const handleGoogleCredential = async (
+    const handleGoogleCredential = useCallback(async (
         response: GoogleCredentialResponse
     ) => {
         if (!response.credential) {
@@ -91,7 +91,7 @@ export default function Login() {
         } finally {
             setIsGoogleLoading(false);
         }
-    };
+    }, [finishLogin]);
 
     useEffect(() => {
         if (!googleClientId || !googleButtonRef.current) return;
@@ -139,7 +139,7 @@ export default function Login() {
         return () => {
             script?.removeEventListener('load', initializeGoogle);
         };
-    }, [googleClientId]);
+    }, [googleClientId, handleGoogleCredential]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();

@@ -10,6 +10,8 @@ import com.tardistock.backend.service.LedgerService;
 import com.tardistock.backend.service.NotificationService;
 import com.tardistock.backend.service.PasswordResetService;
 import com.tardistock.backend.service.RefreshTokenService;
+import com.tardistock.backend.service.MutationRequestService;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.tardistock.backend.service.VerificationCodeExpiredException;
 import com.tardistock.backend.service.VerificationCodeRejectedException;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -40,6 +43,12 @@ public class AccountController {
     private final RefreshTokenService refreshTokenService;
     private final GoogleIdentityService googleIdentityService;
     private final PasswordResetService passwordResetService;
+    private MutationRequestService mutationRequests;
+
+    @Autowired
+    public void setMutationRequestService(MutationRequestService mutationRequests) {
+        this.mutationRequests = mutationRequests;
+    }
 
     public AccountController(
             WalletRepository walletRepository,
@@ -574,6 +583,15 @@ public class AccountController {
     }
 
     @PostMapping("/transfer")
+    public ResponseEntity<?> transferRequest(@RequestBody Map<String, Object> request,
+            Authentication authentication,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key) {
+        return mutationRequests.execute(requireUsername(authentication), key, "TRANSFER",
+                Map.of("toUser", String.valueOf(request.get("toUser")).trim(),
+                        "amount", parsePositiveAmount(request.get("amount")).toPlainString()),
+                () -> transfer(request, authentication));
+    }
+
     @Transactional
     public ResponseEntity<?> transfer(
             @RequestBody Map<String, Object> request,
@@ -587,7 +605,7 @@ public class AccountController {
                     request.get("accountPassword") == null
                             ? null
                             : request.get("accountPassword").toString();
-            double amount =
+            BigDecimal amount =
                     parsePositiveAmount(request.get("amount"));
 
             if (toUsername == null || toUsername.isBlank()) {
@@ -599,6 +617,11 @@ public class AccountController {
                         "message", "본인에게 송금할 수 없습니다."));
             }
 
+            // Match every other balance mutation's member -> wallet lock order.
+            // Acquire both members in the same order for opposite-direction transfers.
+            for (String lockUsername : java.util.stream.Stream.of(fromUsername, toUsername).sorted().toList()) {
+                memberRepository.findByUsernameForUpdate(lockUsername);
+            }
             List<Wallet> lockedWallets =
                     walletRepository.findAllForUpdateByUsernames(
                             List.of(fromUsername, toUsername));
@@ -636,15 +659,13 @@ public class AccountController {
                 return ResponseEntity.badRequest().body(Map.of(
                         "message", "계좌 비밀번호가 일치하지 않습니다."));
             }
-            if (fromWallet.getBalance() < amount) {
+            if (fromWallet.getBalanceAmount().compareTo(amount) < 0) {
                 return ResponseEntity.badRequest().body(Map.of(
                         "message", "잔고가 부족합니다."));
             }
 
-            double newFromBalance =
-                    roundCents(fromWallet.getBalance() - amount);
-            double newToBalance =
-                    roundCents(toWallet.getBalance() + amount);
+            BigDecimal newFromBalance = fromWallet.getBalanceAmount().subtract(amount);
+            BigDecimal newToBalance = toWallet.getBalanceAmount().add(amount);
             if (!fitsCents(newFromBalance)
                     || !fitsCents(newToBalance)) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -652,16 +673,16 @@ public class AccountController {
                 ));
             }
 
-            fromWallet.setBalance(newFromBalance);
-            toWallet.setBalance(newToBalance);
+            fromWallet.setBalanceAmount(newFromBalance);
+            toWallet.setBalanceAmount(newToBalance);
             walletRepository.save(fromWallet);
             walletRepository.save(toWallet);
 
             var outgoingEntry = ledgerService.record(
                     fromWallet.getMember(),
                     "TRANSFER_OUT",
-                    -amount,
-                    fromWallet.getBalance(),
+                    amount.negate(),
+                    fromWallet.getBalanceAmount(),
                     toUsername,
                     null,
                     toUsername + "님에게 송금"
@@ -670,7 +691,7 @@ public class AccountController {
                     toWallet.getMember(),
                     "TRANSFER_IN",
                     amount,
-                    toWallet.getBalance(),
+                    toWallet.getBalanceAmount(),
                     fromUsername,
                     null,
                     fromUsername + "님에게서 송금 수신"
@@ -691,7 +712,7 @@ public class AccountController {
                     "transactionId", outgoingEntry.getId(),
                     "fromUser", fromUsername,
                     "toUser", toUsername,
-                    "amount", amount,
+                    "amount", amount.doubleValue(),
                     "transferredAt", outgoingEntry.getCreatedAt().toString(),
                     "newBalance", fromWallet.getBalance()
             ));
@@ -719,22 +740,20 @@ public class AccountController {
         return authentication.getName();
     }
 
-    private double parsePositiveAmount(Object value) {
+    private BigDecimal parsePositiveAmount(Object value) {
         if (value == null) {
             throw new IllegalArgumentException(
                     "금액을 올바르게 입력하세요.");
         }
         try {
-            double parsed =
-                    Double.parseDouble(value.toString());
-            if (!Double.isFinite(parsed)
-                    || parsed <= 0
-                    || parsed > 1_000_000_000.0) {
+            BigDecimal parsed = new BigDecimal(value.toString());
+            if (parsed.signum() <= 0
+                    || parsed.compareTo(BigDecimal.valueOf(1_000_000_000L)) > 0) {
                 throw new IllegalArgumentException(
                         "금액을 올바르게 입력하세요.");
             }
-            double rounded = roundCents(parsed);
-            if (rounded <= 0) {
+            BigDecimal rounded = roundCents(parsed);
+            if (rounded.signum() <= 0) {
                 throw new IllegalArgumentException(
                         "금액을 올바르게 입력하세요.");
             }

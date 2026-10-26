@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -53,6 +54,18 @@ public class LedgerService {
             String counterparty,
             String symbol,
             String description) {
+        return record(member, type, BigDecimal.valueOf(amount), BigDecimal.valueOf(balanceAfter),
+                counterparty, symbol, description);
+    }
+
+    public LedgerEntry record(Member member, String type, BigDecimal amount,
+                              BigDecimal balanceAfter, String description) {
+        return record(member, type, amount, balanceAfter, null, null, description);
+    }
+
+    public LedgerEntry record(Member member, String type, BigDecimal amount,
+                              BigDecimal balanceAfter, String counterparty,
+                              String symbol, String description) {
         return ledgerEntryRepository.save(new LedgerEntry(
                 member,
                 type,

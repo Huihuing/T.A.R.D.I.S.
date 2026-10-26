@@ -1,6 +1,6 @@
 import { API_URL } from '../config';
 import { authFetch, getAuthHeaders } from '../auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Gift, Coins, CheckCircle2, Sparkles, X, Flame, TrendingUp, MessageSquare, Award, LifeBuoy } from 'lucide-react';
 
@@ -37,26 +37,31 @@ export default function EconomyModal({ isOpen, onClose, onBalanceUpdate, current
     const [status, setStatus] = useState<EconomyStatus | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [message, setMessage] = useState<string | null>(null);
+    const onBalanceUpdateRef = useRef(onBalanceUpdate);
+    useEffect(() => { onBalanceUpdateRef.current = onBalanceUpdate; }, [onBalanceUpdate]);
 
-    const fetchStatus = async () => {
+    const fetchStatus = useCallback(async () => {
         try {
             const res = await authFetch(`${API_URL}/api/economy/status`, { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setStatus(data);
-                if (data.balance !== undefined) onBalanceUpdate(data.balance);
+                if (typeof data.balance === 'number' && Number.isFinite(data.balance)) onBalanceUpdateRef.current(data.balance);
             }
         } catch (e) {
             console.error('가상 경제 상태 조회 실패', e);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        if (isOpen) {
-            fetchStatus();
+        let active = true;
+        queueMicrotask(() => {
+            if (!active || !isOpen) return;
             setMessage(null);
-        }
-    }, [isOpen]);
+            void fetchStatus();
+        });
+        return () => { active = false; };
+    }, [isOpen, fetchStatus]);
 
     const handleCheckIn = async () => {
         if (loading) return;

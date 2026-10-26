@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,7 +19,17 @@ public interface LimitOrderRepository
 
     long countByMemberAndStatus(Member member, String status);
 
-    List<LimitOrder> findTop500ByStatusOrderByCreatedAtAsc(String status);
+    @Query("""
+            select distinct o.symbol
+            from LimitOrder o
+            where o.status = 'PENDING'
+              and o.symbol > :afterSymbol
+            order by o.symbol asc
+            """)
+    List<String> findPendingSymbolsAfter(
+            @Param("afterSymbol") String afterSymbol,
+            Pageable pageable
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

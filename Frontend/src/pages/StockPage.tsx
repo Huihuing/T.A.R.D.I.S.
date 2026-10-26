@@ -1,23 +1,28 @@
-import { API_URL, WS_URL } from '../config';
-import { useState, useEffect } from 'react';
+import { API_URL } from '../config';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Search, Star, ClipboardList, Trash2 } from 'lucide-react';
-import { authFetch, getAuthHeaders, getStoredToken } from '../auth';
+import { authFetch, getAuthHeaders } from '../auth';
 import { confirmAction, notify } from '../uiFeedback';
+import { marketQuotes, quoteTime } from '../marketData';
+import { mutationIntent } from '../mutationIntent';
+import type { MarketQuote } from '../quoteClient';
 
 interface StockSymbol { symbol: string; description: string; displaySymbol: string; }
+type QuoteCard = MarketQuote & { symbol: string; description?: string; error?: string };
+interface LimitOrder { id: number; symbol: string; side: string; status: string; amount: number; limitPrice: number; fillPrice?: number; resultMessage?: string; createdAt: string; completedAt?: string; }
 
 const ALL_SYMBOLS = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD', 'COIN', 'PLTR', 'TSM', 'V', 'BABA', 'JPM', 'WMT'];
 const BATCH_SIZE = 4;
 
 export default function StockPage() {
     const [searchParams] = useSearchParams();
-    const [stocks, setStocks] = useState<any[]>([]);
+    const [stocks, setStocks] = useState<QuoteCard[]>([]);
     const [loadedCount, setLoadedCount] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     
-    const [selectedStock, setSelectedStock] = useState<any | null>(null);
+    const [selectedStock, setSelectedStock] = useState<QuoteCard | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     
@@ -26,12 +31,15 @@ export default function StockPage() {
 
     // 💡 북마크 상태 및 조회 로직
     const [bookmarks, setBookmarks] = useState<string[]>([]);
-    const [limitOrders, setLimitOrders] = useState<any[]>([]);
+    const [limitOrders, setLimitOrders] = useState<LimitOrder[]>([]);
     const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
     const [orderAmount, setOrderAmount] = useState<number | ''>('');
     const [orderPrice, setOrderPrice] = useState<number | ''>('');
     const [isOrderSaving, setIsOrderSaving] = useState(false);
     const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
+    const [orderError, setOrderError] = useState('');
+    const orderInFlight = useRef(false);
+    const searchController = useRef<AbortController | null>(null);
     const [orderStatusFilter, setOrderStatusFilter] = useState<
         'ALL' | 'PENDING' | 'FILLED' | 'CANCELLED' | 'REJECTED'
     >('ALL');
@@ -54,14 +62,11 @@ export default function StockPage() {
     };
 
     const fetchStockBatch = async (startIndex: number, endIndex: number) => {
-        setIsLoading(true);
         const symbolsToFetch = ALL_SYMBOLS.slice(startIndex, endIndex);
         try {
             const promises = symbolsToFetch.map(async (symbol) => {
-                const res = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
-                if (res.status === 429) return { symbol, error: '한도 초과' };
-                const data = await res.json();
-                return { symbol, ...data };
+                try { return { symbol, ...await marketQuotes.get(symbol) }; }
+                catch (error) { return { symbol, c: 0, d: 0, dp: 0, receivedAt: 0, error: error instanceof Error ? error.message : '시세 조회 실패' }; }
             });
             const newStocks = await Promise.all(promises);
             setStocks((prev) => {
@@ -81,24 +86,31 @@ export default function StockPage() {
                 API_URL + '/api/limit-orders',
                 { headers: getAuthHeaders(false) }
             );
-            const data = await res.json().catch(() => []);
-            setLimitOrders(res.ok && Array.isArray(data) ? data : []);
+            const data = await res.json();
+            if (!res.ok || !Array.isArray(data)) throw new Error('주문 조회 실패');
+            setLimitOrders(data);
+            setOrderError('');
         } catch {
-            setLimitOrders([]);
+            setOrderError('주문 내역을 갱신하지 못했습니다. 이전 결과를 유지합니다.');
         }
     };
     useEffect(() => { 
-        fetchBookmarks();
-        fetchLimitOrders();
-        fetchStockBatch(0, BATCH_SIZE); 
         const fetchAllSymbols = async () => {
             try {
                 const res = await fetch(`${API_URL}/api/stock/symbols`);
                 const data = await res.json();
                 if (Array.isArray(data)) setAllSymbols(data);
-            } catch (err) {}
+            } catch { notify('종목 검색 목록을 불러오지 못했습니다.', 'warning'); }
         };
-        fetchAllSymbols();
+        let active = true;
+        queueMicrotask(() => {
+            if (!active) return;
+            void fetchBookmarks();
+            void fetchLimitOrders();
+            void fetchStockBatch(0, BATCH_SIZE);
+            void fetchAllSymbols();
+        });
+        return () => { active = false; };
     }, []);
 
     useEffect(() => {
@@ -106,22 +118,12 @@ export default function StockPage() {
         if (!symbol) return;
 
         let active = true;
+        const controller = new AbortController();
         const openRequestedSymbol = async () => {
             setIsSearching(true);
             try {
-                const quoteRes = await fetch(
-                    `${API_URL}/api/stock/quote?symbol=${encodeURIComponent(symbol)}`
-                );
-                if (quoteRes.status === 429) {
-                    notify('API 호출 한도를 초과했습니다.', 'warning');
-                    return;
-                }
-                const quoteData = await quoteRes.json();
+                const quoteData = await marketQuotes.get(symbol, controller.signal);
                 if (!active) return;
-                if (quoteData.c === 0 && quoteData.h === 0) {
-                    notify('시세 데이터를 제공하지 않는 종목입니다.', 'warning');
-                    return;
-                }
                 setSelectedStock({
                     symbol,
                     description: '',
@@ -139,34 +141,31 @@ export default function StockPage() {
         openRequestedSymbol();
         return () => {
             active = false;
+            controller.abort();
         };
     }, [searchParams]);
 
-    const handleLoadMore = () => fetchStockBatch(loadedCount, loadedCount + BATCH_SIZE);
+    const handleLoadMore = () => { setIsLoading(true); void fetchStockBatch(loadedCount, loadedCount + BATCH_SIZE); };
 
     const filteredSymbols = allSymbols.filter(s => s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) || s.description.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10);
 
     const executeSearch = async (targetSymbol: string) => {
+        searchController.current?.abort();
+        const controller = new AbortController();
+        searchController.current = controller;
         setSearchQuery('');
         setIsDropdownOpen(false);
         setIsSearching(true);
         try {
-            const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${targetSymbol}`);
-            if (quoteRes.status === 429) {
-                notify('API 호출 한도를 초과했습니다.', 'warning');
-                return;
-            }
-            const quoteData = await quoteRes.json();
-            if (quoteData.c === 0 && quoteData.h === 0) {
-                notify('시세 데이터를 제공하지 않는 종목입니다.', 'warning');
-            }
-            else setSelectedStock({ symbol: targetSymbol, description: allSymbols.find(s => s.symbol === targetSymbol)?.description || '', ...quoteData });
-        } catch {
-            notify('검색 중 오류가 발생했습니다.', 'error');
+            const quoteData = await marketQuotes.get(targetSymbol, controller.signal);
+            if (!controller.signal.aborted) setSelectedStock({ symbol: targetSymbol, description: allSymbols.find(s => s.symbol === targetSymbol)?.description || '', ...quoteData });
+        } catch (error) {
+            if (!controller.signal.aborted) notify(error instanceof Error ? error.message : '검색 중 오류가 발생했습니다.', 'error');
         } finally {
-            setIsSearching(false);
+            if (!controller.signal.aborted) setIsSearching(false);
         }
     };
+    useEffect(() => () => searchController.current?.abort(), []);
 
     const handleFormSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -214,28 +213,29 @@ export default function StockPage() {
     };
 
     const createLimitOrder = async () => {
+        if (orderInFlight.current) return;
         if (!selectedStock?.symbol) return;
-        if (!orderAmount || orderAmount <= 0) {
+        if (!orderAmount || !Number.isSafeInteger(orderAmount) || orderAmount <= 0) {
             notify('주문 수량을 올바르게 입력해주세요.', 'warning');
             return;
         }
-        if (!orderPrice || orderPrice <= 0) {
+        if (!orderPrice || !Number.isFinite(orderPrice) || orderPrice <= 0) {
             notify('지정가를 올바르게 입력해주세요.', 'warning');
             return;
         }
+        orderInFlight.current = true;
         setIsOrderSaving(true);
         try {
-            const res = await authFetch(API_URL + '/api/limit-orders', {
+            const endpoint = API_URL + '/api/limit-orders';
+            const body = JSON.stringify({ side: orderSide, symbol: selectedStock.symbol, amount: Number(orderAmount), limitPrice: Number(orderPrice) });
+            const intent = await mutationIntent(endpoint, body);
+            const res = await authFetch(endpoint, {
                 method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify({
-                    side: orderSide,
-                    symbol: selectedStock.symbol,
-                    amount: Number(orderAmount),
-                    limitPrice: Number(orderPrice)
-                })
+                headers: { ...getAuthHeaders(), 'Idempotency-Key': intent.key },
+                body
             });
-            const data = await res.json().catch(() => ({}));
+            const data = await res.json();
+            intent.settle(res);
             if (!res.ok) {
                 notify(data.message || '지정가 주문 등록에 실패했습니다.', 'error');
                 return;
@@ -252,6 +252,7 @@ export default function StockPage() {
         } catch {
             notify('지정가 주문 등록 중 오류가 발생했습니다.', 'error');
         } finally {
+            orderInFlight.current = false;
             setIsOrderSaving(false);
         }
     };
@@ -358,7 +359,7 @@ export default function StockPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400">Global Market</h1>
-                    <p className="text-slate-400 text-sm mt-1">실시간 글로벌 주식 시세 및 검색</p>
+                    <p className="text-slate-400 text-sm mt-1">글로벌 주식 시세 및 검색 · 표시 시세는 최대 30초 동안 재사용합니다.</p>
                 </div>
                 <form onSubmit={handleFormSearch} className="flex gap-2 w-full md:w-auto relative z-[60]">
                     <div className="relative w-full md:w-72">
@@ -405,6 +406,7 @@ export default function StockPage() {
                                     </div>
                                     <div className="mt-auto">
                                         <p className="text-3xl font-mono font-bold tracking-tight text-white">${stock.c?.toFixed(2)}</p>
+                                        {stock.stale && <p className="text-xs text-amber-300">갱신 지연 · 이전 시세</p>}
                                         <div className="flex items-center gap-2 mt-2">
                                             <span className={`text-sm font-bold ${isUp ? 'text-emerald-500' : isDown ? 'text-rose-500' : 'text-slate-400'}`}>{isUp ? '+' : ''}{stock.d?.toFixed(2)}</span>
                                             <span className={`text-sm px-2 py-0.5 rounded-md ${isUp ? 'bg-emerald-500/20 text-emerald-400' : isDown ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-300'}`}>{isUp ? '+' : ''}{stock.dp?.toFixed(2)}%</span>
@@ -425,7 +427,7 @@ export default function StockPage() {
                 </div>
             )}
 
-            {getStoredToken() && (
+            {localStorage.getItem('username') && localStorage.getItem('username') !== 'Guest' && (
                 <div className="mt-8 bg-slate-800/40 border border-slate-700/50 rounded-3xl p-5">
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
                         <div className="flex items-center gap-2">
@@ -480,7 +482,9 @@ export default function StockPage() {
                         </div>
                     </div>
 
-                    {limitOrders.length === 0 ? (
+                    <p className="mb-3 text-xs text-slate-400">지정가 주문은 기본 약 5분 간격으로 종목을 순차 확인합니다. 종목 수나 시세 장애에 따라 더 지연될 수 있으며, 체결 시 잔액과 보유 수량을 다시 검증합니다.</p>
+                    {orderError && <p role="alert" className="mb-3 text-sm text-amber-300">{orderError}</p>}
+                    {limitOrders.length === 0 && orderError ? <p className="text-sm text-amber-300">주문 내역을 확인할 수 없습니다. 다시 조회해 주세요.</p> : limitOrders.length === 0 ? (
                         <p className="text-sm text-slate-500">아직 등록된 지정가 주문이 없습니다.</p>
                     ) : filteredLimitOrders.length === 0 ? (
                         <p className="text-sm text-slate-500 py-4 text-center">
@@ -585,6 +589,8 @@ export default function StockPage() {
                                 </div>
                                 <div className="mb-6 sm:mb-8">
                                     <p className="text-4xl sm:text-5xl font-mono font-bold text-white">${selectedStock.c?.toFixed(2)}</p>
+                                    <p className="mt-2 text-xs text-slate-400">시세 기준: {quoteTime(selectedStock)}</p>
+                                    {selectedStock.stale && <p className="mt-1 text-xs text-amber-300">제공사 갱신 실패로 이전 시세를 표시합니다.</p>}
                                     <div className="flex items-center gap-2 mt-2"><span className={`font-bold ${selectedStock.d > 0 ? 'text-emerald-500' : selectedStock.d < 0 ? 'text-rose-500' : 'text-slate-400'}`}>{selectedStock.d > 0 ? '+' : ''}{selectedStock.d?.toFixed(2)} ({selectedStock.dp > 0 ? '+' : ''}{selectedStock.dp?.toFixed(2)}%)</span></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 mb-auto">
@@ -625,14 +631,14 @@ export default function StockPage() {
                                         </div>
                                         {likelyImmediateTrigger && (
                                             <p className="mt-2 text-amber-300 leading-relaxed">
-                                                현재가가 이미 체결 조건을 만족합니다. 다음 주문 처리 시 빠르게 체결될 수 있습니다.
+                                                표시 시세가 체결 조건을 만족합니다. 다음 순차 확인 때 유효한 시세로 조건을 다시 확인합니다.
                                             </p>
                                         )}
                                     </div>
                                     <button type="button" onClick={createLimitOrder} disabled={isOrderSaving} className="w-full mt-2 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">
                                         {isOrderSaving ? '주문 등록 중...' : '지정가 주문 등록'}
                                     </button>
-                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">매수는 현재가가 지정가 이하, 매도는 현재가가 지정가 이상일 때 체결됩니다. 주문은 체결 시점의 잔액·보유 수량을 다시 확인합니다.</p>
+                                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">기본 약 5분 간격으로 순차 확인하며 종목 수와 장애에 따라 더 지연될 수 있습니다. 매수는 유효 시세가 지정가 이하, 매도는 이상일 때 잔액·보유 수량을 다시 확인해 체결합니다. 장 마감이나 시세 지연으로 최근 2분 이내 가격을 확인할 수 없으면 체결을 보류합니다.</p>
                                 </div>
                             </div>
                         </motion.div>

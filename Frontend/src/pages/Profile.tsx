@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
     ArrowLeft,
@@ -27,7 +27,7 @@ export default function Profile() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const loadProfile = async () => {
+    const loadProfile = useCallback(async () => {
         setIsLoading(true);
         setError('');
 
@@ -58,11 +58,13 @@ export default function Profile() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [username]);
 
     useEffect(() => {
-        void loadProfile();
-    }, [username]);
+        let active = true;
+        queueMicrotask(() => { if (active) void loadProfile(); });
+        return () => { active = false; };
+    }, [loadProfile]);
 
     useBackendReadyRetry(loadProfile);
 

@@ -1,19 +1,22 @@
 import { API_URL } from '../config';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Edit3, ArrowLeft, Send, Image as ImageIcon, Loader2, Search, ChevronLeft, ChevronRight, Flag, X, AlertTriangle } from 'lucide-react';
 import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
 
+interface BoardComment { id: number; author: string; content: string; createdAt: string; isGuest?: boolean; }
+interface BoardPost { id: number; title: string; content: string; author: string; createdAt: string; isGuest?: boolean; guestNickname?: string; comments: BoardComment[]; }
+
 type ManageAction =
     | { type: 'DELETE_POST'; isGuest: boolean }
-    | { type: 'EDIT_COMMENT'; comment: any }
-    | { type: 'DELETE_COMMENT'; comment: any };
+    | { type: 'EDIT_COMMENT'; comment: BoardComment }
+    | { type: 'DELETE_COMMENT'; comment: BoardComment };
 
 export default function Board() {
     const [viewMode, setViewMode] = useState<'list' | 'detail' | 'write'>('list');
-    const [posts, setPosts] = useState<any[]>([]);
-    const [selectedPost, setSelectedPost] = useState<any>(null);
+    const [posts, setPosts] = useState<BoardPost[]>([]);
+    const [selectedPost, setSelectedPost] = useState<BoardPost | null>(null);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [commentInput, setCommentInput] = useState('');
@@ -45,11 +48,9 @@ export default function Board() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const currentUser = localStorage.getItem('username');
     const isGuest = !currentUser || currentUser === 'Guest';
-    const fetch: typeof window.fetch = isGuest
-        ? window.fetch.bind(window)
-        : authFetch;
+    const fetch = useCallback<typeof window.fetch>((input, init) => isGuest ? window.fetch(input, init) : authFetch(input, init), [isGuest]);
     
-    const fetchPosts = async () => {
+    const fetchPosts = useCallback(async () => {
         if (viewMode !== 'list') return;
 
         setIsListLoading(true);
@@ -77,11 +78,13 @@ export default function Board() {
         } finally {
             setIsListLoading(false);
         }
-    };
+    }, [viewMode, page, searchQuery, fetch]);
 
     useEffect(() => {
-        fetchPosts();
-    }, [viewMode, page, searchQuery]);
+        let active = true;
+        queueMicrotask(() => { if (active) void fetchPosts(); });
+        return () => { active = false; };
+    }, [fetchPosts]);
 
     const submitSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,7 +123,7 @@ export default function Board() {
                 return;
             }
 
-            const payload: any = { title, content };
+            const payload: Record<string, string> = { title, content };
             if (isGuest) {
                 if (!editingPostId) payload.guestNickname = guestNickname.trim();
                 payload.guestPassword = guestPassword;
@@ -155,7 +158,7 @@ export default function Board() {
 
     const submitComment = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!commentInput.trim()) return;
+        if (!commentInput.trim() || !selectedPost) return;
 
         try {
             if (isGuest && (!commentGuestNickname.trim() || !commentGuestPassword)) {
@@ -163,7 +166,7 @@ export default function Board() {
                 return;
             }
 
-            const commentPayload: any = {
+            const commentPayload: { postId: number; content: string; guestNickname?: string; guestPassword?: string } = {
                 postId: selectedPost.id,
                 content: commentInput
             };
@@ -215,7 +218,7 @@ export default function Board() {
             } else {
                 notify('이미지 업로드에 실패했습니다. (서버 응답 오류)', 'error');
             }
-        } catch (error) {
+        } catch {
             notify('이미지 업로드 중 오류가 발생했습니다.', 'error');
         } finally {
             setIsUploading(false);
@@ -224,6 +227,7 @@ export default function Board() {
     };
 
     const startEditPost = () => {
+        if (!selectedPost) return;
         setTitle(selectedPost.title);
         setContent(selectedPost.content);
         setEditingPostId(selectedPost.id);
@@ -244,6 +248,7 @@ export default function Board() {
     };
 
     const deletePost = () => {
+        if (!selectedPost) return;
         setManageAction({
             type: 'DELETE_POST',
             isGuest: Boolean(selectedPost.isGuest)
@@ -252,7 +257,7 @@ export default function Board() {
         setManageCommentContent('');
     };
 
-    const editComment = (comment: any) => {
+    const editComment = (comment: BoardComment) => {
         setManageAction({
             type: 'EDIT_COMMENT',
             comment
@@ -261,7 +266,7 @@ export default function Board() {
         setManagePassword('');
     };
 
-    const deleteComment = (comment: any) => {
+    const deleteComment = (comment: BoardComment) => {
         setManageAction({
             type: 'DELETE_COMMENT',
             comment
@@ -272,7 +277,7 @@ export default function Board() {
 
     const submitManageAction = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!manageAction || manageSubmitting) return;
+        if (!manageAction || manageSubmitting || !selectedPost) return;
 
         const guestOwned = manageAction.type === 'DELETE_POST'
             ? manageAction.isGuest
@@ -421,10 +426,10 @@ export default function Board() {
             if (!res.ok) return notify('포트폴리오를 불러오려면 다시 로그인해 주세요.', 'warning');
             const portfolio = await res.json();
             const summary = portfolio.length > 0 
-                ? portfolio.map((p: any) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n') 
+                ? portfolio.map((p: { symbol: string; amount: number; averagePrice: number }) => `• ${p.symbol}: ${p.amount}주 (평단가 $${(p.averagePrice || 0).toFixed(2)})`).join('\n')
                 : '보유 주식이 없습니다.';
             setContent(prev => prev + `\n\n📊 **[나의 포트폴리오 현황]**\n${summary}\n`);
-        } catch (e) {}
+        } catch { notify('포트폴리오를 불러오지 못했습니다.', 'error'); }
     };
 
     const formatKstDateTime = (value: string) => {
@@ -676,7 +681,7 @@ export default function Board() {
                         <div className="mt-12 border-t border-slate-700 pt-8">
                             <h3 className="text-xl font-bold text-white mb-6">💬 댓글 ({selectedPost.comments.length})</h3>
                             <div className="flex flex-col gap-4 mb-6">
-                                {selectedPost.comments.map((c: any) => (
+                                {selectedPost.comments.map(c => (
                                     <div key={c.id} className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="font-bold text-sky-400 text-sm">{c.author}</span>

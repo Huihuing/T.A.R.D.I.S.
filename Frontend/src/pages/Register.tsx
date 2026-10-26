@@ -88,7 +88,7 @@ export default function Register() {
             } else {
                 notify(data.message || '회원가입에 실패했습니다.', 'error');
             }
-        } catch (err) {
+        } catch {
             notify('서버 오류가 발생했습니다.', 'error');
         } finally {
             setIsLoading(false);

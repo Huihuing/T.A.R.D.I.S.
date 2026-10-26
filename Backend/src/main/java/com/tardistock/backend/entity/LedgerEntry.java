@@ -66,10 +66,17 @@ public class LedgerEntry {
             String symbol,
             String description,
             LocalDateTime createdAt) {
+        this(member, type, money(amount), money(balanceAfter), counterparty,
+                symbol, description, createdAt);
+    }
+
+    public LedgerEntry(
+            Member member, String type, BigDecimal amount, BigDecimal balanceAfter,
+            String counterparty, String symbol, String description, LocalDateTime createdAt) {
         this.member = member;
         this.type = type;
-        this.amount = money(amount);
-        this.balanceAfter = money(balanceAfter);
+        this.amount = MoneyMath.requireCents(amount);
+        this.balanceAfter = MoneyMath.requireCents(balanceAfter);
         this.counterparty = counterparty;
         this.symbol = symbol;
         this.description = description;
@@ -80,6 +87,10 @@ public class LedgerEntry {
     public String getType() { return type; }
     public double getAmount() { return amount.doubleValue(); }
     public double getBalanceAfter() { return balanceAfter.doubleValue(); }
+    @JsonIgnore
+    public BigDecimal getAmountValue() { return amount; }
+    @JsonIgnore
+    public BigDecimal getBalanceAfterAmount() { return balanceAfter; }
     public String getCounterparty() { return counterparty; }
     public String getSymbol() { return symbol; }
     public String getDescription() { return description; }

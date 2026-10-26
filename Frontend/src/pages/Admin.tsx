@@ -1,7 +1,7 @@
 import { API_URL } from '../config';
 import { authFetch } from '../auth';
 import { confirmAction, notify } from '../uiFeedback';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Activity,
     Bell,
@@ -56,7 +56,7 @@ export default function Admin() {
     const [reasonFilter, setReasonFilter] = useState('ALL');
     const [reportSearch, setReportSearch] = useState('');
 
-    const loadAdminData = async () => {
+    const loadAdminData = useCallback(async () => {
         try {
             const [statsRes, reportsRes] = await Promise.all([
                 authFetch(`${API_URL}/api/admin/stats`),
@@ -83,11 +83,13 @@ export default function Admin() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [reportStatus]);
 
     useEffect(() => {
-        loadAdminData();
-    }, [reportStatus]);
+        let active = true;
+        queueMicrotask(() => { if (active) void loadAdminData(); });
+        return () => { active = false; };
+    }, [loadAdminData]);
 
     const resolveReport = async (
         report: ModerationReport,

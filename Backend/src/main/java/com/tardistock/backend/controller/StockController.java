@@ -3,10 +3,13 @@ package com.tardistock.backend.controller;
 import com.tardistock.backend.config.ExternalApiHttpClient;
 import com.tardistock.backend.util.BoundedCacheSupport;
 import com.tardistock.backend.util.SingleFlightSupport;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
@@ -14,7 +17,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Clock;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,8 +49,28 @@ public class StockController {
     @Value("${finnhub.api.key}")
     private String finnhubToken;
 
-    private final RestTemplate restTemplate =
-            ExternalApiHttpClient.create();
+    private final RestTemplate restTemplate;
+    private final MeterRegistry meterRegistry;
+    private final Clock clock;
+
+    public StockController() {
+        this(ExternalApiHttpClient.create(), Metrics.globalRegistry);
+    }
+
+    @Autowired
+    public StockController(MeterRegistry meterRegistry) {
+        this(ExternalApiHttpClient.create(), meterRegistry);
+    }
+
+    StockController(RestTemplate restTemplate, MeterRegistry meterRegistry) {
+        this(restTemplate, meterRegistry, Clock.systemUTC());
+    }
+
+    StockController(RestTemplate restTemplate, MeterRegistry meterRegistry, Clock clock) {
+        this.restTemplate = restTemplate;
+        this.meterRegistry = meterRegistry;
+        this.clock = clock;
+    }
     private final ConcurrentHashMap<String, CacheEntry<Map<?, ?>>> quoteCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CacheEntry<String>> searchCache =
@@ -67,7 +92,7 @@ public class StockController {
 
         CacheEntry<Map<?, ?>> cached = quoteCache.get(normalized);
         if (isFresh(cached)) {
-            return ResponseEntity.ok(cached.value());
+            return quoteResponse(cached, false, "fresh_cache");
         }
 
         return SingleFlightSupport.execute(
@@ -80,7 +105,7 @@ public class StockController {
     private ResponseEntity<?> loadQuote(String normalized) {
         CacheEntry<Map<?, ?>> cached = quoteCache.get(normalized);
         if (isFresh(cached)) {
-            return ResponseEntity.ok(cached.value());
+            return quoteResponse(cached, false, "fresh_cache");
         }
 
         try {
@@ -91,41 +116,60 @@ public class StockController {
 
             ResponseEntity<Map> response =
                     restTemplate.getForEntity(url, Map.class);
+            countProviderQuote("success");
             Map<?, ?> body = response.getBody();
             if (body != null) {
+                CacheEntry<Map<?, ?>> entry = new CacheEntry<>(body, clock.millis() + QUOTE_CACHE_MS);
                 BoundedCacheSupport.put(
                         quoteCache,
                         normalized,
-                        new CacheEntry<>(
-                                body,
-                                System.currentTimeMillis() + QUOTE_CACHE_MS
-                        ),
+                        entry,
                         MAX_QUOTE_CACHE_ENTRIES,
                         CacheEntry::expiresAt
                 );
+                return quoteResponse(entry, false, "live");
             }
             return ResponseEntity.ok(body);
         } catch (HttpClientErrorException.TooManyRequests e) {
+            countProviderQuote("rate_limited");
             log.warn("Finnhub quote rate limit reached for {}", normalized);
             if (isUsableStale(cached, QUOTE_STALE_MS)) {
-                return ResponseEntity.ok(cached.value());
+                return quoteResponse(cached, true, "stale");
             }
             return ResponseEntity.status(429).body(Map.of(
                     "message", "시세 제공사 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
             ));
         } catch (Exception e) {
+            countProviderQuote("failure");
             log.warn(
                     "Finnhub quote request failed for {}: {}",
                     normalized,
                     e.getClass().getSimpleName()
             );
             if (isUsableStale(cached, QUOTE_STALE_MS)) {
-                return ResponseEntity.ok(cached.value());
+                return quoteResponse(cached, true, "stale");
             }
             return ResponseEntity.status(502).body(Map.of(
                     "message", "주식 데이터를 일시적으로 불러오지 못했습니다."
             ));
         }
+    }
+
+    private void countProviderQuote(String outcome) {
+        meterRegistry.counter("tardis.finnhub.requests", "endpoint", "display_quote", "outcome", outcome).increment();
+    }
+
+    private ResponseEntity<?> quoteResponse(CacheEntry<Map<?, ?>> entry, boolean stale, String state) {
+        meterRegistry.counter("tardis.market.quote.responses", "state", state).increment();
+        Map<String, Object> body = new LinkedHashMap<>();
+        entry.value().forEach((key, value) -> body.put(String.valueOf(key), value));
+        long fetchedAt = entry.expiresAt() - QUOTE_CACHE_MS;
+        body.put("stale", stale);
+        body.put("fetchedAt", fetchedAt);
+        return ResponseEntity.ok()
+                .header("X-Tardis-Quote-Stale", Boolean.toString(stale))
+                .header("X-Tardis-Quote-Fetched-At", Long.toString(fetchedAt))
+                .body(body);
     }
 
     @GetMapping("/candles")
@@ -226,7 +270,7 @@ public class StockController {
                         candlesCacheKey,
                         new CacheEntry<>(
                                 body,
-                                System.currentTimeMillis()
+                                clock.millis()
                                         + CANDLES_CACHE_MS
                         ),
                         MAX_CANDLES_CACHE_ENTRIES,
@@ -281,7 +325,7 @@ public class StockController {
             if (body != null && !body.isBlank()) {
                 symbolsCache = new CacheEntry<>(
                         body,
-                        System.currentTimeMillis() + SYMBOL_CACHE_MS
+                        clock.millis() + SYMBOL_CACHE_MS
                 );
             }
             return ResponseEntity.ok(body);
@@ -359,7 +403,7 @@ public class StockController {
                         cacheKey,
                         new CacheEntry<>(
                                 body,
-                                System.currentTimeMillis() + SEARCH_CACHE_MS
+                                clock.millis() + SEARCH_CACHE_MS
                         ),
                         MAX_SEARCH_CACHE_ENTRIES,
                         CacheEntry::expiresAt
@@ -411,7 +455,7 @@ public class StockController {
 
     private boolean isFresh(CacheEntry<?> entry) {
         return entry != null
-                && entry.expiresAt() > System.currentTimeMillis();
+                && entry.expiresAt() > clock.millis();
     }
 
     private boolean isUsableStale(
@@ -419,7 +463,7 @@ public class StockController {
             long staleAllowanceMs) {
         return entry != null
                 && entry.expiresAt() + staleAllowanceMs
-                > System.currentTimeMillis();
+                > clock.millis();
     }
 
     int inFlightSizeForTest() {

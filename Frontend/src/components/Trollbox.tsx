@@ -29,7 +29,7 @@ export default function Trollbox() {
 
         const client = new Client({
             webSocketFactory: () =>
-                new SockJS(`${WS_URL}/ws-stomp`) as any,
+                new SockJS(`${WS_URL}/ws-stomp`),
             reconnectDelay: 5000,
             beforeConnect: () => {
                 const token = getStoredToken();

@@ -22,4 +22,22 @@ public final class MoneyMath {
     public static boolean fitsCents(double value) {
         return DecimalMath.fits(value, MONEY_PRECISION, MONEY_SCALE);
     }
+
+    public static BigDecimal roundCents(BigDecimal value) {
+        if (value == null) {
+            throw new IllegalArgumentException("금액을 입력해주세요.");
+        }
+        return value.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    public static boolean fitsCents(BigDecimal value) {
+        return value != null && roundCents(value).precision() <= MONEY_PRECISION;
+    }
+
+    public static BigDecimal requireCents(BigDecimal value) {
+        if (!fitsCents(value)) {
+            throw new IllegalArgumentException("금액이 DECIMAL(19,2) 허용 범위를 초과합니다.");
+        }
+        return roundCents(value);
+    }
 }

@@ -2,14 +2,21 @@ package com.tardistock.backend.service;
 
 import com.tardistock.backend.config.ExternalApiHttpClient;
 import com.tardistock.backend.util.DecimalMath;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
@@ -29,6 +36,8 @@ public class FinnhubPriceService {
     private static final Pattern SYMBOL_PATTERN =
             Pattern.compile("^[A-Z0-9.-]{1,15}$");
     private static final int CACHE_SECONDS = 60;
+    private static final int TRADING_QUOTE_MAX_AGE_SECONDS = 120;
+    private static final int MAX_FUTURE_SKEW_SECONDS = 30;
     private static final int MAX_CACHE_ENTRIES = 500;
     private static final int MARKET_PRICE_PRECISION = 19;
     private static final int MARKET_PRICE_SCALE = 6;
@@ -37,6 +46,8 @@ public class FinnhubPriceService {
     private String apiKey;
 
     private final RestTemplate restTemplate;
+    private final Clock clock;
+    private final MeterRegistry metrics;
     private final ConcurrentHashMap<String, CachedPrice> cache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<Double>> inFlight =
@@ -46,8 +57,23 @@ public class FinnhubPriceService {
         this(ExternalApiHttpClient.create());
     }
 
+    @Autowired
+    public FinnhubPriceService(MeterRegistry metrics) {
+        this(ExternalApiHttpClient.create(), Clock.systemUTC(), metrics);
+    }
+
     FinnhubPriceService(RestTemplate restTemplate) {
+        this(restTemplate, Clock.systemUTC());
+    }
+
+    FinnhubPriceService(RestTemplate restTemplate, Clock clock) {
+        this(restTemplate, clock, Metrics.globalRegistry);
+    }
+
+    FinnhubPriceService(RestTemplate restTemplate, Clock clock, MeterRegistry metrics) {
         this.restTemplate = restTemplate;
+        this.clock = clock;
+        this.metrics = metrics;
     }
 
     /**
@@ -95,9 +121,36 @@ public class FinnhubPriceService {
         }
     }
 
+    /**
+     * 신규 거래 전용 가격. 표시용 stale fallback은 절대 체결에 사용하지 않습니다.
+     * 조회 TTL 60초 및 공급자 시세 시각 120초(미래 오차 30초)를 모두 검증합니다.
+     * 장 마감 시세, 누락된 시각, 갱신 실패 시 0을 반환해 체결을 보류합니다.
+     */
+    public double getTradingPrice(String symbol) {
+        String normalized = normalizeSymbol(symbol);
+        if (normalized == null) return 0.0;
+
+        getPrice(normalized);
+        CachedPrice cached = cache.get(normalized);
+        Instant now = clock.instant();
+        if (!isFresh(cached)
+                || cached.quotedAt == null
+                || cached.quotedAt.isBefore(now.minusSeconds(TRADING_QUOTE_MAX_AGE_SECONDS))
+                || cached.quotedAt.isAfter(now.plusSeconds(MAX_FUTURE_SKEW_SECONDS))) {
+            return 0.0;
+        }
+        // Use the same unit price for cash math and DECIMAL(19,6) trade history.
+        // Otherwise discarded fractional digits can accumulate into real cents
+        // when a large number of shares is traded.
+        BigDecimal tradingPrice = BigDecimal.valueOf(cached.price)
+                .setScale(MARKET_PRICE_SCALE, RoundingMode.HALF_UP);
+        return tradingPrice.signum() > 0 ? tradingPrice.doubleValue() : 0.0;
+    }
+
     private double refreshPrice(
             String normalized,
             CachedPrice staleCache) {
+        String outcome = "failure";
         try {
             String url =
                     "https://finnhub.io/api/v1/quote?symbol="
@@ -122,13 +175,15 @@ public class FinnhubPriceService {
                             normalized,
                             new CachedPrice(
                                     currentPrice,
-                                    LocalDateTime.now()
+                                    clock.instant(),
+                                    quoteTimestamp(response.get("t"))
                             )
                     );
                     log.debug(
                             "Finnhub price refreshed for {}",
                             normalized
                     );
+                    outcome = "success";
                     return currentPrice;
                 }
 
@@ -138,11 +193,17 @@ public class FinnhubPriceService {
                 );
             }
         } catch (Exception e) {
+            if (e instanceof HttpClientErrorException.TooManyRequests) {
+                outcome = "rate_limited";
+            }
             log.warn(
                     "Finnhub price request failed for {}: {}",
                     normalized,
                     e.getClass().getSimpleName()
             );
+        } finally {
+            metrics.counter("tardis.finnhub.requests", "endpoint", "trading_price",
+                    "outcome", outcome).increment();
         }
 
         return staleCache != null ? staleCache.price : 0.0;
@@ -152,7 +213,17 @@ public class FinnhubPriceService {
         return cached != null
                 && cached.cachedAt
                 .plusSeconds(CACHE_SECONDS)
-                .isAfter(LocalDateTime.now());
+                .isAfter(clock.instant());
+    }
+
+    private Instant quoteTimestamp(Object value) {
+        if (value == null) return null;
+        try {
+            long seconds = new java.math.BigDecimal(value.toString()).longValueExact();
+            return seconds > 0 ? Instant.ofEpochSecond(seconds) : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private void putBounded(String symbol, CachedPrice price) {
@@ -185,11 +256,13 @@ public class FinnhubPriceService {
 
     private static class CachedPrice {
         final double price;
-        final LocalDateTime cachedAt;
+        final Instant cachedAt;
+        final Instant quotedAt;
 
-        CachedPrice(double price, LocalDateTime cachedAt) {
+        CachedPrice(double price, Instant cachedAt, Instant quotedAt) {
             this.price = price;
             this.cachedAt = cachedAt;
+            this.quotedAt = quotedAt;
         }
     }
 }

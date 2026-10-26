@@ -44,7 +44,7 @@ class DecimalPriceRangeServiceTest {
     @Test
     void limitOrderRejectsPriceOutsideDecimal19Scale2BeforeSave() {
         Member member = member();
-        when(memberRepository.findByUsername("alice"))
+        when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));
         when(limitOrderRepository.countByMemberAndStatus(member, "PENDING"))
                 .thenReturn(0L);
