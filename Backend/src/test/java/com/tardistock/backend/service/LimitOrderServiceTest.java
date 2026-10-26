@@ -16,8 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -98,8 +100,8 @@ class LimitOrderServiceTest {
         verify(ledgerService).record(
                 eq(member),
                 eq("LIMIT_BUY"),
-                eq(-380.0),
-                eq(620.0),
+                eq(new BigDecimal("-380.00")),
+                eq(new BigDecimal("620.00")),
                 isNull(),
                 eq("AAPL"),
                 contains("지정가 매수")
@@ -197,7 +199,7 @@ class LimitOrderServiceTest {
 
     @Test
     void rejectsLimitPriceThatRoundsBelowOneCent() {
-        when(memberRepository.findByUsername("alice"))
+        when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));
         when(limitOrderRepository.countByMemberAndStatus(member, "PENDING"))
                 .thenReturn(0L);
@@ -213,7 +215,7 @@ class LimitOrderServiceTest {
 
     @Test
     void halfCentLimitPriceRoundsUpToOneCent() {
-        when(memberRepository.findByUsername("alice"))
+        when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));
         when(limitOrderRepository.countByMemberAndStatus(member, "PENDING"))
                 .thenReturn(0L);
@@ -229,5 +231,106 @@ class LimitOrderServiceTest {
         );
 
         assertEquals(0.01, order.getLimitPrice(), 0.0000001);
+    }
+
+    @Test
+    void cancelledOrderCannotBeFilledAgain() {
+        LimitOrder order = order(1);
+        order.cancel(LocalDateTime.now());
+        when(limitOrderRepository.findPendingForUpdateBySymbol("AAPL"))
+                .thenReturn(List.of(order));
+
+        assertEquals(0, service.processSymbol("AAPL", 100.0));
+        assertEquals("CANCELLED", order.getStatus());
+        verifyNoInteractions(memberRepository, walletRepository, portfolioRepository,
+                tradeHistoryRepository, ledgerService, notificationService);
+    }
+
+    @Test
+    void quoteExpiringDuringLockWaitLeavesOrderAndAssetsUnchanged() {
+        LimitOrder order = order(1);
+        Wallet wallet = readyToFill(order);
+        AtomicInteger calls = new AtomicInteger();
+
+        assertEquals(0, service.processSymbol("AAPL",
+                () -> calls.getAndIncrement() == 0 ? 100.0 : 0.0));
+
+        assertEquals("PENDING", order.getStatus());
+        assertEquals(1000.0, wallet.getBalance());
+        verify(walletRepository, never()).save(any());
+        verify(portfolioRepository, never()).save(any());
+        verifyNoInteractions(tradeHistoryRepository, ledgerService, notificationService);
+    }
+
+    @Test
+    void priceMovingBeyondLimitDuringLockWaitLeavesOrderPending() {
+        LimitOrder order = order(1);
+        Wallet wallet = readyToFill(order);
+        AtomicInteger calls = new AtomicInteger();
+
+        assertEquals(0, service.processSymbol("AAPL",
+                () -> calls.getAndIncrement() == 0 ? 100.0 : 201.0));
+
+        assertEquals("PENDING", order.getStatus());
+        assertEquals(1000.0, wallet.getBalance());
+        verifyNoInteractions(tradeHistoryRepository, ledgerService, notificationService);
+    }
+
+    @Test
+    void integerHoldingOverflowIsRejectedBeforeAnyMoneyChanges() {
+        LimitOrder order = order(1);
+        Wallet wallet = readyToFill(order);
+        Portfolio portfolio = new Portfolio(member, "AAPL", Integer.MAX_VALUE, 100.0);
+        when(portfolioRepository.findForUpdateByMemberAndSymbol(member, "AAPL"))
+                .thenReturn(Optional.of(portfolio));
+
+        assertEquals(1, service.processSymbol("AAPL", 100.0));
+
+        assertEquals("REJECTED", order.getStatus());
+        assertEquals(Integer.MAX_VALUE, portfolio.getAmount());
+        assertEquals(1000.0, wallet.getBalance());
+        verify(walletRepository, never()).save(any());
+        verify(portfolioRepository, never()).save(any());
+        verifyNoInteractions(tradeHistoryRepository, ledgerService);
+    }
+
+    @Test
+    void smallPurchasePreservesCentsOfVeryLargeWallet() {
+        LimitOrder order = order(1);
+        Wallet wallet = readyToFill(order);
+        wallet.setBalanceAmount(new BigDecimal("10000000000000000.01"));
+
+        service.processSymbol("AAPL", 0.01);
+
+        assertEquals(new BigDecimal("10000000000000000.00"), wallet.getBalanceAmount());
+        verify(ledgerService).record(eq(member), eq("LIMIT_BUY"),
+                eq(new BigDecimal("-0.01")), eq(wallet.getBalanceAmount()),
+                isNull(), eq("AAPL"), anyString());
+    }
+
+    @Test
+    void priceThatRoundsTotalToZeroCannotGrantFreeShares() {
+        LimitOrder order = order(1);
+        Wallet wallet = readyToFill(order);
+
+        service.processSymbol("AAPL", 0.000001);
+
+        assertEquals("REJECTED", order.getStatus());
+        assertEquals(1000.0, wallet.getBalance());
+        verify(walletRepository, never()).save(any());
+        verify(portfolioRepository, never()).save(any());
+        verifyNoInteractions(tradeHistoryRepository, ledgerService);
+    }
+
+    private LimitOrder order(int amount) {
+        return new LimitOrder(member, "BUY", "AAPL", amount, 200.0, LocalDateTime.now());
+    }
+
+    private Wallet readyToFill(LimitOrder order) {
+        Wallet wallet = new Wallet(member, 1000.0);
+        when(limitOrderRepository.findPendingForUpdateBySymbol("AAPL")).thenReturn(List.of(order));
+        when(memberRepository.findByUsernameForUpdate("alice")).thenReturn(Optional.of(member));
+        when(walletRepository.findForUpdateByMember(member)).thenReturn(Optional.of(wallet));
+        return wallet;
     }
 }

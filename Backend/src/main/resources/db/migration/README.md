@@ -26,3 +26,7 @@
 | V8 | case-insensitive 중복 이메일 비파괴 격리 후 `member.email` UNIQUE |
 | V9 | 사용자 승인에 따른 1회성 운영 데이터 전체 초기화 (스키마·history 유지) |
 | V10 | 이메일 인증번호 24시간 발송 한도 테이블 `email_code_send_quota` |
+| V11 | 거래·송금·지정가 생성의 멱등성 영수증 테이블 `mutation_request` (운영 미적용) |
+
+현재 확인한 운영 기준은 V10입니다. V11은 이번 수정에 포함된 추가 전용 migration이며
+로컬 테스트 DB에서 검증합니다. 운영 적용 여부는 실제 Flyway 이력으로 확인해야 합니다.

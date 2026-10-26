@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     CheckCircle2,
@@ -15,7 +15,6 @@ import { API_URL } from '../config';
 import {
     authFetch,
     getAuthHeaders,
-    getStoredToken,
     logoutSession
 } from '../auth';
 import { confirmAction, notify } from '../uiFeedback';
@@ -85,7 +84,7 @@ export default function Settings() {
     const [sessionsLoading, setSessionsLoading] = useState(false);
     const [sessionsRevoking, setSessionsRevoking] = useState(false);
 
-    const loadSessions = async () => {
+    const loadSessions = useCallback(async () => {
         setSessionsLoading(true);
         try {
             const res = await authFetch(
@@ -104,7 +103,7 @@ export default function Settings() {
         } finally {
             setSessionsLoading(false);
         }
-    };
+    }, []);
 
     const revokeOtherSessions = async () => {
         const accepted = await confirmAction({
@@ -141,7 +140,7 @@ export default function Settings() {
         }
     };
 
-    const loadSecurityActivity = async () => {
+    const loadSecurityActivity = useCallback(async () => {
         setSecurityActivityLoading(true);
         try {
             const res = await authFetch(
@@ -154,9 +153,9 @@ export default function Settings() {
         } finally {
             setSecurityActivityLoading(false);
         }
-    };
+    }, []);
 
-    const loadSettings = async () => {
+    const loadSettings = useCallback(async () => {
         try {
             const res = await authFetch(
                 `${API_URL}/api/account/settings`,
@@ -185,15 +184,13 @@ export default function Settings() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [navigate, loadSecurityActivity, loadSessions]);
 
     useEffect(() => {
-        if (!getStoredToken()) {
-            navigate('/login', { replace: true });
-            return;
-        }
-        loadSettings();
-    }, [navigate]);
+        let active = true;
+        queueMicrotask(() => { if (active) void loadSettings(); });
+        return () => { active = false; };
+    }, [loadSettings]);
 
     const handlePasswordChange = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -392,7 +389,7 @@ export default function Settings() {
             setRecoveryLoading(false);
         }
     };
-    const linkGoogle = async (
+    const linkGoogle = useCallback(async (
         response: GoogleCredentialResponse
     ) => {
         if (!response.credential) {
@@ -426,12 +423,14 @@ export default function Settings() {
         } finally {
             setGoogleLoading(false);
         }
-    };
+    }, [loadSettings]);
+
+    const googleConnected = settings?.googleConnected;
 
     useEffect(() => {
         if (
-            !settings
-            || settings.googleConnected
+            googleConnected === undefined
+            || googleConnected
             || !googleClientId
             || !googleButtonRef.current
         ) {
@@ -439,9 +438,7 @@ export default function Settings() {
         }
 
         const initializeGoogle = () => {
-            const googleWindow = (
-                window as Window & { google?: any }
-            ).google;
+            const googleWindow = window.google;
             if (!googleWindow || !googleButtonRef.current) return;
 
             googleWindow.accounts.id.initialize({
@@ -461,9 +458,7 @@ export default function Settings() {
             );
         };
 
-        const googleWindow = (
-            window as Window & { google?: any }
-        ).google;
+        const googleWindow = window.google;
         if (googleWindow) {
             initializeGoogle();
             return;
@@ -489,7 +484,7 @@ export default function Settings() {
         return () => {
             script?.removeEventListener('load', initializeGoogle);
         };
-    }, [settings?.googleConnected, googleClientId]);
+    }, [googleConnected, googleClientId, linkGoogle]);
 
     const unlinkGoogle = async () => {
         const accepted = await confirmAction({

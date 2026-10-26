@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Briefcase, RefreshCw, Newspaper, Gift } from 'lucide-react';
 // 💡 Recharts 라이브러리 임포트
@@ -7,6 +7,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, A
 import EconomyModal from '../components/EconomyModal';
 import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
+import { useMarketQuotes } from '../useMarketQuotes';
+import { quoteTime } from '../marketData';
+import { mutationIntent } from '../mutationIntent';
 
 interface TradeHistory { id: number; tradeType: string; symbol: string; amount: number; price: number; tradeTime: string; }
 interface PortfolioItem { symbol: string; amount: number; averagePrice: number; }
@@ -29,77 +32,37 @@ export default function Dashboard() {
     const [allSymbols, setAllSymbols] = useState<StockSymbol[]>([]);
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-    const [watchlistData, setWatchlistData] = useState<Record<string, { c: number, d: number, dp: number }>>({});
-    const [currentPrice, setCurrentPrice] = useState<number>(0);
-    const [priceChange, setPriceChange] = useState<number>(0);
-    const [percentChange, setPercentChange] = useState<number>(0);
-    const [totalAssets, setTotalAssets] = useState<number>(0);
+    const { quotes: watchlistData, errors: quoteErrors, loading: isLoadingStocks } = useMarketQuotes([...DASHBOARD_SYMBOLS, ...portfolio.map(item => item.symbol), selectedSymbol]);
+    const selectedQuote = watchlistData[selectedSymbol];
+    const currentPrice = selectedQuote?.c ?? 0;
+    const priceChange = selectedQuote?.d ?? 0;
+    const percentChange = selectedQuote?.dp ?? 0;
+    const totalAssets = balance + portfolio.reduce((sum, item) => sum + item.amount * (watchlistData[item.symbol]?.c ?? item.averagePrice), 0);
+    const [accountError, setAccountError] = useState('');
+    const [hasAccountData, setHasAccountData] = useState(false);
+    const [assetHistoryError, setAssetHistoryError] = useState('');
+    const [isTrading, setIsTrading] = useState(false);
+    const tradeInFlight = useRef(false);
+    const accountRequest = useRef(0);
+    const historyRequest = useRef(0);
     const [buyRatio, setBuyRatio] = useState<number>(50); 
     const [panelMode, setPanelMode] = useState<'summary' | 'top4'>('summary'); 
     const [isPortfolioModalOpen, setIsPortfolioModalOpen] = useState<boolean>(false);
     const [isEconomyModalOpen, setIsEconomyModalOpen] = useState<boolean>(false);
     const [toasts, setToasts] = useState<TradeToast[]>([]);
     
-    const [stocks, setStocks] = useState<any[]>([]);
     const [stockIndex, setStockIndex] = useState(0);
-    const [isLoadingStocks, setIsLoadingStocks] = useState(false);
+    const stocks = DASHBOARD_SYMBOLS.slice(stockIndex, stockIndex + BATCH_SIZE).map(symbol => ({ symbol, ...watchlistData[symbol], error: quoteErrors[symbol] ?? (!watchlistData[symbol] ? '시세 미수신' : '') }));
     const [assetHistory, setAssetHistory] = useState<PortfolioSnapshot[]>([]);
     const [assetHistoryRange, setAssetHistoryRange] = useState<'1D' | '1W' | '1M' | 'ALL'>('1W');
-    const [isAssetHistoryLoading, setIsAssetHistoryLoading] = useState(false);
+    const [isAssetHistoryLoading, setIsAssetHistoryLoading] = useState(true);
 
     const [newsTab, setNewsTab] = useState<'global' | 'korea'>('global'); 
     const [globalNewsList, setGlobalNewsList] = useState<NewsItem[]>([]);
     const [koreaNewsList, setKoreaNewsList] = useState<NaverNewsItem[]>([]);
     const [newsIndex, setNewsIndex] = useState(0);
-    const [isLoadingNews, setIsLoadingNews] = useState(false);
-
-    useEffect(() => {
-        const handleNotification = (event: Event) => {
-            const detail =
-                (event as CustomEvent<{
-                    type?: TradeToast['type'];
-                    message?: string;
-                }>).detail;
-
-            if (!detail) return;
-
-            const toastId = Date.now();
-            setToasts(prev => [
-                ...prev,
-                {
-                    id: toastId,
-                    type: detail.type || 'TRANSFER',
-                    customMessage:
-                        detail.message || '새 알림이 도착했습니다.'
-                }
-            ]);
-            window.setTimeout(
-                () =>
-                    setToasts(prev =>
-                        prev.filter(toast => toast.id !== toastId)
-                    ),
-                4000
-            );
-            if (
-                detail.type === 'TRANSFER'
-                || detail.type === 'LIMIT_ORDER'
-            ) {
-                fetchUserData();
-            }
-        };
-
-        window.addEventListener(
-            'tardis:notification',
-            handleNotification
-        );
-
-        return () => {
-            window.removeEventListener(
-                'tardis:notification',
-                handleNotification
-            );
-        };
-    }, []);
+    const [isLoadingNews, setIsLoadingNews] = useState(true);
+    const [newsError, setNewsError] = useState('');
 
     const realtimeToastMeta = (type: string) => {
         switch (type) {
@@ -160,54 +123,60 @@ export default function Dashboard() {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
     };
 
-    const fetchUserData = async () => {
+    const fetchUserData = useCallback(async () => {
         const username = localStorage.getItem('username');
-        if (!username) return;
+        if (!username || username === 'Guest') return;
+        const request = ++accountRequest.current;
         try {
-            const headers = getAuthHeaders();
-            const balRes = await authFetch(`${API_URL}/api/trade/balance`, { headers });
-            setBalance(Number(await balRes.text()) || 0);
-            
-            const histRes = await authFetch(`${API_URL}/api/trade/history`, { headers });
-            const histData: TradeHistory[] = await histRes.json();
+            const responses = await Promise.all(['balance', 'history', 'portfolio'].map(path => authFetch(`${API_URL}/api/trade/${path}`, { headers: getAuthHeaders(false) })));
+            if (responses.some(response => !response.ok)) throw new Error('계좌 정보를 갱신하지 못했습니다. 잠시 후 다시 확인해 주세요.');
+            const [balanceText, histData, portfolioData] = await Promise.all([responses[0].text(), responses[1].json(), responses[2].json()]);
+            const nextBalance = Number(balanceText);
+            if (!balanceText.trim() || !Number.isFinite(nextBalance) || !Array.isArray(histData) || !Array.isArray(portfolioData)) throw new Error('계좌 응답을 확인할 수 없습니다.');
+            if (request !== accountRequest.current) return;
+            setBalance(nextBalance);
             setHistory(histData);
-            if (histData.length > 0) setBuyRatio(Math.round((histData.filter(h => h.tradeType === 'BUY').length / histData.length) * 100));
-            
-            const portRes = await authFetch(`${API_URL}/api/trade/portfolio`, { headers });
-            setPortfolio(await portRes.json());
-        } catch (err) {}
-    };
+            setBuyRatio(histData.length ? Math.round((histData.filter((h: TradeHistory) => h.tradeType === 'BUY').length / histData.length) * 100) : 50);
+            setPortfolio(portfolioData);
+            setHasAccountData(true);
+            setAccountError('');
+        } catch (error) {
+            if (request === accountRequest.current) setAccountError(error instanceof Error ? error.message : '계좌 조회 실패');
+        }
+    }, []);
+
+    useEffect(() => {
+        const handleNotification = (event: Event) => {
+            const detail = (event as CustomEvent<{ type?: string; message?: string }>).detail;
+            if (!detail) return;
+            const id = Date.now();
+            setToasts(previous => [...previous, { id, type: detail.type || 'TRANSFER', customMessage: detail.message || '새 알림이 도착했습니다.' }]);
+            window.setTimeout(() => setToasts(previous => previous.filter(toast => toast.id !== id)), 4000);
+            if (detail.type === 'TRANSFER' || detail.type === 'LIMIT_ORDER') void fetchUserData();
+        };
+        window.addEventListener('tardis:notification', handleNotification);
+        return () => window.removeEventListener('tardis:notification', handleNotification);
+    }, [fetchUserData]);
 
     const fetchAssetHistory = async (range: '1D' | '1W' | '1M' | 'ALL') => {
-        setIsAssetHistoryLoading(true);
+        const request = ++historyRequest.current;
         try {
             const res = await authFetch(API_URL + '/api/portfolio-history?range=' + range, {
                 headers: getAuthHeaders()
             });
-            const data = await res.json().catch(() => []);
-            setAssetHistory(res.ok && Array.isArray(data) ? data : []);
+            const data = await res.json();
+            if (!res.ok || !Array.isArray(data)) throw new Error('자산 추이 조회 실패');
+            if (request !== historyRequest.current) return;
+            setAssetHistory(data);
+            setAssetHistoryError('');
         } catch {
-            setAssetHistory([]);
+            if (request === historyRequest.current) setAssetHistoryError('자산 추이를 갱신하지 못했습니다. 이전 결과를 표시합니다.');
         } finally {
-            setIsAssetHistoryLoading(false);
+            if (request === historyRequest.current) setIsAssetHistoryLoading(false);
         }
-    };
-    const fetchStockBatch = async (startIdx: number) => {
-        setIsLoadingStocks(true);
-        const symbolsToFetch = DASHBOARD_SYMBOLS.slice(startIdx, startIdx + BATCH_SIZE);
-        try {
-            const promises = symbolsToFetch.map(async (symbol) => {
-                const res = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
-                if (res.status === 429) return { symbol, error: '한도 대기' };
-                const data = await res.json();
-                return { symbol, ...data };
-            });
-            setStocks(await Promise.all(promises));
-        } catch (error) {} finally { setIsLoadingStocks(false); }
     };
 
     const fetchNewsData = async () => {
-        setIsLoadingNews(true);
         try {
             const resGlobal = await fetch(`${API_URL}/api/news/global?symbol=AAPL`);
             const globalData = await resGlobal.json();
@@ -216,50 +185,26 @@ export default function Dashboard() {
             const resKorea = await fetch(`${API_URL}/api/news/korea?query=증시 특징주`);
             const koreaData = await resKorea.json();
             if (koreaData && koreaData.items) setKoreaNewsList(koreaData.items);
-        } catch (err) {} finally { setIsLoadingNews(false); }
+        } catch { setNewsError('뉴스를 불러오지 못했습니다.'); } finally { setIsLoadingNews(false); }
     };
 
     useEffect(() => { 
-        fetchUserData();
-        fetchAssetHistory('1W');
-        fetchStockBatch(0); 
-        fetchNewsData();
-        fetch(`${API_URL}/api/stock/symbols`).then(r=>r.json()).then(d => { if(Array.isArray(d)) setAllSymbols(d); }).catch(()=>{});
-    }, []);
+        const controller = new AbortController();
+        queueMicrotask(() => {
+            if (controller.signal.aborted) return;
+            void fetchUserData();
+            void fetchNewsData();
+            fetch(`${API_URL}/api/stock/symbols`, { signal: controller.signal }).then(r=>r.json()).then(d => { if(Array.isArray(d)) setAllSymbols(d); }).catch(()=>{});
+        });
+        return () => controller.abort();
+    }, [fetchUserData]);
 
     useEffect(() => {
-        fetchAssetHistory(assetHistoryRange);
+        let active = true;
+        queueMicrotask(() => { if (active) void fetchAssetHistory(assetHistoryRange); });
+        return () => { active = false; };
     }, [assetHistoryRange]);
 
-    useEffect(() => {
-        const fetchWatchlistPrices = async () => {
-            const updatedData: Record<string, { c: number, d: number, dp: number }> = {};
-            const symbolsToFetch = Array.from(new Set([...DASHBOARD_SYMBOLS, ...portfolio.map(p => p.symbol)]));
-            for (const sym of symbolsToFetch) {
-                try {
-                    const res = await fetch(`${API_URL}/api/stock/quote?symbol=${sym}`);
-                    const data = await res.json();
-                    if (data && data.c) updatedData[sym] = { c: data.c, d: data.d, dp: data.dp };
-                } catch (err) {}
-            }
-            setWatchlistData(prev => ({ ...prev, ...updatedData }));
-        };
-        fetchWatchlistPrices();
-        const interval = setInterval(fetchWatchlistPrices, 30000);
-        return () => clearInterval(interval);
-    }, [portfolio]);
-
-    useEffect(() => {
-        let stockAssets = 0;
-        portfolio.forEach(p => stockAssets += (p.amount * (watchlistData[p.symbol]?.c || p.averagePrice)));
-        setTotalAssets(balance + stockAssets);
-    }, [watchlistData, portfolio, balance]);
-
-    useEffect(() => {
-        fetch(`${API_URL}/api/stock/quote?symbol=${selectedSymbol}`).then(r=>r.json()).then(data => {
-            if (data && data.c) { setCurrentPrice(data.c); setPriceChange(data.d); setPercentChange(data.dp); }
-        }).catch(()=>{});
-    }, [selectedSymbol]);
 
     const getThumbnail = (url: string, originalImage?: string) => {
         const lowerUrl = url.toLowerCase();
@@ -275,7 +220,34 @@ export default function Dashboard() {
         return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=1000&auto=format&fit=crop';
     };
 
-    const getValidAmount = () => (typeof tradeAmount === 'number' && tradeAmount > 0 ? tradeAmount : 1);
+    const submitTrade = async (side: 'BUY' | 'SELL') => {
+        if (tradeInFlight.current) return;
+        const username = localStorage.getItem('username');
+        if (!username || username === 'Guest') return notify('로그인이 필요합니다.', 'warning');
+        if (typeof tradeAmount !== 'number' || !Number.isSafeInteger(tradeAmount) || tradeAmount <= 0) return notify('올바른 정수 수량을 입력해 주세요.', 'warning');
+        const amount = tradeAmount;
+        const symbol = selectedSymbol;
+        const endpoint = `${API_URL}/api/trade/${side.toLowerCase()}`;
+        const body = JSON.stringify({ symbol, amount });
+        tradeInFlight.current = true;
+        setIsTrading(true);
+        try {
+            const intent = await mutationIntent(endpoint, body);
+            const res = await authFetch(endpoint, { method: 'POST', headers: { ...getAuthHeaders(), 'Idempotency-Key': intent.key }, body });
+            const data = await res.json();
+            intent.settle(res);
+            if (res.ok && data.status === 'SUCCESS') {
+                await fetchUserData();
+                if (typeof data.price === 'number' && Number.isFinite(data.price)) showLocalToast(side, symbol, amount, data.price);
+                else notify(`${symbol} ${amount}주 ${side === 'BUY' ? '매수' : '매도'}가 체결되었습니다. 거래 내역에서 체결가를 확인하세요.`, 'success');
+            } else notify(data.message || '거래가 처리되지 않았습니다.', 'error');
+        } catch {
+            notify('거래 응답을 확인하지 못했습니다. 거래 내역을 확인하거나 같은 주문을 다시 시도해 주세요.', 'error');
+        } finally {
+            tradeInFlight.current = false;
+            setIsTrading(false);
+        }
+    };
     
     const filteredSymbols = allSymbols.filter(s => s.symbol.toLowerCase().includes(searchTerm.toLowerCase()) || s.description.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10);
     const top4Movers = Object.entries(watchlistData).sort(([, a], [, b]) => Math.abs(b.dp) - Math.abs(a.dp)).slice(0, 4);
@@ -300,6 +272,9 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-[#0b1120] text-slate-200 p-4 sm:p-6 md:p-8 font-sans flex flex-col relative">
+            {accountError && <div role="alert" className="mb-4 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-300">{accountError} {hasAccountData ? '이전 계좌 정보를 표시합니다.' : '계좌 정보를 아직 확인하지 못했습니다.'}<button type="button" className="ml-3 underline" onClick={() => void fetchUserData()}>다시 조회</button></div>}
+            {Object.keys(quoteErrors).length > 0 && <p role="status" className="mb-4 text-sm text-amber-300">시세 갱신 지연: {Object.keys(quoteErrors).join(', ')}. 이전 시세 또는 매수 평단가로 평가한 추정 자산입니다. 자동 재조회합니다.</p>}
+            {assetHistoryError && <p role="alert" className="mb-3 text-sm text-amber-300">{assetHistoryError}</p>}
             <div className="fixed bottom-8 right-8 z-[100] flex flex-col gap-3 pointer-events-none">
                 <AnimatePresence>
                     {toasts.map(toast => {
@@ -392,7 +367,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
                         {(['1D', '1W', '1M', 'ALL'] as const).map(range => (
-                            <button key={range} type="button" onClick={() => setAssetHistoryRange(range)}
+                            <button key={range} type="button" onClick={() => { if (range !== assetHistoryRange) { setIsAssetHistoryLoading(true); setAssetHistoryRange(range); } }}
                                 className={'px-3 py-1.5 rounded-md text-xs font-bold transition-colors ' + (assetHistoryRange === range ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white')}>
                                 {range}
                             </button>
@@ -403,7 +378,7 @@ export default function Dashboard() {
                     {isAssetHistoryLoading ? (
                         <div className="h-full flex items-center justify-center text-slate-500 text-sm">자산 추이를 불러오는 중...</div>
                     ) : assetHistory.length === 0 ? (
-                        <div className="h-full flex items-center justify-center text-slate-500 text-sm">아직 저장된 자산 스냅샷이 없습니다.</div>
+                        <div className="h-full flex items-center justify-center text-slate-500 text-sm">{assetHistoryError ? '자산 추이를 확인할 수 없습니다.' : '아직 저장된 자산 스냅샷이 없습니다.'}</div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={assetHistory}>
@@ -416,7 +391,7 @@ export default function Dashboard() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                 <XAxis dataKey="capturedAt" tick={{ fill: "#64748b", fontSize: 10 }} minTickGap={28} />
                                 <YAxis width={72} tickFormatter={(value: number) => '$' + Math.round(value).toLocaleString()} tick={{ fill: '#64748b', fontSize: 10 }} domain={['auto', 'auto']} />
-                                <RechartsTooltip formatter={(value: any) => ['$' + Number(value).toFixed(2), '총자산']} />
+                                <RechartsTooltip formatter={(value: unknown) => ['$' + Number(value).toFixed(2), '총자산']} />
                                 <Area type="monotone" dataKey="totalAssets" stroke="#38bdf8" strokeWidth={2} fill="url(#assetHistoryFill)" />
                             </AreaChart>
                         </ResponsiveContainer>
@@ -428,10 +403,10 @@ export default function Dashboard() {
                     <>
                         <div className={`bg-slate-800/50 backdrop-blur-md border ${totalAssets < 100 ? 'border-rose-500/50 ring-1 ring-rose-500/50' : 'border-slate-700/50'} rounded-2xl p-5 flex flex-col justify-between shadow-lg`}>
                             <span className="text-slate-400 text-xs font-bold uppercase">Total Assets</span>
-                            <div className="text-2xl font-mono font-bold mt-2 text-white">${totalAssets.toFixed(2)}</div>
+                            <div className="text-2xl font-mono font-bold mt-2 text-white">{hasAccountData ? `$${totalAssets.toFixed(2)}` : '계좌 조회 대기'}</div>
                             <div className="flex justify-between items-center mt-1">
-                                <span className="text-xs text-sky-400">Cash: ${balance.toFixed(2)}</span>
-                                {totalAssets < 100 && (
+                                <span className="text-xs text-sky-400">Cash: {hasAccountData ? `$${balance.toFixed(2)}` : '조회 대기'}</span>
+                                {hasAccountData && totalAssets < 100 && (
                                     <button 
                                         onClick={async () => {
                                             try {
@@ -442,7 +417,7 @@ export default function Dashboard() {
                                                 const data = await res.json();
                                                 notify(data.message);
                                                 if (data.status === 'SUCCESS') fetchUserData();
-                                            } catch(e) { notify('오류가 발생했습니다.', 'error'); }
+                                            } catch { notify('오류가 발생했습니다.', 'error'); }
                                         }}
                                         className="bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow animate-pulse"
                                     >
@@ -488,7 +463,7 @@ export default function Dashboard() {
                     <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 shadow-lg relative z-30">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
                             <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2"><Briefcase className="w-5 h-5 text-sky-400"/> 해외 주요 증시</h2>
-                            <button onClick={() => { const nextIdx = (stockIndex + BATCH_SIZE) % DASHBOARD_SYMBOLS.length; setStockIndex(nextIdx); fetchStockBatch(nextIdx); }} className="flex items-center gap-1 text-xs text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg transition-colors font-bold">
+                            <button onClick={() => setStockIndex((stockIndex + BATCH_SIZE) % DASHBOARD_SYMBOLS.length)} className="flex items-center gap-1 text-xs text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-lg transition-colors font-bold">
                                 <RefreshCw className={`w-3 h-3 ${isLoadingStocks ? 'animate-spin' : ''}`} /> 다른 종목 보기
                             </button>
                         </div>
@@ -502,9 +477,8 @@ export default function Dashboard() {
                                     }`}
                                 >
                                     <span className="font-black text-sm text-white mb-1">{stock.symbol}</span>
-                                    {stock.error ? <span className="text-xs text-slate-500">API 대기</span> : (
-                                        <><span className="font-mono font-bold text-slate-300 text-sm">${stock.c?.toFixed(2)}</span><span className={`text-xs font-bold mt-1 ${stock.d > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{stock.d > 0 ? '+' : ''}{stock.dp?.toFixed(2)}%</span></>
-                                    )}
+                                    {stock.c ? <><span className="font-mono font-bold text-slate-300 text-sm">${stock.c.toFixed(2)}</span><span className={`text-xs font-bold mt-1 ${stock.d > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{stock.d > 0 ? '+' : ''}{stock.dp?.toFixed(2)}%</span><time className="mt-1 text-[10px] text-slate-500">{quoteTime(watchlistData[stock.symbol])}</time></> : null}
+                                    {stock.error && <span className="text-xs text-amber-400">{stock.error}</span>}
                                 </div>
                             ))}
                         </div>
@@ -513,7 +487,8 @@ export default function Dashboard() {
                     <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-lg flex flex-col relative z-20">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                             <div>
-                                <h2 className="text-lg font-bold text-slate-200">{selectedSymbol} / USD Real-time</h2>
+                                <h2 className="text-lg font-bold text-slate-200">{selectedSymbol} / USD</h2>
+                                <p className="text-xs text-slate-400">시세 기준: {quoteTime(selectedQuote)} · 표시 시세는 30초 간격 갱신</p>
                                 <div className="mt-1 flex items-baseline gap-3">
                                     <span className="text-3xl font-bold font-mono">{currentPrice > 0 ? `$${currentPrice.toFixed(2)}` : 'Loading...'}</span>
                                     <span className={`font-semibold ${priceChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{priceChange > 0 ? '+' : ''}{priceChange.toFixed(2)} ({percentChange > 0 ? '+' : ''}{percentChange.toFixed(2)}%)</span>
@@ -546,7 +521,7 @@ export default function Dashboard() {
                                             ))}
                                         </Pie>
                                             <RechartsTooltip 
-                                                formatter={(value: any, name: any) => [
+                                                formatter={(value: unknown, name: unknown) => [
                                                     `$${Number(value).toFixed(2)} (${((Number(value) / (totalAssets || 1)) * 100).toFixed(1)}%)`,
                                                     name === 'Cash' ? '💵 보유 현금 (Cash)' : `📈 ${name} (보유 주식)`
                                                 ]}
@@ -564,7 +539,7 @@ export default function Dashboard() {
 
                         <div className="mb-4">
                             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Total Assets (총 자산)</p>
-                            <p className="text-3xl font-mono font-black text-white">${totalAssets.toFixed(2)}</p>
+                            <p className="text-3xl font-mono font-black text-white">{hasAccountData ? `$${totalAssets.toFixed(2)}` : '계좌 조회 대기'}</p>
                         </div>
 
                         {/* 💡 보유 자산 상세 포트폴리오 리스트 (색상 닷 & 종목별 가치 표시) */}
@@ -575,7 +550,7 @@ export default function Dashboard() {
                                     <span className="text-xs font-bold text-slate-200">보유 현금 (Cash)</span>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-xs font-mono font-bold text-sky-400">${balance.toFixed(2)}</span>
+                                    <span className="text-xs font-mono font-bold text-sky-400">{hasAccountData ? `$${balance.toFixed(2)}` : '조회 대기'}</span>
                                     <span className="text-[10px] text-slate-400 block font-mono">
                                         {((balance / (totalAssets || 1)) * 100).toFixed(1)}%
                                     </span>
@@ -619,33 +594,16 @@ export default function Dashboard() {
                             <input type="number" min="1" value={tradeAmount} onChange={(e) => { const val = e.target.value; if (val === '') setTradeAmount(''); else { const parsed = parseInt(val, 10); if (!isNaN(parsed) && parsed > 0) setTradeAmount(parsed); } }} className="w-full bg-slate-900 text-white border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-sky-500 font-mono text-lg transition-colors shadow-inner" />
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3">
-                            <button className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg"
-                                onClick={async () => {
-                                    const username = localStorage.getItem('username');
-                                    if (!username) return notify('로그인이 필요합니다.', 'warning');
-                                    const amt = getValidAmount();
-                                    const res = await authFetch(`${API_URL}/api/trade/sell`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
-                                    const data = await res.json();
-                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('SELL', selectedSymbol, amt, currentPrice); } else notify(data.message);
-                                }}
-                            >SELL {selectedSymbol}</button>
-                            <button className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg"
-                                onClick={async () => {
-                                    const username = localStorage.getItem('username');
-                                    if (!username) return notify('로그인이 필요합니다.', 'warning');
-                                    const amt = getValidAmount();
-                                    const res = await authFetch(`${API_URL}/api/trade/buy`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ symbol: selectedSymbol, amount: amt }) });
-                                    const data = await res.json();
-                                    if (res.ok && data.status === "SUCCESS") { fetchUserData(); showLocalToast('BUY', selectedSymbol, amt, currentPrice); } else notify(data.message);
-                                }}
-                            >BUY {selectedSymbol}</button>
+                            <button disabled={isTrading} className="flex-1 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg" onClick={() => void submitTrade('SELL')}>{isTrading ? '주문 처리 중...' : `SELL ${selectedSymbol}`}</button>
+                            <button disabled={isTrading} className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg" onClick={() => void submitTrade('BUY')}>{isTrading ? '주문 처리 중...' : `BUY ${selectedSymbol}`}</button>
                         </div>
+                        <p className="mt-3 text-xs text-slate-400">체결가는 서버가 거래 시점에 검증합니다. 장 마감이나 시세 지연으로 최근 2분 이내 가격을 확인할 수 없으면 체결되지 않습니다.</p>
                     </div>
 
                     <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex-1 max-h-[350px] flex flex-col shadow-lg">
                         <h2 className="text-xl font-bold mb-4 border-b border-slate-700 pb-2">History</h2>
                         <div className="overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                            {history.length === 0 ? <p className="text-slate-500 text-center mt-6 text-sm font-bold">거래 내역이 없습니다.</p> : (
+                            {history.length === 0 ? <p className="text-slate-500 text-center mt-6 text-sm font-bold">{hasAccountData ? '거래 내역이 없습니다.' : '거래 내역 조회 대기'}</p> : (
                                 history.slice().reverse().map((item) => (
                                     <div key={item.id} className="bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl flex justify-between items-center text-sm hover:border-sky-500/50 transition-colors">
                                         <div><span className={`font-black mr-2 ${item.tradeType === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>{item.tradeType}</span><span className="font-bold text-white">{item.symbol}</span><span className="text-slate-400 ml-1">x {item.amount}</span></div>
@@ -678,12 +636,13 @@ export default function Dashboard() {
                     </div>
                 </div>
                 
+                {newsError && <p role="alert" className="mb-3 text-sm text-amber-300">{newsError}</p>}
                 {isLoadingNews ? (
                     <div className="text-center text-slate-500 py-10 font-bold">뉴스를 불러오는 중입니다...</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {newsTab === 'global' ? (
-                            visibleNews.length > 0 ? visibleNews.map((news: any, idx: number) => {
+                            visibleNews.length > 0 ? globalNewsList.slice(newsIndex, newsIndex + 4).map((news, idx) => {
                                 const imgSrc = getThumbnail(news.url, news.image);
                                 const isLogo = !imgSrc.includes('unsplash');
                                 return (
@@ -701,7 +660,7 @@ export default function Dashboard() {
                                 );
                             }) : <div className="col-span-full text-center text-slate-500 py-4 font-bold">표시할 해외 뉴스가 없습니다.</div>
                         ) : (
-                            visibleNews.length > 0 ? visibleNews.map((news: any, idx: number) => {
+                            visibleNews.length > 0 ? koreaNewsList.slice(newsIndex, newsIndex + 4).map((news, idx) => {
                                 const imgSrc = getThumbnail(news.link);
                                 const isLogo = !imgSrc.includes('unsplash');
                                 return (

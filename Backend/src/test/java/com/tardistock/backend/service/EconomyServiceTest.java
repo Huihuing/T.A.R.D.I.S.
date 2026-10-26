@@ -12,6 +12,7 @@ import com.tardistock.backend.repository.WalletRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -119,9 +120,8 @@ class EconomyServiceTest {
         LedgerService ledger = mock(LedgerService.class);
 
         Member member = mock(Member.class);
-        Wallet wallet = mock(Wallet.class);
+        Wallet wallet = new Wallet(member, 100.005);
         UserEconomy economy = mock(UserEconomy.class);
-        AtomicReference<Double> balance = new AtomicReference<>(100.005);
 
         when(members.findByUsernameForUpdate("alpha"))
                 .thenReturn(Optional.of(member));
@@ -129,11 +129,6 @@ class EconomyServiceTest {
                 .thenReturn(Optional.of(wallet));
         when(economies.findForUpdateByMember(member))
                 .thenReturn(Optional.of(economy));
-        when(wallet.getBalance()).thenAnswer(invocation -> balance.get());
-        doAnswer(invocation -> {
-            balance.set(invocation.getArgument(0));
-            return null;
-        }).when(wallet).setBalance(anyDouble());
         when(trades
                 .existsByMemberAndTradeTypeIgnoreCaseAndTradeTimeGreaterThanEqualAndTradeTimeLessThan(
                         eq(member),
@@ -160,12 +155,12 @@ class EconomyServiceTest {
                 (Double) result.get("newBalance"),
                 0.0000001
         );
-        verify(wallet).setBalance(400.01);
+        assertEquals(new BigDecimal("400.01"), wallet.getBalanceAmount());
         verify(ledger).record(
                 member,
                 "QUEST_REWARD",
-                300.0,
-                400.01,
+                new BigDecimal("300.0"),
+                new BigDecimal("400.01"),
                 "일일 매수 미션 보상"
         );
     }

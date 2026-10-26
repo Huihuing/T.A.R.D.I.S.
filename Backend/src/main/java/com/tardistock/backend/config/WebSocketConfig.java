@@ -11,6 +11,8 @@ import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -73,8 +75,14 @@ public class WebSocketConfig
                     public Message<?> preSend(
                             Message<?> message,
                             MessageChannel channel) {
-                        StompHeaderAccessor accessor =
-                                StompHeaderAccessor.wrap(message);
+                        // Keep the transport's accessor: its user-change callback
+                        // binds the CONNECT principal to subsequent STOMP frames.
+                        StompHeaderAccessor original = MessageHeaderAccessor
+                                .getAccessor(message, StompHeaderAccessor.class);
+                        boolean rebuild = original == null || !original.isMutable();
+                        StompHeaderAccessor accessor = rebuild
+                                ? StompHeaderAccessor.wrap(message)
+                                : original;
 
                         if (StompCommand.CONNECT.equals(
                                 accessor.getCommand())) {
@@ -91,7 +99,10 @@ public class WebSocketConfig
                             authorizeSend(accessor);
                         }
 
-                        return message;
+                        return rebuild
+                                ? MessageBuilder.createMessage(
+                                        message.getPayload(), accessor.getMessageHeaders())
+                                : message;
                     }
                 }
         );

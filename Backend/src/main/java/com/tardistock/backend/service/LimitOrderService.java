@@ -4,11 +4,15 @@ import com.tardistock.backend.entity.*;
 import com.tardistock.backend.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.DoubleSupplier;
 import java.util.regex.Pattern;
 
 import static com.tardistock.backend.util.MoneyMath.fitsCents;
@@ -62,7 +66,8 @@ public class LimitOrderService {
             int amount,
             double limitPrice) {
 
-        Member member = requireMember(username);
+        Member member = memberRepository.findByUsernameForUpdate(username)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
         if (limitOrderRepository.countByMemberAndStatus(
                 member,
@@ -89,6 +94,9 @@ public class LimitOrderService {
         }
 
         double normalizedLimitPrice = roundCents(limitPrice);
+        if (!LimitOrder.isPersistablePrice(normalizedLimitPrice)) {
+            throw new IllegalArgumentException("주문 가격은 DECIMAL(19,2) 범위의 유한한 숫자여야 합니다.");
+        }
         if (normalizedLimitPrice < 0.01) {
             throw new IllegalArgumentException(
                     "지정가는 $0.01 이상이어야 합니다."
@@ -137,13 +145,19 @@ public class LimitOrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<LimitOrder> pendingBatch() {
-        return limitOrderRepository
-                .findTop500ByStatusOrderByCreatedAtAsc("PENDING");
+    public List<String> pendingSymbolsAfter(String afterSymbol, int limit) {
+        return limitOrderRepository.findPendingSymbolsAfter(
+                afterSymbol, PageRequest.of(0, limit));
     }
 
     @Transactional
     public int processSymbol(String symbol, double marketPrice) {
+        return processSymbol(symbol, () -> marketPrice);
+    }
+
+    @Transactional
+    public int processSymbol(String symbol, DoubleSupplier currentPrice) {
+        double marketPrice = currentPrice.getAsDouble();
         if (!Double.isFinite(marketPrice)
                 || marketPrice <= 0
                 || !TradeHistory.isPersistablePrice(marketPrice)) {
@@ -155,6 +169,7 @@ public class LimitOrderService {
 
         int processed = 0;
         for (LimitOrder order : orders) {
+            if (!order.isPending()) continue;
             boolean shouldFill =
                     ("BUY".equals(order.getSide())
                             && marketPrice <= order.getLimitPrice())
@@ -163,20 +178,19 @@ public class LimitOrderService {
 
             if (!shouldFill) continue;
 
-            execute(order, marketPrice);
-            processed++;
+            if (execute(order, currentPrice)) processed++;
         }
         return processed;
     }
 
-    private void execute(LimitOrder order, double marketPrice) {
+    private boolean execute(LimitOrder order, DoubleSupplier currentPrice) {
         Member member = memberRepository
                 .findByUsernameForUpdate(order.getMember().getUsername())
                 .orElse(null);
 
         if (member == null) {
             reject(order, "사용자 정보를 찾을 수 없습니다.");
-            return;
+            return true;
         }
 
         Wallet wallet = walletRepository
@@ -185,57 +199,57 @@ public class LimitOrderService {
 
         if (wallet == null) {
             reject(order, "지갑 정보를 찾을 수 없습니다.");
-            return;
+            return true;
+        }
+
+        Portfolio portfolio = portfolioRepository.findForUpdateByMemberAndSymbol(
+                member, order.getSymbol()).orElse(null);
+        // DB lock 대기 중 시세가 만료될 수 있으므로 실제 mutation 직전에 재검증합니다.
+        double marketPrice = currentPrice.getAsDouble();
+        if (!Double.isFinite(marketPrice) || marketPrice <= 0
+                || !TradeHistory.isPersistablePrice(marketPrice)
+                || ("BUY".equals(order.getSide()) && marketPrice > order.getLimitPrice())
+                || ("SELL".equals(order.getSide()) && marketPrice < order.getLimitPrice())) {
+            return false;
         }
 
         if ("BUY".equals(order.getSide())) {
-            executeBuy(order, member, wallet, marketPrice);
+            executeBuy(order, member, wallet, portfolio, marketPrice);
         } else {
-            executeSell(order, member, wallet, marketPrice);
+            executeSell(order, member, wallet, portfolio, marketPrice);
         }
+        return true;
     }
 
     private void executeBuy(
             LimitOrder order,
             Member member,
             Wallet wallet,
+            Portfolio existingPortfolio,
             double marketPrice) {
 
-        double rawTotalCost = marketPrice * order.getAmount();
-        if (!Double.isFinite(rawTotalCost)) {
+        BigDecimal totalCost = roundCents(BigDecimal.valueOf(marketPrice)
+                .multiply(BigDecimal.valueOf(order.getAmount())));
+        if (!fitsCents(totalCost) || totalCost.signum() <= 0) {
             reject(
                     order,
                     "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
             );
             return;
         }
-
-        double totalCost = roundCents(rawTotalCost);
-        if (!fitsCents(totalCost)) {
-            reject(
-                    order,
-                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
-            );
-            return;
-        }
-        if (wallet.getBalance() < totalCost) {
+        if (wallet.getBalanceAmount().compareTo(totalCost) < 0) {
             reject(order, "체결 시점의 잔액이 부족하여 주문이 취소되었습니다.");
             return;
         }
 
-        Portfolio portfolio = portfolioRepository
-                .findForUpdateByMemberAndSymbol(
-                        member,
-                        order.getSymbol()
-                )
-                .orElse(new Portfolio(
+        Portfolio portfolio = existingPortfolio == null ? new Portfolio(
                         member,
                         order.getSymbol(),
                         0,
                         0.0
-                ));
+                ) : existingPortfolio;
 
-        double newBalance = roundCents(wallet.getBalance() - totalCost);
+        BigDecimal newBalance = roundCents(wallet.getBalanceAmount().subtract(totalCost));
         if (!fitsCents(newBalance)) {
             reject(
                     order,
@@ -244,13 +258,19 @@ public class LimitOrderService {
             return;
         }
 
-        double newTotalValue =
-                portfolio.getAmount() * portfolio.getAveragePrice()
-                        + totalCost;
+        long combinedAmount = (long) portfolio.getAmount() + order.getAmount();
+        if (portfolio.getAmount() < 0 || combinedAmount > Integer.MAX_VALUE) {
+            reject(order, "보유 수량이 허용 범위를 초과하여 주문이 취소되었습니다.");
+            return;
+        }
+        BigDecimal newTotalValue = portfolio.getAveragePriceAmount()
+                .multiply(BigDecimal.valueOf(portfolio.getAmount()))
+                .add(BigDecimal.valueOf(marketPrice).multiply(BigDecimal.valueOf(order.getAmount())));
         int newAmount =
-                portfolio.getAmount() + order.getAmount();
-        double newAveragePrice = newTotalValue / newAmount;
-        if (!Portfolio.isPersistablePrice(newAveragePrice)) {
+                (int) combinedAmount;
+        BigDecimal newAveragePrice = newTotalValue.divide(
+                BigDecimal.valueOf(newAmount), 6, RoundingMode.HALF_UP);
+        if (newAveragePrice.precision() > 19 || newAveragePrice.signum() < 0) {
             reject(
                     order,
                     "평균 매입가가 허용 범위를 초과하여 주문이 취소되었습니다."
@@ -258,11 +278,11 @@ public class LimitOrderService {
             return;
         }
 
-        wallet.setBalance(newBalance);
+        wallet.setBalanceAmount(newBalance);
         walletRepository.save(wallet);
 
         portfolio.setAmount(newAmount);
-        portfolio.setAveragePrice(newAveragePrice);
+        portfolio.setAveragePriceAmount(newAveragePrice);
         portfolioRepository.save(portfolio);
 
         recordFill(
@@ -270,7 +290,7 @@ public class LimitOrderService {
                 member,
                 wallet,
                 marketPrice,
-                -totalCost,
+                totalCost.negate(),
                 "LIMIT_BUY"
         );
     }
@@ -279,14 +299,8 @@ public class LimitOrderService {
             LimitOrder order,
             Member member,
             Wallet wallet,
+            Portfolio portfolio,
             double marketPrice) {
-
-        Portfolio portfolio = portfolioRepository
-                .findForUpdateByMemberAndSymbol(
-                        member,
-                        order.getSymbol()
-                )
-                .orElse(null);
 
         if (portfolio == null
                 || portfolio.getAmount() < order.getAmount()) {
@@ -294,8 +308,9 @@ public class LimitOrderService {
             return;
         }
 
-        double rawProceeds = marketPrice * order.getAmount();
-        if (!Double.isFinite(rawProceeds)) {
+        BigDecimal proceeds = roundCents(BigDecimal.valueOf(marketPrice)
+                .multiply(BigDecimal.valueOf(order.getAmount())));
+        if (!fitsCents(proceeds) || proceeds.signum() <= 0) {
             reject(
                     order,
                     "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
@@ -303,16 +318,7 @@ public class LimitOrderService {
             return;
         }
 
-        double proceeds = roundCents(rawProceeds);
-        if (!fitsCents(proceeds)) {
-            reject(
-                    order,
-                    "체결 금액이 허용 범위를 초과하여 주문이 취소되었습니다."
-            );
-            return;
-        }
-
-        double newBalance = roundCents(wallet.getBalance() + proceeds);
+        BigDecimal newBalance = roundCents(wallet.getBalanceAmount().add(proceeds));
         if (!fitsCents(newBalance)) {
             reject(
                     order,
@@ -331,7 +337,7 @@ public class LimitOrderService {
             portfolioRepository.save(portfolio);
         }
 
-        wallet.setBalance(newBalance);
+        wallet.setBalanceAmount(newBalance);
         walletRepository.save(wallet);
 
         recordFill(
@@ -349,7 +355,7 @@ public class LimitOrderService {
             Member member,
             Wallet wallet,
             double marketPrice,
-            double ledgerAmount,
+            BigDecimal ledgerAmount,
             String ledgerType) {
 
         LocalDateTime now = LocalDateTime.now(KST);
@@ -367,7 +373,7 @@ public class LimitOrderService {
                 member,
                 ledgerType,
                 ledgerAmount,
-                wallet.getBalance(),
+                wallet.getBalanceAmount(),
                 null,
                 order.getSymbol(),
                 order.getSymbol()

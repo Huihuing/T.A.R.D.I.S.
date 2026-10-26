@@ -26,6 +26,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.tardistock.backend.security.JwtAuthenticationFilter;
 
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
@@ -153,10 +154,29 @@ class AuthControllerTest {
         verify(ledgerService).record(
                 eq(member),
                 eq("DAILY_LOGIN_REWARD"),
-                eq(500.0),
-                eq(1500.0),
+                eq(BigDecimal.valueOf(500)),
+                eq(new BigDecimal("1500.00")),
                 eq("일일 로그인 보상")
         );
+    }
+
+    @Test
+    void dailyLoginRewardPreservesCentsAtLargeBalances() {
+        Member member = new Member("alice", "encoded-password", "Alice",
+                "alice@example.test", "encoded-pin");
+        member.setLastLoginDate(LocalDate.now(ZoneId.of("Asia/Seoul")).minusDays(1));
+        Wallet wallet = new Wallet(member, 0);
+        wallet.setBalanceAmount(new BigDecimal("90071992547409.91"));
+        when(memberRepository.findByUsernameForUpdate("alice")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("correct-password", "encoded-password")).thenReturn(true);
+        when(jwtTokenProvider.createToken("alice")).thenReturn("signed.jwt.token");
+        when(walletRepository.findForUpdateByMember(member)).thenReturn(Optional.of(wallet));
+
+        assertEquals(200, authController.login(Map.of("username", "alice", "password", "correct-password"))
+                .getStatusCode().value());
+        assertEquals(new BigDecimal("90071992547909.91"), wallet.getBalanceAmount());
+        verify(ledgerService).record(eq(member), eq("DAILY_LOGIN_REWARD"),
+                eq(BigDecimal.valueOf(500)), eq(wallet.getBalanceAmount()), anyString());
     }
 
     @Test

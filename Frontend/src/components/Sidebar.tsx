@@ -17,11 +17,11 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
     const isGuest = username === 'Guest';
     
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [isAdmin, setIsAdmin] = useState(false);
+    const [adminIdentity, setAdminIdentity] = useState<string | null>(null);
+    const isAdmin = !isGuest && adminIdentity === username;
 
     useEffect(() => {
         if (isGuest) {
-            setIsAdmin(false);
             return;
         }
 
@@ -29,9 +29,9 @@ export default function Sidebar({ isOpen = true, toggleSidebar }: SidebarProps) 
         // not permanently hide the admin menu. Once the backend is ready,
         // authFetch can refresh the access token and retry this protected GET.
         authFetch(`${API_URL}/api/admin/me`)
-            .then(res => setIsAdmin(res.ok))
-            .catch(() => setIsAdmin(false));
-    }, [isGuest]);
+            .then(res => setAdminIdentity(res.ok ? username : null))
+            .catch(() => setAdminIdentity(null));
+    }, [isGuest, username]);
 
     // 💡 Watchlist 메뉴 추가
     const navItems = [

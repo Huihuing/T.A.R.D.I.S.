@@ -68,7 +68,7 @@ Browser → Vercel (React) → /api/* rewrite → Render (Spring Boot) → Aiven
 
 ## 실행 / 테스트
 
-Java 21, Node.js가 필요합니다.
+Java 21, Node.js가 필요합니다. 프론트 Node 테스트는 TypeScript strip 기능이 있는 Node 22.6 이상을 사용합니다.
 
 ```powershell
 # Backend 테스트 + 빌드
@@ -81,6 +81,9 @@ cd Backend
 # Frontend
 cd Frontend
 npm install
+npm run lint
+npm test
+npm run build
 npm run dev
 ```
 
@@ -103,4 +106,6 @@ npm run dev
 - [보안 정책](SECURITY.md)
 - [운영 인프라 및 리전 계획](docs/INFRASTRUCTURE.md)
 - [DB 마이그레이션 / Flyway](docs/DB_MIGRATION.md)
+- [거래 정합성 계약 / 로컬 MySQL 통합 테스트](docs/TRADE_INTEGRITY.md)
+- [2026-10-26 통합 감사 결과](docs/INTEGRITY_SECURITY_AUDIT_2026-10-26.md)
 - [AI 코딩 에이전트 작업 기준](AGENTS.md)

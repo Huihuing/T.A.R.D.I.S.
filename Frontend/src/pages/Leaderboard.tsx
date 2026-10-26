@@ -32,7 +32,9 @@ export default function Leaderboard() {
     };
 
     useEffect(() => {
-        void fetchLeaderboard();
+        let active = true;
+        queueMicrotask(() => { if (active) void fetchLeaderboard(); });
+        return () => { active = false; };
     }, []);
 
     useBackendReadyRetry(fetchLeaderboard);

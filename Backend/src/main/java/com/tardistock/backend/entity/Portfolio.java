@@ -44,6 +44,15 @@ public class Portfolio {
     public void setAmount(int amount) { this.amount = amount; }
     public double getAveragePrice() { return averagePrice.doubleValue(); }
     public void setAveragePrice(double averagePrice) { this.averagePrice = price(averagePrice); }
+    @JsonIgnore
+    public BigDecimal getAveragePriceAmount() { return averagePrice; }
+    public void setAveragePriceAmount(BigDecimal value) {
+        BigDecimal normalized = value.setScale(PRICE_SCALE, RoundingMode.HALF_UP);
+        if (normalized.signum() < 0 || normalized.precision() > PRICE_PRECISION) {
+            throw new IllegalArgumentException("평균 매입가가 허용 범위를 초과합니다.");
+        }
+        this.averagePrice = normalized;
+    }
 
     public static boolean isPersistablePrice(double value) {
         return DecimalMath.fits(value, PRICE_PRECISION, PRICE_SCALE);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ArrowLeftRight,
     Bell,
@@ -41,7 +41,7 @@ export default function NotificationCenter() {
     const [unreadOnly, setUnreadOnly] = useState(false);
     const clientRef = useRef<Client | null>(null);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         if (isGuest) return;
 
         try {
@@ -65,7 +65,7 @@ export default function NotificationCenter() {
         } catch {
             // 실시간 재연결/다음 조회에서 복구합니다.
         }
-    };
+    }, [isGuest]);
 
     useEffect(() => {
         let disposed = false;
@@ -96,7 +96,7 @@ export default function NotificationCenter() {
 
                 const client = new Client({
                     webSocketFactory: () =>
-                        new SockJS(`${WS_URL}/ws-stomp`) as any,
+                        new SockJS(`${WS_URL}/ws-stomp`),
                     reconnectDelay: 5000,
                     beforeConnect: async () => {
                         let latestToken = getStoredToken();
@@ -176,7 +176,7 @@ export default function NotificationCenter() {
                 clientRef.current = null;
             }
         };
-    }, [username, isGuest]);
+    }, [username, isGuest, load]);
 
     if (isGuest) return null;
 
@@ -291,7 +291,7 @@ export default function NotificationCenter() {
     };
 
     const visibleItems = unreadOnly
-        ? items.filter(item => !Boolean(item.readAt || item.read))
+        ? items.filter(item => !(item.readAt || item.read))
         : items;
 
     return (

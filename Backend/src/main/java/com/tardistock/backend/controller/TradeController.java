@@ -11,11 +11,17 @@ import com.tardistock.backend.repository.WalletRepository;
 import com.tardistock.backend.service.EconomyService;
 import com.tardistock.backend.service.FinnhubPriceService;
 import com.tardistock.backend.service.LedgerService;
+import com.tardistock.backend.service.MutationRequestService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Locale;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
@@ -38,6 +44,12 @@ public class TradeController {
     private final FinnhubPriceService finnhubPriceService;
     private final EconomyService economyService;
     private final LedgerService ledgerService;
+    private MutationRequestService mutationRequests;
+
+    @Autowired
+    public void setMutationRequestService(MutationRequestService mutationRequests) {
+        this.mutationRequests = mutationRequests;
+    }
 
     public TradeController(
             MemberRepository memberRepository,
@@ -79,6 +91,13 @@ public class TradeController {
     }
 
     @PostMapping("/buy")
+    public ResponseEntity<?> buyRequest(@RequestBody Map<String, Object> payload,
+            Authentication authentication,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key) {
+        return mutationRequests.execute(authenticatedUsername(authentication), key, "STOCK_BUY",
+                tradePayload(payload), () -> ResponseEntity.ok(buyStock(payload, authentication)));
+    }
+
     @Transactional
     public Map<String, String> buyStock(
             @RequestBody Map<String, Object> payload,
@@ -95,7 +114,7 @@ public class TradeController {
             return fail(response, "종목과 수량을 올바르게 입력해주세요.");
         }
 
-        double price = finnhubPriceService.getPrice(symbol);
+        double price = finnhubPriceService.getTradingPrice(symbol);
         if (!Double.isFinite(price) || price <= 0) {
             return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
         }
@@ -110,39 +129,45 @@ public class TradeController {
             return fail(response, "지갑을 찾을 수 없습니다.");
         }
 
-        double rawTotalCost = price * amount;
-        if (!Double.isFinite(rawTotalCost)) {
-            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
-        }
-        double totalCost = roundCents(rawTotalCost);
-        if (!fitsCents(totalCost)) {
-            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
-        }
-        if (wallet.getBalance() < totalCost) {
-            return fail(response, "잔액이 부족합니다!");
-        }
-
         Portfolio portfolio = portfolioRepository.findForUpdateByMemberAndSymbol(member, symbol)
                 .orElse(new Portfolio(member, symbol, 0, 0.0));
 
-        double newBalance = roundCents(wallet.getBalance() - totalCost);
+        // Re-check after waiting for locks; a previously fresh quote may have expired.
+        price = finnhubPriceService.getTradingPrice(symbol);
+        if (!Double.isFinite(price) || price <= 0 || !TradeHistory.isPersistablePrice(price)) {
+            return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
+        }
+        BigDecimal totalCost = roundCents(BigDecimal.valueOf(price).multiply(BigDecimal.valueOf(amount)));
+        if (!fitsCents(totalCost) || totalCost.signum() <= 0) {
+            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        }
+        if (wallet.getBalanceAmount().compareTo(totalCost) < 0) {
+            return fail(response, "잔액이 부족합니다!");
+        }
+
+        BigDecimal newBalance = wallet.getBalanceAmount().subtract(totalCost);
         if (!fitsCents(newBalance)) {
             return fail(response, "거래 후 잔액이 허용 범위를 초과합니다.");
         }
 
-        double newTotalValue =
-                (portfolio.getAmount() * portfolio.getAveragePrice()) + totalCost;
-        int newAmount = portfolio.getAmount() + amount;
-        double newAveragePrice = newTotalValue / newAmount;
-        if (!Portfolio.isPersistablePrice(newAveragePrice)) {
+        long totalAmount = (long) portfolio.getAmount() + amount;
+        if (portfolio.getAmount() < 0 || totalAmount > Integer.MAX_VALUE) {
+            return fail(response, "보유 수량이 허용 범위를 초과합니다.");
+        }
+        int newAmount = (int) totalAmount;
+        BigDecimal newTotalValue = portfolio.getAveragePriceAmount()
+                .multiply(BigDecimal.valueOf(portfolio.getAmount()))
+                .add(BigDecimal.valueOf(price).multiply(BigDecimal.valueOf(amount)));
+        BigDecimal newAveragePrice = newTotalValue.divide(BigDecimal.valueOf(newAmount), 6, RoundingMode.HALF_UP);
+        if (newAveragePrice.precision() > 19 || newAveragePrice.signum() < 0) {
             return fail(response, "평균 매입가가 허용 범위를 초과합니다.");
         }
 
-        wallet.setBalance(newBalance);
+        wallet.setBalanceAmount(newBalance);
         walletRepository.save(wallet);
 
         portfolio.setAmount(newAmount);
-        portfolio.setAveragePrice(newAveragePrice);
+        portfolio.setAveragePriceAmount(newAveragePrice);
         portfolioRepository.save(portfolio);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -156,8 +181,8 @@ public class TradeController {
         ledgerService.record(
                 member,
                 "STOCK_BUY",
-                -totalCost,
-                wallet.getBalance(),
+                totalCost.negate(),
+                wallet.getBalanceAmount(),
                 null,
                 symbol,
                 symbol + " " + amount + "주 매수"
@@ -169,6 +194,13 @@ public class TradeController {
     }
 
     @PostMapping("/sell")
+    public ResponseEntity<?> sellRequest(@RequestBody Map<String, Object> payload,
+            Authentication authentication,
+            @RequestHeader(name = "Idempotency-Key", required = false) String key) {
+        return mutationRequests.execute(authenticatedUsername(authentication), key, "STOCK_SELL",
+                tradePayload(payload), () -> ResponseEntity.ok(sellStock(payload, authentication)));
+    }
+
     @Transactional
     public Map<String, String> sellStock(
             @RequestBody Map<String, Object> payload,
@@ -185,7 +217,7 @@ public class TradeController {
             return fail(response, "종목과 수량을 올바르게 입력해주세요.");
         }
 
-        double price = finnhubPriceService.getPrice(symbol);
+        double price = finnhubPriceService.getTradingPrice(symbol);
         if (!Double.isFinite(price) || price <= 0) {
             return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
         }
@@ -206,16 +238,16 @@ public class TradeController {
             return fail(response, "보유 주식이 부족합니다!");
         }
 
-        double rawProceeds = price * amount;
-        if (!Double.isFinite(rawProceeds)) {
-            return fail(response, "거래 금액이 허용 범위를 초과합니다.");
+        price = finnhubPriceService.getTradingPrice(symbol);
+        if (!Double.isFinite(price) || price <= 0 || !TradeHistory.isPersistablePrice(price)) {
+            return fail(response, "현재 시세를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
         }
-        double proceeds = roundCents(rawProceeds);
-        if (!fitsCents(proceeds)) {
+        BigDecimal proceeds = roundCents(BigDecimal.valueOf(price).multiply(BigDecimal.valueOf(amount)));
+        if (!fitsCents(proceeds) || proceeds.signum() <= 0) {
             return fail(response, "거래 금액이 허용 범위를 초과합니다.");
         }
 
-        double newBalance = roundCents(wallet.getBalance() + proceeds);
+        BigDecimal newBalance = wallet.getBalanceAmount().add(proceeds);
         if (!fitsCents(newBalance)) {
             return fail(response, "거래 후 잔액이 허용 범위를 초과합니다.");
         }
@@ -229,7 +261,7 @@ public class TradeController {
             portfolioRepository.save(portfolio);
         }
 
-        wallet.setBalance(newBalance);
+        wallet.setBalanceAmount(newBalance);
         walletRepository.save(wallet);
 
         tradeHistoryRepository.save(new TradeHistory(
@@ -244,7 +276,7 @@ public class TradeController {
                 member,
                 "STOCK_SELL",
                 proceeds,
-                wallet.getBalance(),
+                wallet.getBalanceAmount(),
                 null,
                 symbol,
                 symbol + " " + amount + "주 매도"
@@ -282,7 +314,7 @@ public class TradeController {
 
     private String normalizeSymbol(Object value) {
         if (value == null) return null;
-        String symbol = value.toString().trim().toUpperCase();
+        String symbol = value.toString().trim().toUpperCase(Locale.ROOT);
         return symbol.matches("[A-Z0-9.\\-]{1,12}") ? symbol : null;
     }
 
@@ -300,5 +332,10 @@ public class TradeController {
         response.put("status", "FAIL");
         response.put("message", message);
         return response;
+    }
+
+    private Map<String, Object> tradePayload(Map<String, Object> payload) {
+        return Map.of("symbol", String.valueOf(normalizeSymbol(payload.get("symbol"))),
+                "amount", parsePositiveAmount(payload.get("amount")));
     }
 }

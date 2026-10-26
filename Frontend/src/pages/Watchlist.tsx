@@ -1,26 +1,31 @@
-import { API_URL, WS_URL } from '../config';
+import { API_URL } from '../config';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, TrendingDown, RefreshCw, X, Star, Bell, Trash2 } from 'lucide-react';
 import { authFetch, getAuthHeaders } from '../auth';
 import { notify } from '../uiFeedback';
+import { marketQuotes, quoteTime } from '../marketData';
+import type { MarketQuote } from '../quoteClient';
+
+type QuoteCard = MarketQuote & { symbol: string; error?: string };
+interface PriceAlert { id: number; symbol: string; active: boolean; direction: string; targetPrice: number; triggeredAt?: string; }
 
 export default function Watchlist() {
     const navigate = useNavigate();
-    const [stocks, setStocks] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [selectedStock, setSelectedStock] = useState<any | null>(null);
-    const [alerts, setAlerts] = useState<any[]>([]);
+    const [stocks, setStocks] = useState<QuoteCard[]>([]);
+    const [isLoading, setIsLoading] = useState(() => !!localStorage.getItem('username') && localStorage.getItem('username') !== 'Guest');
+    const [selectedStock, setSelectedStock] = useState<QuoteCard | null>(null);
+    const [alerts, setAlerts] = useState<PriceAlert[]>([]);
     const [alertTarget, setAlertTarget] = useState<number | ''>('');
     const [alertDirection, setAlertDirection] = useState<'ABOVE' | 'BELOW'>('ABOVE');
     const [isSavingAlert, setIsSavingAlert] = useState(false);
+    const [loadError, setLoadError] = useState('');
+    const [alertError, setAlertError] = useState('');
 
     const fetchWatchlist = async () => {
-        setIsLoading(true);
         const username = localStorage.getItem('username');
         if (!username || username === 'Guest') { 
-            setIsLoading(false); 
             return; 
         }
         
@@ -30,49 +35,48 @@ export default function Watchlist() {
                 `${API_URL}/api/bookmark`,
                 { headers: getAuthHeaders(false) }
             );
-            if (!res.ok) {
-                setStocks([]);
-                return;
-            }
+            if (!res.ok) throw new Error('관심 종목 조회 실패');
             const bookmarkedSymbols: string[] = await res.json();
+            if (!Array.isArray(bookmarkedSymbols)) throw new Error('관심 종목 응답 오류');
             
             if (bookmarkedSymbols.length > 0) {
                 // 해당 종목들의 실시간 시세 불러오기
                 const promises = bookmarkedSymbols.map(async (symbol) => {
-                    const quoteRes = await fetch(`${API_URL}/api/stock/quote?symbol=${symbol}`);
-                    if (quoteRes.status === 429) return { symbol, error: '한도 초과' };
-                    const data = await quoteRes.json();
-                    return { symbol, ...data };
+                    try { return { symbol, ...await marketQuotes.get(symbol) }; }
+                    catch (error) { return { symbol, c: 0, d: 0, dp: 0, receivedAt: 0, error: error instanceof Error ? error.message : '시세 조회 실패' }; }
                 });
                 const newStocks = await Promise.all(promises);
                 setStocks(newStocks);
             } else {
                 setStocks([]);
             }
-        } catch (e) {
-            console.error(e);
+            setLoadError('');
+        } catch {
+            setLoadError('관심 종목을 갱신하지 못했습니다. 이전 결과를 유지합니다.');
         } finally {
             setIsLoading(false);
         }
     };
 
     const fetchAlerts = async () => {
+        if (!localStorage.getItem('username') || localStorage.getItem('username') === 'Guest') return;
         try {
             const res = await authFetch(`${API_URL}/api/price-alerts`, {
                 headers: getAuthHeaders(false)
             });
-            const data = await res.json().catch(() => []);
-            if (res.ok && Array.isArray(data)) {
-                setAlerts(data);
-            }
+            const data = await res.json();
+            if (!res.ok || !Array.isArray(data)) throw new Error('가격 알림 조회 실패');
+            setAlerts(data);
+            setAlertError('');
         } catch {
-            setAlerts([]);
+            setAlertError('가격 알림을 갱신하지 못했습니다. 이전 결과를 유지합니다.');
         }
     };
 
     useEffect(() => { 
-        fetchWatchlist();
-        fetchAlerts();
+        let active = true;
+        queueMicrotask(() => { if (active) { void fetchWatchlist(); void fetchAlerts(); } });
+        return () => { active = false; };
     }, []);
 
     const removeBookmark = async (e: React.MouseEvent, symbol: string) => {
@@ -89,7 +93,7 @@ export default function Watchlist() {
             if (data.status === 'REMOVED') {
                 setStocks(prev => prev.filter(s => s.symbol !== symbol));
             }
-        } catch (e) {}
+        } catch { notify('관심 종목 삭제에 실패했습니다.', 'error'); }
     };
 
     const createPriceAlert = async () => {
@@ -151,6 +155,7 @@ export default function Watchlist() {
 
     return (
         <div className="p-4 sm:p-6 md:p-8 min-h-screen text-slate-200 bg-[#0b1120] relative">
+            {(loadError || alertError) && <div role="alert" className="mb-4 p-3 rounded-xl bg-amber-500/10 text-amber-300 text-sm">{loadError} {alertError}<button type="button" className="ml-3 underline" onClick={() => { setIsLoading(true); void fetchWatchlist(); void fetchAlerts(); }}>다시 조회</button></div>}
             <div className="mb-8 border-b border-slate-800 pb-4">
                 <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-indigo-400 flex items-center gap-3">
                     <Star className="w-8 h-8 text-yellow-400 fill-yellow-400" /> My Watchlist
@@ -169,7 +174,7 @@ export default function Watchlist() {
                     <RefreshCw className="w-10 h-10 animate-spin text-sky-500 mb-4" />
                     <span className="text-slate-400 font-bold">관심 종목 시세 불러오는 중...</span>
                 </div>
-            ) : stocks.length === 0 ? (
+            ) : loadError && stocks.length === 0 ? <p className="text-amber-300">관심 종목을 확인할 수 없습니다. 다시 조회해 주세요.</p> : stocks.length === 0 ? (
                 <div className="text-center py-20 bg-slate-800/30 rounded-3xl border border-slate-700/50">
                     <Star className="w-16 h-16 text-slate-600 mx-auto mb-4" />
                     <h2 className="text-xl font-bold text-slate-300 mb-2">등록된 관심 종목이 없습니다</h2>
@@ -184,7 +189,7 @@ export default function Watchlist() {
                         return (
                             <motion.div key={`${stock.symbol}-${index}`} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }} onClick={() => !stock.error && setSelectedStock(stock)} className={`bg-slate-800/50 backdrop-blur-md p-5 rounded-3xl border border-slate-700/50 shadow-lg transition-all flex flex-col relative overflow-hidden ${stock.error ? 'opacity-70' : 'cursor-pointer hover:border-sky-500 hover:-translate-y-1'}`}>
                                 {stock.error ? (
-                                    <div className="flex flex-col items-center justify-center h-full text-slate-500 py-6"><RefreshCw className="w-8 h-8 mb-2 opacity-20" /><span className="text-sm font-bold text-rose-500/80">API 호출 대기중...</span></div>
+                                    <div className="flex flex-col items-center justify-center h-full text-slate-500 py-6"><span className="font-bold mb-2">{stock.symbol}</span><RefreshCw className="w-8 h-8 mb-2 opacity-20" /><span className="text-sm font-bold text-rose-500/80">{stock.error}</span></div>
                                 ) : (
                                     <>
                                         <div className="flex justify-between items-start mb-4">
@@ -199,6 +204,8 @@ export default function Watchlist() {
                                         </div>
                                         <div className="mt-auto">
                                             <p className="text-3xl font-mono font-bold tracking-tight text-white">${stock.c?.toFixed(2)}</p>
+                                            <p className="mt-1 text-[10px] text-slate-400">시세 기준: {quoteTime(stock)}</p>
+                                            {stock.stale && <p className="text-xs text-amber-300">갱신 지연 · 이전 시세</p>}
                                             <div className="flex items-center gap-2 mt-2">
                                                 <span className={`text-sm font-bold ${isUp ? 'text-emerald-500' : isDown ? 'text-rose-500' : 'text-slate-400'}`}>{isUp ? '+' : ''}{stock.d?.toFixed(2)}</span>
                                                 <span className={`text-sm px-2 py-0.5 rounded-md ${isUp ? 'bg-emerald-500/20 text-emerald-400' : isDown ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-300'}`}>{isUp ? '+' : ''}{stock.dp?.toFixed(2)}%</span>

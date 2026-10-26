@@ -137,6 +137,7 @@ public class SecurityConfig {
                 "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of(
                 "Authorization",
+                "Idempotency-Key",
                 "Content-Type",
                 "Accept",
                 "Origin",

@@ -1,6 +1,7 @@
 package com.tardistock.backend.entity;
 
 import com.tardistock.backend.util.MoneyMath;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
@@ -34,6 +35,15 @@ public class Wallet {
 
     public double getBalance() { return balance.doubleValue(); }
     public void setBalance(double balance) { this.balance = money(balance); }
+    @JsonIgnore
+    public BigDecimal getBalanceAmount() { return balance; }
+    public void setBalanceAmount(BigDecimal balance) {
+        BigDecimal normalized = MoneyMath.requireCents(balance);
+        if (normalized.signum() < 0) {
+            throw new IllegalArgumentException("잔액은 음수일 수 없습니다.");
+        }
+        this.balance = normalized;
+    }
     public Member getMember() { return member; }
 
     private static BigDecimal money(double value) {

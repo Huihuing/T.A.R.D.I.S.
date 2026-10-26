@@ -25,12 +25,12 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    let active = true;
     if (getStoredToken()) {
-      setState('allowed');
-      return;
+      queueMicrotask(() => { if (active) setState('allowed'); });
+      return () => { active = false; };
     }
 
-    let active = true;
     let retryTimer: number | null = null;
 
     const clearRetry = () => {

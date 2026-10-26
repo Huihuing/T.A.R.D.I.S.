@@ -68,7 +68,7 @@ class TradeControllerMoneyRangeTest {
         Member member = new Member();
         Wallet wallet = new Wallet(member, 10_000_000_000_000_000d);
         authenticate("alice");
-        when(finnhubPriceService.getPrice("AAPL"))
+        when(finnhubPriceService.getTradingPrice("AAPL"))
                 .thenReturn(1_000_000_000_000d);
         when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));
@@ -103,7 +103,7 @@ class TradeControllerMoneyRangeTest {
                 100.0
         );
         authenticate("alice");
-        when(finnhubPriceService.getPrice("AAPL"))
+        when(finnhubPriceService.getTradingPrice("AAPL"))
                 .thenReturn(1_000_000_000_000d);
         when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));
@@ -145,7 +145,7 @@ class TradeControllerMoneyRangeTest {
                 100.0
         );
         authenticate("alice");
-        when(finnhubPriceService.getPrice("AAPL"))
+        when(finnhubPriceService.getTradingPrice("AAPL"))
                 .thenReturn(10_000_000_000d);
         when(memberRepository.findByUsernameForUpdate("alice"))
                 .thenReturn(Optional.of(member));

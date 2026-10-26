@@ -26,7 +26,7 @@ export default function BackendWakeStatus() {
   const [snapshot, setSnapshot] = useState<BackendWakeSnapshot>(
     getBackendWakeSnapshot()
   );
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(Date.now);
 
   useEffect(() => {
     const unsubscribe = subscribeBackendWakeup(setSnapshot);

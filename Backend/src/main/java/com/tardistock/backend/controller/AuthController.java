@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -451,13 +452,13 @@ public class AuthController {
                     .findForUpdateByMember(member)
                     .orElse(null);
             if (wallet != null) {
-                wallet.setBalance(wallet.getBalance() + 500.0);
+                wallet.setBalanceAmount(wallet.getBalanceAmount().add(BigDecimal.valueOf(500)));
                 walletRepository.save(wallet);
                 ledgerService.record(
                         member,
                         "DAILY_LOGIN_REWARD",
-                        500.0,
-                        wallet.getBalance(),
+                        BigDecimal.valueOf(500),
+                        wallet.getBalanceAmount(),
                         "일일 로그인 보상"
                 );
                 member.setLastLoginDate(today);
