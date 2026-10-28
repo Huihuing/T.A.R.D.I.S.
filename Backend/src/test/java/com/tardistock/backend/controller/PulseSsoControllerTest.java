@@ -16,8 +16,8 @@ class PulseSsoControllerTest {
         String ticket = "A".repeat(43);
         when(client.isConfigured()).thenReturn(true);
         when(client.redeem("tardis", ticket)).thenReturn(Optional.of("42"));
-        when(legacyAuth.completePulseLoginById(42L))
-                .thenReturn(ResponseEntity.ok(Map.of("token", "native-jwt")));
+        doReturn(ResponseEntity.ok(Map.of("token", "native-jwt")))
+                .when(legacyAuth).completePulseLoginById(42L);
         ResponseEntity<?> response = controller.login(Map.of("ticket", ticket));
         assertEquals(200, response.getStatusCode().value());
         verify(legacyAuth).completePulseLoginById(42L);
