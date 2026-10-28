@@ -1,0 +1,46 @@
+name: PULSE ID PR Verification
+
+on:
+  pull_request:
+    paths:
+      - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoController.java"
+      - "Backend/src/main/java/com/tardistock/backend/controller/AuthController.java"
+      - "Backend/src/main/java/com/tardistock/backend/service/PulseSsoRedemptionClient.java"
+      - "Backend/src/main/java/com/tardistock/backend/config/SecurityConfig.java"
+      - "Backend/src/test/java/com/tardistock/backend/controller/**"
+      - "Frontend/src/App.tsx"
+      - "Frontend/src/pages/PulseSso.tsx"
+      - "Frontend/src/pages/PulseLink.tsx"
+      - ".github/workflows/pulse-id-pr-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - run: chmod +x gradlew && ./gradlew test --no-daemon
+        working-directory: Backend
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: Frontend
+      - run: npm run build
+        working-directory: Frontend
