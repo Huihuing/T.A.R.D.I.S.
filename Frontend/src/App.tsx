@@ -11,6 +11,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
 const PulseLink = lazy(() => import('./pages/PulseLink'));
+const PulseSso = lazy(() => import('./pages/PulseSso'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const Register = lazy(() => import('./pages/Register'));
 const SetupPin = lazy(() => import('./pages/SetupPin'));
@@ -142,6 +143,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/pulse-link" element={<PulseLink />} />
+          <Route path="/pulse-sso" element={<PulseSso />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route
