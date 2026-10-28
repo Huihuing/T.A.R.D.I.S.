@@ -440,6 +440,21 @@ public class AuthController {
         return member;
     }
 
+    /**
+     * Exchange an already redeemed PULSE handoff for the ordinary TARDIS
+     * member session, preserving daily reward and transfer PIN controls.
+     * No HTTP mapping: only the trusted internal SSO controller calls this.
+     */
+    @Transactional
+    public ResponseEntity<?> completePulseLoginById(long memberId) {
+        if (memberId <= 0) return ResponseEntity.status(401).body(
+                Map.of("message", "PULSE 계정 연결이 유효하지 않습니다."));
+        Member member = memberRepository.findById(memberId).orElse(null);
+        if (member == null) return ResponseEntity.status(401).body(
+                Map.of("message", "연결된 T.A.R.D.I.S. 계정이 없습니다."));
+        return completeLogin(member);
+    }
+
     private ResponseEntity<?> completeLogin(Member member) {
         String username = member.getUsername();
         boolean dailyReward = false;
