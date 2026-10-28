@@ -10,6 +10,7 @@ import { BACKEND_READY_EVENT } from './backendWakeup';
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Login = lazy(() => import('./pages/Login'));
+const PulseLink = lazy(() => import('./pages/PulseLink'));
 const Wallet = lazy(() => import('./pages/Wallet'));
 const Register = lazy(() => import('./pages/Register'));
 const SetupPin = lazy(() => import('./pages/SetupPin'));
@@ -140,6 +141,7 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/pulse-link" element={<PulseLink />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route
