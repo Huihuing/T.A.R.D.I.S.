@@ -37,3 +37,14 @@ T.A.R.D.I.S.에서 원본 `member.id`와 지갑·PIN·거래원장·일일 보�
 ## 월드에서 PULSE 로그인으로 진입 (선택 설정)
 
 Tardis 프론트엔드에 **공개 URL만** `VITE_PULSE_LAB_URL=https://<사용 중인 PULSE 포털>`로 설정하면 기존 로그인 화면에 `PULSE//ID로 로그인` 링크가 나타난다. 로그인 완료 후 포털에서 `T.A.R.D.I.S. 한 번에 입장`을 선택하는 방식이다. 로컬 개발은 `http://localhost:3000`처럼 loopback만 허용한다. 값을 설정하지 않으면 기존 로그인 화면만 나온다. JWT/서버 비밀값은 절대 `VITE_*`에 넣지 않는다.
+
+## 2026-10-29 실제 Tardis MySQL SSO 검증
+
+- [GitHub Actions #40807739781](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40807739781): **SUCCESS**.
+- GitHub Actions의 일회성 **MySQL 8.4**에 원본 Tardis Flyway V1–V10 마이그레이션을 적용하고, `flyway_schema_history`의 **V9 적용 완료를 먼저 확인한 뒤에만** 검증용 회원과 지갑을 생성했다. V9는 기존 회원·지갑·원장 데이터를 일괄 삭제하는 위험한 과거 일회성 마이그레이션이므로 Shadow 복원 시 이력 보존이 필수다.
+- 실제 Tardis Spring Boot 서버가 로컬 테스트용 중앙 PULSE 티켓 교환 서버에 서명키와 별개인 서버 비밀키로 인증해 원래 `member.id`를 반환받고 **기존 JWT + refresh cookie**를 발급하는 것까지 확인했다.
+- 발급받은 JWT로 기존 보호 API `GET /api/auth/sessions`을 호출했고, 기존 회원의 refresh 세션을 실제 DB에서 확인했다.
+- 지갑 잔고가 최초 **100.00 → 600.00**이 되고 `ledger_entry`에 **일일 로그인 보상 500.00이 정확히 한 번만** 기록됨을 확인했다. 두 번째 다른 유효한 SSO 티켓으로 같은 날 로그인해도 원장/지갑 보상이 중복 발생하지 않았다.
+- 이미 사용된 SSO 티켓의 재사용은 401로 거부됐다.
+- **주의: 중앙 PULSE 서버는 이번 Tardis 통합 테스트에서 로컬 모의 서버다.** 실제 Keycloak+PULSE 계정 DB 브라우저 테스트와 통합한 4개 실앱 종단간 E2E는 아직 필요하다.
+- 원래 운영 회원/지갑/원장을 변경하지 않았으며 CI가 폐기하는 MySQL 테스트 데이터만 사용했다.
