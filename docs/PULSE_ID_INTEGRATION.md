@@ -58,3 +58,10 @@ Tardis 프론트엔드에 **공개 URL만** `VITE_PULSE_LAB_URL=https://<사용 
 - [Tardis Java/Frontend PR CI #40809953939](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40809953939) **PASS**: JWT 세대 검증 및 서비스 비밀키 거부 단위 테스트.
 - 주의: 이 기능은 **원래 비밀번호/Google 로그인 세션까지 모든 기기에서 종료**한다. 보호 API마다 회원 세대 DB 조회가 추가되어 부하·DB 장애 fail-closed 회귀 검증이 필요하다.
 - 프로덕션 Keycloak 다른 기기 세션 종료, 장애 재시도 중복 철회, 실제 4개 World 동시 E2E 및 운영 DB 전환은 아직 완료되지 않았다. 운영 DB/회원/배포 미변경.
+
+## 2026-10-29 멱등 글로벌 로그아웃 — 신규 V12
+
+- `Backend/src/main/resources/db/migration/V12__pulse_logout_receipts.sql`이 기존 `member.id` FK를 유지한 상태로 `pulse_logout_receipts(operation_id,member_id)`를 추가한다.
+- 중앙은 **매 글로벌 로그아웃 작업마다 안정적인 UUID `operationId`**를 발급한다. Tardis는 회원 row lock 아래 기존 receipt를 확인하고, **처음 처리한 경우에만** JWT generation 증가·모든 refresh 삭제·receipt 기록을 한 트랜잭션으로 수행한다.
+- 첫 요청이 성공한 뒤 응답이 끊겨 재요청되어도 같은 `operationId`면 generation을 다시 올리지 않는다. 따라서 **새로 로그인한 세션을 중복 로그아웃으로 무효화하지 않는다**.
+- [실제 Spring/MySQL 일회성 검증](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40822722241) 성공: 기존 지갑/원장·일일 보상 불변, 재시도 receipt 정확히 1개, 새 JWT 유효. 운영 V12 미적용.
