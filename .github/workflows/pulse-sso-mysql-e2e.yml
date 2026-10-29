@@ -38,6 +38,7 @@ jobs:
       SERVER_PORT: "18081"
       JWT_SECRET: only-disposable-ci-jwt-tardis-key-over-32-bytes-9B8D
       REFRESH_COOKIE_SECURE: "false"
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       FRONTEND_URL: http://localhost:5173
       PULSE_SSO_REDEEM_URL: http://127.0.0.1:18089/api/pulse-id/sso/redeem
       PULSE_SSO_ALLOW_LOCAL_HTTP: "true"
@@ -66,7 +67,10 @@ jobs:
             if curl -fsS http://127.0.0.1:18081/actuator/health >/dev/null; then exit 0; fi
             sleep 2
           done
-          tail -100 /tmp/pulse-tardis-e2e.log
+          echo "Actuator returned:"
+          curl -s http://127.0.0.1:18081/actuator/health || true
+          echo
+          grep -E "Mail health|MailHealth|DataSourceHealth|Exception|Caused by|DOWN" /tmp/pulse-tardis-e2e.log | tail -45 || true
           exit 1
       - name: Test native member, wallet and JWT through real Spring API
         run: python Backend/scripts/pulse-sso-mysql-e2e.py
