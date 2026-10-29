@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "Backend/scripts/pulse-sso-mysql-e2e.py"
+      - "Backend/scripts/pulse-db-shadow-rehearsal.py"
+      - "Backend/src/main/resources/db/migration/**"
       - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoController.java"
       - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoRevokeController.java"
       - "Backend/src/main/java/com/tardistock/backend/entity/Member.java"
@@ -80,6 +82,69 @@ jobs:
           exit 1
       - name: Test native member, wallet and JWT through real Spring API
         run: python Backend/scripts/pulse-sso-mysql-e2e.py
+      - name: Fingerprint ORIGINAL disposable DB, including Flyway V9 history and synthetic finance rows
+        run: python Backend/scripts/pulse-db-shadow-rehearsal.py prepare
+
+      - name: Dump live disposable Tardis and restore complete history into isolated shadow
+        shell: bash
+        run: |
+          set -euo pipefail
+          MYSQL_ROOT_CI_PASSWORD=only-disposable-ci-mysql-root
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysqldump -h127.0.0.1 -P3307 -uroot \
+            --single-transaction --quick --set-gtid-purged=OFF \
+            --routines --triggers --events --default-character-set=utf8mb4 \
+            tardis > /tmp/pulse-tardis-disposable-dump.sql
+          test -s /tmp/pulse-tardis-disposable-dump.sql
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysql -h127.0.0.1 -P3307 -uroot -e "
+              CREATE DATABASE tardis_shadow_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+              CREATE DATABASE tardis_broken_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+              GRANT ALL PRIVILEGES ON tardis_shadow_ci.* TO 'tardis_ci'@'%';
+              GRANT ALL PRIVILEGES ON tardis_broken_ci.* TO 'tardis_ci'@'%';
+            "
+          for schema in tardis_shadow_ci tardis_broken_ci; do
+            docker run --rm --network host -i \
+              -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+              mysql -h127.0.0.1 -P3307 -uroot "$schema" \
+              < /tmp/pulse-tardis-disposable-dump.sql
+          done
+          # Deliberately break only the throwaway NEGATIVE-CONTROL database.
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysql -h127.0.0.1 -P3307 -uroot tardis_broken_ci -e "
+              DELETE FROM flyway_schema_history WHERE version = '9';
+            "
+
+      - name: Verify full shadow DB restore and reject a lost Flyway V9 history
+        run: |
+          python Backend/scripts/pulse-db-shadow-rehearsal.py verify
+          python Backend/scripts/pulse-db-shadow-rehearsal.py guard
+
+      - name: Restart actual Tardis Spring backend against restored shadow MySQL
+        shell: bash
+        run: |
+          (
+            cd Backend
+            DB_URL="jdbc:mysql://127.0.0.1:3307/tardis_shadow_ci?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul" \
+            SERVER_PORT=18082 \
+            ./gradlew bootRun --no-daemon > /tmp/pulse-tardis-shadow.log 2>&1 &
+          )
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18082/actuator/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Restored shadow Spring API could not start safely."
+          tail -100 /tmp/pulse-tardis-shadow.log
+          exit 1
+
+      - name: Confirm Flyway did not replay V9 and all restored finance checksums are unchanged
+        run: python Backend/scripts/pulse-db-shadow-rehearsal.py verify
+
       - name: Diagnostics on failure
         if: failure()
-        run: tail -100 /tmp/pulse-tardis-e2e.log || true
+        run: |
+          tail -100 /tmp/pulse-tardis-e2e.log || true
+          tail -100 /tmp/pulse-tardis-shadow.log || true
