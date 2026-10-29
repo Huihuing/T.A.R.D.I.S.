@@ -5,6 +5,12 @@ on:
     paths:
       - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoController.java"
       - "Backend/src/main/java/com/tardistock/backend/controller/AuthController.java"
+      - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoRevokeController.java"
+      - "Backend/src/main/java/com/tardistock/backend/entity/Member.java"
+      - "Backend/src/main/java/com/tardistock/backend/security/JwtTokenProvider.java"
+      - "Backend/src/main/java/com/tardistock/backend/security/JwtAuthenticationFilter.java"
+      - "Backend/src/main/resources/db/migration/V11__pulse_global_logout_generation.sql"
+      - "Backend/src/test/java/com/tardistock/backend/security/**"
       - "Backend/src/main/java/com/tardistock/backend/service/PulseSsoRedemptionClient.java"
       - "Backend/src/main/java/com/tardistock/backend/config/SecurityConfig.java"
       - "Backend/src/test/java/com/tardistock/backend/controller/**"
