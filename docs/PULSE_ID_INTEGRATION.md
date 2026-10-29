@@ -33,3 +33,7 @@ T.A.R.D.I.S.에서 원본 `member.id`와 지갑·PIN·거래원장·일일 보�
 - **Draft PR #131 유지 / main 미병합 / 운영 배포·환경변수 변경 없음.**
 
 참조: [PULSE//LAB SSO 통합 계약](https://github.com/Huihuing/pulse-lab/blob/feature/pulse-id-foundation/docs/PULSE_HUB_SSO.md).
+
+## 월드에서 PULSE 로그인으로 진입 (선택 설정)
+
+Tardis 프론트엔드에 **공개 URL만** `VITE_PULSE_LAB_URL=https://<사용 중인 PULSE 포털>`로 설정하면 기존 로그인 화면에 `PULSE//ID로 로그인` 링크가 나타난다. 로그인 완료 후 포털에서 `T.A.R.D.I.S. 한 번에 입장`을 선택하는 방식이다. 로컬 개발은 `http://localhost:3000`처럼 loopback만 허용한다. 값을 설정하지 않으면 기존 로그인 화면만 나온다. JWT/서버 비밀값은 절대 `VITE_*`에 넣지 않는다.
