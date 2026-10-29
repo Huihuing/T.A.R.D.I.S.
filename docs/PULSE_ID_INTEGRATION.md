@@ -73,3 +73,9 @@ Tardis 프론트엔드에 **공개 URL만** `VITE_PULSE_LAB_URL=https://<사용 
 - 복원 DB에 실제 Spring Boot를 다시 띄워 Flyway가 기존 V9 삭제성 마이그레이션을 재실행하지 않는지 확인했고, 이후 모든 원래 행 해시를 재검증했다. `flyway_schema_history` V9만 제거한 **격리된 부정 테스트 DB는 서비스 연결 전에 거부**했다.
 - **중요:** V9는 회원·지갑·원장 등 17개 테이블의 행을 삭제하는 과거 migration이므로, 실제 운영/Shadow에 역사를 빼고 V9를 재실행하는 건 허용할 수 없다.
 - 테스트는 **합성 데이터만** 사용하며 실제 Aiven DB 접근·덤프·마이그레이션·배포는 하지 않았다. [세 World 복원 결과](https://github.com/Huihuing/pulse-lab/blob/feature/pulse-id-foundation/docs/DB_SHADOW_REHEARSAL_2026-10-29.md).
+
+## 2026-10-29 이전 전 Flyway 삭제 위험 정적 검사
+
+- `Backend/scripts/check-pulse-migration-safety.mjs`는 **DB에 연결하거나 SQL을 실행하지 않는** 정적 검사다. 기존 V9 데이터 초기화 SQL을 원본 Git blob SHA로 고정하고 V1부터 연속된 Flyway 버전 및 V9 외 DELETE/TRUNCATE/DROP을 검사한다.
+- [PR CI #40831884858](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40831884858) **PASS**. [실제 폐기형 MySQL/Shadow #40831884875](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40831884875) **PASS**.
+- 단, **이 검사만으로 운영 DB가 Flyway V9을 다시 실행하지 않는다고 보장하지 않는다.** `flyway_schema_history`·백업·Shadow 리허설 확인 후에만 운영 적용 가능.
