@@ -1,5 +1,8 @@
 package com.tardistock.backend.security;
 
+import com.tardistock.backend.entity.Member;
+import com.tardistock.backend.repository.MemberRepository;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -9,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class JwtAuthenticationFilterTest {
 
@@ -23,9 +27,12 @@ class JwtAuthenticationFilterTest {
     @Test
     void validBearerTokenPopulatesSecurityContext() throws Exception {
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider);
+        MemberRepository members = mock(MemberRepository.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider, members);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
+        Member member = mock(Member.class);
+        when(members.findByUsername("alice")).thenReturn(Optional.of(member));
         request.addHeader("Authorization", "Bearer " + provider.createToken("alice"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean chainCalled = new AtomicBoolean(false);
