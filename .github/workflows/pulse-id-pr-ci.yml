@@ -9,7 +9,8 @@ on:
       - "Backend/src/main/java/com/tardistock/backend/entity/Member.java"
       - "Backend/src/main/java/com/tardistock/backend/security/JwtTokenProvider.java"
       - "Backend/src/main/java/com/tardistock/backend/security/JwtAuthenticationFilter.java"
-      - "Backend/src/main/resources/db/migration/V11__pulse_global_logout_generation.sql"
+      - "Backend/src/main/resources/db/migration/**"
+      - "Backend/scripts/check-pulse-migration-safety.mjs"
       - "Backend/src/test/java/com/tardistock/backend/security/**"
       - "Backend/src/main/java/com/tardistock/backend/service/PulseSsoRedemptionClient.java"
       - "Backend/src/main/java/com/tardistock/backend/config/SecurityConfig.java"
@@ -34,6 +35,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: gradle
+      - name: Block destructive Flyway changes before tests
+        run: node Backend/scripts/check-pulse-migration-safety.mjs
       - run: chmod +x gradlew && ./gradlew test --no-daemon
         working-directory: Backend
   frontend:
