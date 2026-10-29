@@ -8,6 +8,7 @@ The central PULSE side is a local *mock*, so this is not cross-repo E2E.
 import json
 import os
 import secrets
+import uuid
 import sys
 import threading
 import urllib.error
@@ -169,23 +170,24 @@ def run():
                     "WHERE member_id = %s AND type = 'DAILY_LOGIN_REWARD'", (member_id,)
                 )
                 assert_true(cursor.fetchone()[0] == 1, "No duplicate ledger reward")
+            operation_id = str(uuid.uuid4())
             # An authenticated central logout invalidates both native JWTs and
             # refresh cookies, including the original legacy password sessions.
             status, _, _ = call(
                 "POST", "/api/auth/pulse-sso/revoke",
-                {"world": "tardis", "legacyUserId": str(member_id)},
+                {"world": "tardis", "legacyUserId": str(member_id), "operationId": operation_id},
                 bearer="wrong-service-key"
             )
             assert_true(status == 401, "Unknown server cannot revoke a member")
             status, _, _ = call(
                 "POST", "/api/auth/pulse-sso/revoke",
-                {"world": "interactive_brain", "legacyUserId": str(member_id)},
+                {"world": "interactive_brain", "legacyUserId": str(member_id), "operationId": operation_id},
                 bearer=KEY
             )
             assert_true(status == 400, "Cannot use Tardis key to revoke another World")
             status, _, _ = call(
                 "POST", "/api/auth/pulse-sso/revoke",
-                {"world": "tardis", "legacyUserId": str(member_id)},
+                {"world": "tardis", "legacyUserId": str(member_id), "operationId": operation_id},
                 bearer=KEY
             )
             assert_true(status == 200, "Authorized central global logout accepted")
@@ -216,6 +218,32 @@ def run():
             )
             assert_true(status == 200, "New-generation JWT is accepted")
             assert_true(resumed.get("dailyReward") is False, "Global logout must not duplicate wallet reward")
+            status, replayed, _ = call(
+                "POST", "/api/auth/pulse-sso/revoke",
+                {"world": "tardis", "legacyUserId": str(member_id),
+                 "operationId": operation_id},
+                bearer=KEY
+            )
+            assert_true(status == 200 and replayed.get("alreadyProcessed") is True,
+                        "Same global-logout operation must be idempotent")
+            status, _, _ = call(
+                "GET", "/api/auth/sessions", bearer=resumed["token"]
+            )
+            assert_true(status == 200,
+                        "Replayed global logout must NOT invalidate a fresh valid login")
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT session_generation FROM member WHERE id = %s", (member_id,)
+                )
+                assert_true(cursor.fetchone()[0] == 1,
+                            "Repeated operation must not bump generation again")
+                cursor.execute(
+                    "SELECT COUNT(*) FROM pulse_logout_receipts "
+                    "WHERE operation_id = %s AND member_id = %s",
+                    (operation_id, member_id)
+                )
+                assert_true(cursor.fetchone()[0] == 1,
+                            "Exactly one durable receipt per operation")
             print("TARDIS REAL MYSQL SSO PASS: member/JWT/refresh, wallet/ledger, replay, global logout invalidation and fresh login.")
         finally:
             server.shutdown()
