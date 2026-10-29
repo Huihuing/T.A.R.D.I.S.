@@ -4,6 +4,7 @@ import com.tardistock.backend.entity.Member;
 import com.tardistock.backend.repository.MemberRepository;
 import com.tardistock.backend.service.RefreshTokenService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,16 +27,20 @@ import java.util.regex.Pattern;
 @RequestMapping("/api/auth/pulse-sso")
 public class PulseSsoRevokeController {
     private static final Pattern BIGINT = Pattern.compile("^[1-9][0-9]{0,18}$");
+    private static final Pattern UUID = Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
     private final String serviceKey;
     private final MemberRepository members;
     private final RefreshTokenService refreshTokens;
+    private final JdbcTemplate jdbc;
 
     public PulseSsoRevokeController(
             MemberRepository members,
             RefreshTokenService refreshTokens,
+            JdbcTemplate jdbc,
             @Value("${PULSE_SSO_SERVICE_KEY:}") String serviceKey) {
         this.members = members;
         this.refreshTokens = refreshTokens;
+        this.jdbc = jdbc;
         this.serviceKey = serviceKey == null ? "" : serviceKey;
     }
 
@@ -77,7 +82,9 @@ public class PulseSsoRevokeController {
         }
         String world = request == null ? null : request.get("world");
         String rawId = request == null ? null : request.get("legacyUserId");
-        if (!"tardis".equals(world) || rawId == null || !BIGINT.matcher(rawId).matches()) {
+        String operationId = request == null ? null : request.get("operationId");
+        if (!"tardis".equals(world) || rawId == null || !BIGINT.matcher(rawId).matches() ||
+                operationId == null || !UUID.matcher(operationId).matches()) {
             return ResponseEntity.badRequest().body(Map.of("error", "INVALID_REVOKE_REQUEST"));
         }
 
@@ -92,11 +99,27 @@ public class PulseSsoRevokeController {
         }
 
         Member target = member.get();
+        var receipts = jdbc.query(
+                "SELECT member_id FROM pulse_logout_receipts WHERE operation_id = ?",
+                (resultSet, rowNum) -> resultSet.getLong("member_id"),
+                operationId);
+        if (!receipts.isEmpty()) {
+            if (receipts.get(0).longValue() != id) {
+                return ResponseEntity.status(409).body(Map.of("error", "OPERATION_CONFLICT"));
+            }
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .body(Map.of("ok", true, "alreadyProcessed", true));
+        }
+
         target.incrementSessionGeneration();
         members.save(target);
         refreshTokens.revokeAll(target);
+        jdbc.update(
+                "INSERT INTO pulse_logout_receipts (operation_id, member_id) VALUES (?, ?)",
+                operationId, id);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(Map.of("ok", true));
+                .body(Map.of("ok", true, "alreadyProcessed", false));
     }
 }
