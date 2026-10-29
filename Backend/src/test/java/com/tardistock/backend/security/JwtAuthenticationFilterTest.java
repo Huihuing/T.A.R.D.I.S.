@@ -50,7 +50,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void invalidBearerTokenDoesNotAuthenticateRequest() throws Exception {
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider, mock(MemberRepository.class));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer invalid.token.value");
@@ -68,7 +68,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void requestWithoutBearerTokenRemainsAnonymousAtThisFilter() throws Exception {
         JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider, mock(MemberRepository.class));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
