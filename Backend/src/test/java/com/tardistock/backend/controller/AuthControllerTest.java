@@ -96,7 +96,7 @@ class AuthControllerTest {
         when(passwordEncoder.matches(
                 "correct-password", "encoded-password"))
                 .thenReturn(true);
-        when(jwtTokenProvider.createToken("alice"))
+        when(jwtTokenProvider.createToken("alice", 0L))
                 .thenReturn("signed.jwt.token");
 
         ResponseEntity<?> response = authController.login(Map.of(
@@ -111,7 +111,7 @@ class AuthControllerTest {
         assertEquals("signed.jwt.token", body.get("token"));
         assertEquals("alice", body.get("username"));
         assertEquals(false, body.get("dailyReward"));
-        verify(jwtTokenProvider).createToken("alice");
+        verify(jwtTokenProvider).createToken("alice", 0L);
     }
 
     @Test
@@ -132,7 +132,7 @@ class AuthControllerTest {
         when(passwordEncoder.matches(
                 "correct-password", "encoded-password"))
                 .thenReturn(true);
-        when(jwtTokenProvider.createToken("alice"))
+        when(jwtTokenProvider.createToken("alice", 0L))
                 .thenReturn("signed.jwt.token");
         when(walletRepository.findForUpdateByMember(member))
                 .thenReturn(Optional.of(wallet));
@@ -181,7 +181,7 @@ class AuthControllerTest {
         ));
 
         assertEquals(401, response.getStatusCode().value());
-        verify(jwtTokenProvider, never()).createToken(anyString());
+        verify(jwtTokenProvider, never()).createToken(anyString(), anyLong());
     }
 
     @Test
@@ -237,7 +237,8 @@ class AuthControllerTest {
         Map<String, Object> body = (Map<String, Object>) loginResponse.getBody();
         String token = (String) body.get("token");
 
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider);
+        when(members.findByUsername("alice")).thenReturn(Optional.of(member));
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider, members);
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
