@@ -77,6 +77,8 @@ public class SecurityConfig {
                     "/api/auth/google",
                     "/api/auth/refresh",
                     "/api/auth/logout",
+                    "/api/auth/pulse-sso",
+                    "/api/auth/pulse-sso/revoke",
                     "/api/auth/password/send",
                     "/api/auth/password/reset"
                 ).permitAll()

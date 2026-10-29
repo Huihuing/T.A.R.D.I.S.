@@ -35,17 +35,40 @@ public class JwtTokenProvider {
     }
 
     public String createToken(String username) {
+        return createToken(username, 0L);
+    }
+
+    public String createToken(String username, long generation) {
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("JWT subject must not be blank.");
+        }
+        if (generation < 0) {
+            throw new IllegalArgumentException("JWT generation must not be negative.");
         }
 
         Date now = new Date();
         return Jwts.builder()
                 .subject(username)
+                .claim("sg", generation)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + tokenValidTimeMs))
                 .signWith(key, Jwts.SIG.HS256)
                 .compact();
+    }
+
+    /**
+     * JWT signature is checked before reading session generation; old
+     * pre-migration JWTs without sg can only be accepted at generation zero.
+     */
+    public boolean matchesSessionGeneration(String token, long currentGeneration) {
+        if (currentGeneration < 0 || token == null) return false;
+        try {
+            Object claim = parser.parseSignedClaims(token).getPayload().get("sg");
+            return claim == null ? currentGeneration == 0 :
+                    claim instanceof Number && ((Number) claim).longValue() == currentGeneration;
+        } catch (JwtException | IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     public String getUsername(String token) {

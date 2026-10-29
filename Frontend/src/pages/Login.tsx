@@ -28,6 +28,22 @@ declare global {
     }
 }
 
+function pulseHubLoginUrl(): string | null {
+    const raw = (import.meta.env.VITE_PULSE_LAB_URL as string | undefined)?.trim();
+    if (!raw) return null;
+    try {
+        const url = new URL(raw);
+        const local = import.meta.env.DEV && url.protocol === 'http:' &&
+            ['localhost', '127.0.0.1'].includes(url.hostname);
+        if ((url.protocol === 'https:' || local) &&
+            url.pathname === '/' && !url.search && !url.hash &&
+            !url.username && !url.password) {
+            return new URL('/identity', url.origin).href;
+        }
+    } catch { /* Invalid config: keep existing login without a hub link. */ }
+    return null;
+}
+
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -35,6 +51,7 @@ export default function Login() {
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const googleButtonRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
+    const pulseHubUrl = pulseHubLoginUrl();
     const googleClientId =
         import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
@@ -237,6 +254,17 @@ export default function Login() {
                     </button>
                 </form>
 
+                {pulseHubUrl && (
+                    <div className="mt-6 border-t border-slate-700 pt-5 text-center">
+                        <a href={pulseHubUrl}
+                           className="block rounded-xl border border-teal-400/50 bg-teal-400/10 px-4 py-3 text-teal-200 font-semibold hover:bg-teal-400/20">
+                            PULSE//ID로 로그인
+                        </a>
+                        <p className="mt-2 text-xs text-slate-400">
+                            연결된 기존 계정은 PULSE//LAB에서 한 번에 입장할 수 있습니다.
+                        </p>
+                    </div>
+                )}
                 <div className="text-center mt-6 text-sm text-slate-400">
                     계정이 없으신가요?{' '}
                     <Link
