@@ -292,7 +292,7 @@ public class AuthController {
 
             Member member = session.member();
             String accessToken = jwtTokenProvider.createToken(
-                    member.getUsername()
+                    member.getUsername(), member.getSessionGeneration()
             );
 
             return ResponseEntity.ok()
@@ -481,7 +481,8 @@ public class AuthController {
             }
         }
 
-        String token = jwtTokenProvider.createToken(username);
+        String token = jwtTokenProvider.createToken(
+                username, member.getSessionGeneration());
         String refreshToken = refreshTokenService.issue(member);
 
         return ResponseEntity.ok()
