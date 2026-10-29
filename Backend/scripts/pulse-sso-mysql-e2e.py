@@ -169,7 +169,54 @@ def run():
                     "WHERE member_id = %s AND type = 'DAILY_LOGIN_REWARD'", (member_id,)
                 )
                 assert_true(cursor.fetchone()[0] == 1, "No duplicate ledger reward")
-            print("TARDIS REAL MYSQL SSO PASS: member, JWT/refresh, wallet, ledger, replay, single daily reward.")
+            # An authenticated central logout invalidates both native JWTs and
+            # refresh cookies, including the original legacy password sessions.
+            status, _, _ = call(
+                "POST", "/api/auth/pulse-sso/revoke",
+                {"world": "tardis", "legacyUserId": str(member_id)},
+                bearer="wrong-service-key"
+            )
+            assert_true(status == 401, "Unknown server cannot revoke a member")
+            status, _, _ = call(
+                "POST", "/api/auth/pulse-sso/revoke",
+                {"world": "interactive_brain", "legacyUserId": str(member_id)},
+                bearer=KEY
+            )
+            assert_true(status == 400, "Cannot use Tardis key to revoke another World")
+            status, _, _ = call(
+                "POST", "/api/auth/pulse-sso/revoke",
+                {"world": "tardis", "legacyUserId": str(member_id)},
+                bearer=KEY
+            )
+            assert_true(status == 200, "Authorized central global logout accepted")
+            status, _, _ = call(
+                "GET", "/api/auth/sessions", bearer=data["token"], cookie=cookie
+            )
+            assert_true(status == 401, "Old Tardis JWT rejected after global logout")
+            status, _, _ = call(
+                "POST", "/api/auth/refresh", cookie=cookie
+            )
+            assert_true(status == 401, "Old Tardis refresh session revoked")
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT session_generation FROM member WHERE id = %s", (member_id,)
+                )
+                assert_true(cursor.fetchone()[0] == 1, "Member revocation persisted in MySQL")
+                cursor.execute(
+                    "SELECT COUNT(*) FROM refresh_token WHERE member_id = %s", (member_id,)
+                )
+                assert_true(cursor.fetchone()[0] == 0, "All native refresh sessions revoked")
+            third_ticket = secrets.token_urlsafe(32)
+            status, resumed, _ = call(
+                "POST", "/api/auth/pulse-sso", {"ticket": third_ticket}
+            )
+            assert_true(status == 200, "A new independently verified login may resume")
+            status, _, _ = call(
+                "GET", "/api/auth/sessions", bearer=resumed["token"]
+            )
+            assert_true(status == 200, "New-generation JWT is accepted")
+            assert_true(resumed.get("dailyReward") is False, "Global logout must not duplicate wallet reward")
+            print("TARDIS REAL MYSQL SSO PASS: member/JWT/refresh, wallet/ledger, replay, global logout invalidation and fresh login.")
         finally:
             server.shutdown()
             server.server_close()
