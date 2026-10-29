@@ -65,3 +65,11 @@ Tardis 프론트엔드에 **공개 URL만** `VITE_PULSE_LAB_URL=https://<사용 
 - 중앙은 **매 글로벌 로그아웃 작업마다 안정적인 UUID `operationId`**를 발급한다. Tardis는 회원 row lock 아래 기존 receipt를 확인하고, **처음 처리한 경우에만** JWT generation 증가·모든 refresh 삭제·receipt 기록을 한 트랜잭션으로 수행한다.
 - 첫 요청이 성공한 뒤 응답이 끊겨 재요청되어도 같은 `operationId`면 generation을 다시 올리지 않는다. 따라서 **새로 로그인한 세션을 중복 로그아웃으로 무효화하지 않는다**.
 - [실제 Spring/MySQL 일회성 검증](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40822722241) 성공: 기존 지갑/원장·일일 보상 불변, 재시도 receipt 정확히 1개, 새 JWT 유효. 운영 V12 미적용.
+
+## 2026-10-29 운영 DB 이전 전 Shadow 백업/복원 리허설 PASS
+
+- [격리 MySQL 8.4 전체 복원 CI #40827975852](https://github.com/Huihuing/T.A.R.D.I.S./actions/runs/40827975852): **PASS**. 검증용 회원/지갑/일일 보상/원장 데이터를 생성하고, 원본 Flyway V1~V12를 **이력 포함** `mysqldump` → 새 `tardis_shadow_ci` DB로 복원했다.
+- [실제 검증 코드](../Backend/scripts/pulse-db-shadow-rehearsal.py): **20개 테이블·15개 FK, 각 행의 SHA-256, 컬럼 구조, Flyway history/checksum, 회원 PK·지갑 잔고·원장**을 복원 전후에 비교.
+- 복원 DB에 실제 Spring Boot를 다시 띄워 Flyway가 기존 V9 삭제성 마이그레이션을 재실행하지 않는지 확인했고, 이후 모든 원래 행 해시를 재검증했다. `flyway_schema_history` V9만 제거한 **격리된 부정 테스트 DB는 서비스 연결 전에 거부**했다.
+- **중요:** V9는 회원·지갑·원장 등 17개 테이블의 행을 삭제하는 과거 migration이므로, 실제 운영/Shadow에 역사를 빼고 V9를 재실행하는 건 허용할 수 없다.
+- 테스트는 **합성 데이터만** 사용하며 실제 Aiven DB 접근·덤프·마이그레이션·배포는 하지 않았다. [세 World 복원 결과](https://github.com/Huihuing/pulse-lab/blob/feature/pulse-id-foundation/docs/DB_SHADOW_REHEARSAL_2026-10-29.md).
