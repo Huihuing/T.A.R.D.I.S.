@@ -388,7 +388,7 @@ class AuthControllerTest {
                                 invocation.getArgument(0),
                                 10000.0
                         )));
-        when(jwtTokenProvider.createToken(anyString()))
+        when(jwtTokenProvider.createToken(anyString(), anyLong()))
                 .thenReturn("google.jwt.token");
 
         ResponseEntity<?> response = authController.googleLogin(
