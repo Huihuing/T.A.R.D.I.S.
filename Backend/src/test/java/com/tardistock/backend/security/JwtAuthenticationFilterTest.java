@@ -78,4 +78,27 @@ class JwtAuthenticationFilterTest {
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
+    @Test
+    void globalLogoutGenerationBlocksOldBearerJwtImmediately() throws Exception {
+        JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
+        MemberRepository members = mock(MemberRepository.class);
+        Member member = mock(Member.class);
+        when(members.findByUsername("alice")).thenReturn(Optional.of(member));
+        when(member.getSessionGeneration()).thenReturn(1L);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(provider, members);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + provider.createToken("alice", 0L));
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) ->
+                assertNull(SecurityContextHolder.getContext().getAuthentication()));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+
+        // Normal password login after revocation may mint the updated version.
+        request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + provider.createToken("alice", 1L));
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) ->
+                assertEquals("alice", SecurityContextHolder.getContext()
+                        .getAuthentication().getName()));
+    }
+
 }
