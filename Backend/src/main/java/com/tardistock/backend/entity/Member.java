@@ -49,6 +49,14 @@ public class Member {
     @JsonIgnore
     private Boolean passwordLoginEnabled;
 
+    /**
+     * Every native Tardis JWT embeds this generation. Global logout bumps it
+     * under a locked member transaction, invalidating old bearer JWTs.
+     */
+    @JsonIgnore
+    @Column(name = "session_generation", nullable = false)
+    private long sessionGeneration = 0;
+
     private java.time.LocalDate lastLoginDate;
     private java.time.LocalDate lastReliefDate;
 
@@ -109,6 +117,15 @@ public class Member {
 
     public void setPasswordLoginEnabled(boolean passwordLoginEnabled) {
         this.passwordLoginEnabled = passwordLoginEnabled;
+    }
+
+    public long getSessionGeneration() { return sessionGeneration; }
+
+    public void incrementSessionGeneration() {
+        if (sessionGeneration == Long.MAX_VALUE) {
+            throw new IllegalStateException("SESSION_GENERATION_EXHAUSTED");
+        }
+        sessionGeneration++;
     }
 
     public java.time.LocalDate getLastLoginDate() { return lastLoginDate; }
