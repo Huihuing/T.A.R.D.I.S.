@@ -1,7 +1,7 @@
-name: PICO World Navigation UI (No DB)
+name: PULSE Native Auth Entry UI (No DB)
 on:
   pull_request:
-    paths: ['Frontend/src/pulse-platform/**', 'Frontend/src/main.tsx', 'Frontend/scripts/pulse-navigation*', '.github/workflows/pulse-navigation-ui.yml']
+    paths: ['Frontend/src/pulse-platform/**', 'Frontend/src/main.tsx', 'Frontend/src/App.tsx', 'Frontend/scripts/pulse-navigation*', '.github/workflows/pulse-navigation-ui.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,20 +27,24 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node --experimental-strip-types --test scripts/pulse-navigation.test.mjs
       - run: npm run build
-      - name: Native application browser checks
+      - name: Native and opt-in central entry browser checks
         run: |
           set -euo pipefail
-          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/pulse-nav-ui.log 2>&1 &
-          PID=$!
-          trap 'kill "$PID" 2>/dev/null || true' EXIT
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:5173 >/dev/null; then break; fi
-            sleep 2
+          for enabled in false true; do
+            VITE_PULSE_AUTH_ENABLED="$enabled" node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173 --strictPort > /tmp/pulse-auth-ui.log 2>&1 &
+            PID=$!
+            trap 'kill "$PID" 2>/dev/null || true' EXIT
+            for i in $(seq 1 60); do
+              if curl -fsS http://127.0.0.1:5173 >/dev/null; then break; fi
+              sleep 1
+            done
+            PULSE_AUTH_TEST_ENABLED="$enabled" node scripts/pulse-navigation-browser.mjs
+            kill "$PID"
+            wait "$PID" 2>/dev/null || true
           done
-          node scripts/pulse-navigation-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: tardis-pico-navigation
+          name: tardis-native-auth-entry
           path: Frontend/test-results/pulse-navigation/
           retention-days: 7

@@ -1,11 +1,9 @@
-# PULSE platform integration — T.A.R.D.I.S.
+# PULSE authentication entry — T.A.R.D.I.S.
 
-Current decision: 2026-11-02. Central PULSE//ID, independent World databases. Physical MySQL consolidation is deferred and is not required for this UI release.
+The floating PICO World Shell was removed after real screenshots showed overlap with native login/signup controls. Do not reintroduce a fixed-position platform badge.
 
-The compact MARKET PICO navigation is frontend-only. It opens the portal, other Worlds and the central identity-management screen in a new tab so current work remains intact. It never reads credentials, modifies login state, calls a World API or claims an account is linked.
+Existing /login and /register are the entry points. With `VITE_PULSE_AUTH_ENABLED=true` they route to the reviewed portal's /login or /signup with a fixed World identifier. The build-time portal origin is `VITE_PULSE_LAB_URL` (default: the canonical PULSE portal). This flag is OFF by default and must remain off until the portal is accessible, production OIDC/DB and native SSO are deployed and actual round-trip login is verified. Merely configuring the flag does not implement SSO.
 
-`VITE_PULSE_LAB_URL` can select a reviewed HTTPS portal origin at build time. Invalid configuration disables the shell. Local HTTP is allowed only in a development build. The default is the team's PULSE portal alias. Do not derive this setting from URL query parameters.
+Native login, account recovery, incoming verification/proof/SSO state and `?nativeAuth=1` remain local. These exceptions change navigation only, not permissions. No passwords, emails, session tokens or arbitrary return URLs are transferred. Existing member IDs, wallet/PIN and service-owned DB remain unchanged. Central registration does not automatically create or merge a Tardis account.
 
-Tardis member IDs, its database, virtual wallet/ledger, PIN verification and all native login/refresh flows remain unchanged. The separate `feature/pulse-id-link-bridge` PR implements SSO and requires actual integration and operational migration checks before release. Deploying this navigation must not deploy that pending backend/schema work.
-
-The common source is versioned as PULSE World Shell 1.0.0; keep its registry and behavior synchronized with the portal and the other two World copies. Browser CI checks real native frontend desktop/mobile navigation with the backend deliberately unavailable; it is not proof of production SSO.
+Browser CI verifies the removal and both entry modes at desktop/390px/320px widths. The central target is a UI routing fixture; these checks do not replace real OIDC or production SSO tests. No backend migration or operational secret is changed.

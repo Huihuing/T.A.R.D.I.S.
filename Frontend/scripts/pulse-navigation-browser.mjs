@@ -1,45 +1,39 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
-const base = new URL(process.env.PULSE_NAV_TEST_URL || 'http://127.0.0.1:5173');
-const world = process.env.PULSE_NAV_WORLD;
-if(!['localhost','127.0.0.1'].includes(base.hostname)||!['tardis','interactive_brain','flashrevive'].includes(world)) throw Error('LOCAL_NATIVE_APP_REQUIRED');
-mkdirSync('test-results/pulse-navigation',{recursive:true});
-const browser=await chromium.launch(); const results=[];
+const base=new URL(process.env.PULSE_NAV_TEST_URL||'http://127.0.0.1:5173');
+const world=process.env.PULSE_NAV_WORLD;
+const enabled=process.env.PULSE_AUTH_TEST_ENABLED==='true';
+if(!['localhost','127.0.0.1'].includes(base.hostname)||world!=='tardis') throw Error('LOCAL_TARDIS_REQUIRED');
+const portal='https://pulse-lab-huihuing.vercel.app';
+const out='test-results/pulse-navigation';mkdirSync(out,{recursive:true});
+const browser=await chromium.launch();const results=[];
 try {
   for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}],['small-phone',{width:320,height:568}]]) {
     const context=await browser.newContext({viewport,reducedMotion:'reduce'});
-    // UI-only, backend-offline resilience. Real SSO is verified separately.
     await context.route('**/*',async route=>{
-      const url=new URL(route.request().url());
-      if(url.origin!==base.origin||url.pathname.startsWith('/api/')||url.pathname.startsWith('/actuator/')) await route.fulfill({status:503,contentType:'application/json',body:'{"error":"UI_TEST_BACKEND_OFFLINE"}'});
-      else await route.continue();
+      const u=new URL(route.request().url());
+      if(u.origin===portal) return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Routing fixture</title><h1>Central routing destination</h1>'});
+      if(u.origin!==base.origin||u.pathname.startsWith('/api/')||u.pathname.startsWith('/actuator/')) return route.fulfill({status:503,contentType:'application/json',body:'{"error":"UI_TEST_BACKEND_OFFLINE"}'});
+      return route.continue();
     });
-    const page=await context.newPage(); const errors=[];
-    page.on('pageerror',e=>errors.push(e.message));
+    const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base.origin,{waitUntil:'domcontentloaded'});
-    const shell=page.locator('[data-pulse-world-shell]'); await shell.waitFor({timeout:60000});
-    assert.equal(await shell.count(),1); assert.equal(await shell.getAttribute('data-pulse-world-shell'),world);
-    const trigger=shell.getByRole('button',{name:'PICO · PULSE World 메뉴'});
-    const triggerBox=await trigger.boundingBox();
-    assert.ok(triggerBox&&triggerBox.y+triggerBox.height<=viewport.height-70,'PICO must leave native bottom navigation and account controls clear');
-    await trigger.focus(); await page.keyboard.press('Enter');
-    assert.equal(await trigger.getAttribute('aria-expanded'),'true');
-    const panel=shell.getByRole('region',{name:'PULSE World 탐색'}); await panel.waitFor({state:'visible'});
-    const anchors=shell.locator('a'); assert.equal(await anchors.count(),4);
-    assert.equal(await shell.locator('[aria-current="page"]').count(),1);
-    for(const a of await anchors.all()) { assert.equal(new URL(await a.getAttribute('href')).protocol,'https:'); assert.equal(await a.getAttribute('target'),'_blank'); assert.match(await a.getAttribute('rel'),/noopener/); }
-    await page.keyboard.press('Tab'); assert.equal(await anchors.first().evaluate(el=>el.getRootNode().activeElement===el),true);
-    await page.keyboard.press('Escape'); assert.equal(await trigger.getAttribute('aria-expanded'),'false');
-    assert.equal(await trigger.evaluate(el=>el.getRootNode().activeElement===el),true);
-    for(let i=0;i<5;i++) await trigger.click();
-    assert.equal(await trigger.getAttribute('aria-expanded'),'true');
-    const box=await panel.boundingBox(); assert.ok(box&&box.x>=0&&box.y>=0&&box.x+box.width<=viewport.width+1&&box.y+box.height<=viewport.height+1);
-    await page.screenshot({path:'test-results/pulse-navigation/'+name+'.png'});
-    await page.evaluate(()=>document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})));
-    assert.equal(await trigger.getAttribute('aria-expanded'),'false'); assert.deepEqual(errors,[]);
-    results.push({world,viewport:name,pass:true,scope:'native UI; backend intentionally offline',nativeBottomControlsClear:true}); await context.close();
+    await page.waitForFunction(()=>Boolean(document.querySelector('#root')?.childElementCount));
+    assert.equal(await page.locator('[data-pulse-world-shell]').count(),0,'Floating PICO shell must not exist');
+    await page.screenshot({path:out+'/'+enabled+'-'+name+'.png'});
+    for(const [path,mode] of [['/login','login'],['/register','signup']]) {
+      await page.goto(base.origin+path,{waitUntil:'domcontentloaded'});
+      if(enabled) await page.waitForURL(portal+'/'+mode+'?world='+world);
+      else { await page.locator('input[type="password"]').first().waitFor({state:'visible'});assert.equal(new URL(page.url()).origin,base.origin); }
+      await page.goto(base.origin+path+'?nativeAuth=1',{waitUntil:'domcontentloaded'});
+      await page.locator('input[type="password"]').first().waitFor({state:'visible'});
+      assert.equal(new URL(page.url()).origin,base.origin,'Native escape must not redirect again');
+    }
+    assert.deepEqual(errors,[]);
+    results.push({world,viewport:name,floatingShell:false,centralRoutingEnabled:enabled,nativeFallback:true,pass:true,scope:'UI routing only; central destination is an intercept fixture, not OIDC'});
+    await context.close();
   }
-} finally { await browser.close(); }
-writeFileSync('test-results/pulse-navigation/results.json',JSON.stringify(results,null,2));
-console.log('PULSE NAV PASS: desktop/mobile/small-phone native UI, bottom controls clear, keyboard/focus, safe external links and viewport fit.');
+} finally {await browser.close();}
+writeFileSync(out+'/results-'+enabled+'.json',JSON.stringify(results,null,2));
+console.log('PASS: no floating shell; native login/signup; opt-in fixed central routes; native escape.');
