@@ -4,6 +4,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,14 +17,15 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-/**
- * Server-to-server only: redeem a one-use central PULSE ticket for an
- * existing legacy account ID. Never trust client-provided legacy IDs.
- */
+/** Server-to-server one-use ticket exchange. Never accepts a browser user ID. */
 @Component
 public final class PulseSsoRedemptionClient {
+    private static final Logger LOG = LoggerFactory.getLogger(PulseSsoRedemptionClient.class);
     private static final Pattern TICKET = Pattern.compile("^[A-Za-z0-9_-]{43}$");
     private final HttpClient http = HttpClient.newBuilder()
+            // The JSON handoff does not require HTTP/2. Avoid cleartext h2c
+            // upgrades at development/proxy boundaries; HTTPS/TLS stays required.
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(3))
             .followRedirects(HttpClient.Redirect.NEVER).build();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -64,22 +67,22 @@ public final class PulseSsoRedemptionClient {
     public Optional<String> redeem(String world, String ticket) {
         if (!isConfigured()) throw new IllegalStateException("PULSE_SSO_DISABLED");
         if (!TICKET.matcher(ticket == null ? "" : ticket).matches()) return Optional.empty();
-        // Ticket is strictly base64url; JSON string interpolation cannot inject fields.
         String body = "{\"world\":\"" + world + "\",\"ticket\":\"" + ticket + "\"}";
         HttpRequest request = HttpRequest.newBuilder(endpoint)
                 .timeout(Duration.ofSeconds(8))
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + serviceKey)
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
         try {
-            HttpResponse<String> response = http.send(
-                    request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() == 401 || response.statusCode() == 403)
-                return Optional.empty();
-            if (response.statusCode() != 200 || response.body().length() > 2048)
+            HttpResponse<String> response = http.send(request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() == 401 || response.statusCode() == 403) return Optional.empty();
+            if (response.statusCode() != 200 || response.body().length() > 2048) {
+                // Never log the token, URL, response body, credentials or user ID.
+                LOG.warn("PULSE_SSO_UPSTREAM_FAILURE status={}", response.statusCode());
                 throw new IllegalStateException("PULSE_SSO_UPSTREAM_UNAVAILABLE");
+            }
             JsonNode data = mapper.readTree(response.body());
             if (!world.equals(data.path("world").asText())) return Optional.empty();
             String legacyId = data.path("legacyUserId").asText("");
@@ -88,6 +91,7 @@ public final class PulseSsoRedemptionClient {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("PULSE_SSO_UPSTREAM_UNAVAILABLE");
         } catch (Exception exception) {
+            LOG.warn("PULSE_SSO_UPSTREAM_FAILURE category={}", exception.getClass().getSimpleName());
             throw new IllegalStateException("PULSE_SSO_UPSTREAM_UNAVAILABLE");
         }
     }
