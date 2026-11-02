@@ -6,6 +6,7 @@ import UiFeedbackHost from './components/UiFeedbackHost';
 import BackendWakeStatus from './components/BackendWakeStatus';
 import ProtectedRoute from './components/ProtectedRoute';
 import { BACKEND_READY_EVENT } from './backendWakeup';
+import PulseAuthEntry from './pulse-platform/PulseAuthEntry';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -139,8 +140,8 @@ export default function App() {
       <BackendWakeStatus />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<PulseAuthEntry mode="login"><Login /></PulseAuthEntry>} />
+          <Route path="/register" element={<PulseAuthEntry mode="signup"><Register /></PulseAuthEntry>} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route
             path="/setup-pin"

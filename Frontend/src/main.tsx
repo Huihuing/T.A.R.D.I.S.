@@ -16,6 +16,7 @@ installBackendAwareFetch()
 // The UI can render immediately while readiness is checked in parallel.
 void startBackendWakeup()
 
+// Authentication is integrated into the existing routes. No floating shell.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
