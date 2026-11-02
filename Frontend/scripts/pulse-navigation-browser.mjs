@@ -7,7 +7,7 @@ if(!['localhost','127.0.0.1'].includes(base.hostname)||!['tardis','interactive_b
 mkdirSync('test-results/pulse-navigation',{recursive:true});
 const browser=await chromium.launch(); const results=[];
 try {
-  for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}]]) {
+  for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:390,height:844}],['small-phone',{width:320,height:568}]]) {
     const context=await browser.newContext({viewport,reducedMotion:'reduce'});
     // UI-only, backend-offline resilience. Real SSO is verified separately.
     await context.route('**/*',async route=>{
@@ -21,6 +21,8 @@ try {
     const shell=page.locator('[data-pulse-world-shell]'); await shell.waitFor({timeout:60000});
     assert.equal(await shell.count(),1); assert.equal(await shell.getAttribute('data-pulse-world-shell'),world);
     const trigger=shell.getByRole('button',{name:'PICO · PULSE World 메뉴'});
+    const triggerBox=await trigger.boundingBox();
+    assert.ok(triggerBox&&triggerBox.y+triggerBox.height<=viewport.height-70,'PICO must leave native bottom navigation and account controls clear');
     await trigger.focus(); await page.keyboard.press('Enter');
     assert.equal(await trigger.getAttribute('aria-expanded'),'true');
     const panel=shell.getByRole('region',{name:'PULSE World 탐색'}); await panel.waitFor({state:'visible'});
@@ -36,8 +38,8 @@ try {
     await page.screenshot({path:'test-results/pulse-navigation/'+name+'.png'});
     await page.evaluate(()=>document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})));
     assert.equal(await trigger.getAttribute('aria-expanded'),'false'); assert.deepEqual(errors,[]);
-    results.push({world,viewport:name,pass:true,scope:'native UI; backend intentionally offline'}); await context.close();
+    results.push({world,viewport:name,pass:true,scope:'native UI; backend intentionally offline',nativeBottomControlsClear:true}); await context.close();
   }
 } finally { await browser.close(); }
 writeFileSync('test-results/pulse-navigation/results.json',JSON.stringify(results,null,2));
-console.log('PULSE NAV PASS: desktop/mobile native UI, keyboard/focus, safe external links and viewport fit.');
+console.log('PULSE NAV PASS: desktop/mobile/small-phone native UI, bottom controls clear, keyboard/focus, safe external links and viewport fit.');

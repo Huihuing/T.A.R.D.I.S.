@@ -1,6 +1,6 @@
-/** PULSE World Shell v1.0.0. Navigation only: never handles tokens or World data. */
+/** PULSE World Shell v1.0.1. Navigation only: never handles tokens or World data. */
 export type PulseWorld = 'tardis' | 'interactive_brain' | 'flashrevive';
-export const PULSE_SHELL_VERSION = '1.0.0';
+export const PULSE_SHELL_VERSION = '1.0.1';
 export const DEFAULT_PORTAL_ORIGIN = 'https://pulse-lab-huihuing.vercel.app';
 export const PULSE_WORLDS = [
   { id: 'tardis', name: 'T.A.R.D.I.S.', pulse: 'MARKET', color: '#82d8ff', href: 'https://tardis-neon.vercel.app' },
@@ -31,7 +31,7 @@ export function mountPulseNavigation(options: { world: PulseWorld; portalUrl?: s
   host.dataset.pulseWorldShell = options.world;
   host.dataset.version = PULSE_SHELL_VERSION;
   // Inline stacking/placement survives app CSS; all internal rules remain isolated.
-  host.style.cssText = 'position:fixed;left:16px;bottom:max(16px,env(safe-area-inset-bottom));z-index:1000;max-width:calc(100vw - 32px)';
+  host.style.cssText = 'position:fixed;left:16px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:1000;max-width:calc(100vw - 32px)';
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = `
@@ -42,7 +42,7 @@ export function mountPulseNavigation(options: { world: PulseWorld; portalUrl?: s
     .trigger strong{letter-spacing:.04em;font-size:11px}.trigger small{font-size:9px;color:var(--accent)}
     .pico{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:4px;width:26px;height:26px;flex:none;border:1px solid var(--accent);border-radius:45%;background:#20313a}
     .pico::before,.pico::after{content:'';width:3px;height:5px;border-radius:3px;background:var(--accent)}
-    .panel{position:absolute;bottom:54px;left:0;width:min(310px,calc(100vw - 32px));max-height:min(460px,calc(100dvh - 100px));overflow:auto;padding:18px;border:1px solid #43515f;border-radius:14px;background:#0b111bf7;box-shadow:0 12px 42px #0006}
+    .panel{position:absolute;bottom:54px;left:0;width:min(310px,calc(100vw - 32px));max-height:min(460px,calc(100dvh - 156px - env(safe-area-inset-bottom,0px)));overflow:auto;padding:18px;border:1px solid #43515f;border-radius:14px;background:#0b111bf7;box-shadow:0 12px 42px #0006}
     .panel[hidden]{display:none}.title{margin:0 0 4px;font-size:14px}.hint{margin:0 0 12px;color:#b5c1cf;font-size:11px}
     nav{display:grid;gap:5px}a,.current{display:block;padding:9px 10px;border-radius:7px;color:#e8f0f8;text-decoration:none}a:hover{background:#ffffff12}a span{color:#99adbf;font-size:11px}.current{border:1px solid #ffffff18;color:var(--accent)}
     .separator{border-top:1px solid #ffffff20;margin-top:10px;padding-top:8px}.note{margin:12px 0 0;font-size:11px;line-height:1.6;color:#b5c1cf}
