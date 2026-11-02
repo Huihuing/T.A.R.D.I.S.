@@ -1,0 +1,150 @@
+name: PULSE Tardis Real MySQL SSO (Disposable)
+
+on:
+  pull_request:
+    paths:
+      - "Backend/scripts/pulse-sso-mysql-e2e.py"
+      - "Backend/scripts/pulse-db-shadow-rehearsal.py"
+      - "Backend/src/main/resources/db/migration/**"
+      - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoController.java"
+      - "Backend/src/main/java/com/tardistock/backend/controller/PulseSsoRevokeController.java"
+      - "Backend/src/main/java/com/tardistock/backend/entity/Member.java"
+      - "Backend/src/main/java/com/tardistock/backend/security/JwtTokenProvider.java"
+      - "Backend/src/main/java/com/tardistock/backend/security/JwtAuthenticationFilter.java"
+      - "Backend/src/main/resources/db/migration/V11__pulse_global_logout_generation.sql"
+      - "Backend/src/test/java/com/tardistock/backend/controller/PulseSsoRevokeControllerTest.java"
+      - "Backend/src/main/java/com/tardistock/backend/controller/AuthController.java"
+      - "Backend/src/main/java/com/tardistock/backend/repository/MemberRepository.java"
+      - "Backend/src/main/java/com/tardistock/backend/service/PulseSsoRedemptionClient.java"
+      - ".github/workflows/pulse-sso-mysql-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tardis-sso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: only-disposable-ci-mysql-root
+          MYSQL_DATABASE: tardis
+          MYSQL_USER: tardis_ci
+          MYSQL_PASSWORD: only-disposable-ci-tardis
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -ponly-disposable-ci-mysql-root"
+          --health-interval=5s --health-timeout=5s --health-retries=25
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3307/tardis?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      DB_USERNAME: tardis_ci
+      DB_PASSWORD: only-disposable-ci-tardis
+      SERVER_PORT: "18081"
+      JWT_SECRET: only-disposable-ci-jwt-tardis-key-over-32-bytes-9B8D
+      REFRESH_COOKIE_SECURE: "false"
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      FRONTEND_URL: http://localhost:5173
+      PULSE_SSO_REDEEM_URL: http://127.0.0.1:18089/api/pulse-id/sso/redeem
+      PULSE_SSO_ALLOW_LOCAL_HTTP: "true"
+      PULSE_DISPOSABLE_DB_TEST: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install disposable test MySQL driver
+        run: python -m pip install --disable-pip-version-check pymysql==1.1.1
+      - name: Generate SSO redemption key for this run
+        run: echo "PULSE_SSO_SERVICE_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Start actual Tardis backend against isolated MySQL 8.4
+        shell: bash
+        run: |
+          cd Backend
+          chmod +x gradlew
+          ./gradlew bootRun --no-daemon > /tmp/pulse-tardis-e2e.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18081/actuator/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Actuator returned:"
+          curl -s http://127.0.0.1:18081/actuator/health || true
+          echo
+          grep -E "Mail health|MailHealth|DataSourceHealth|Exception|Caused by|DOWN" /tmp/pulse-tardis-e2e.log | tail -45 || true
+          exit 1
+      - name: Test native member, wallet and JWT through real Spring API
+        run: python Backend/scripts/pulse-sso-mysql-e2e.py
+      - name: Fingerprint ORIGINAL disposable DB, including Flyway V9 history and synthetic finance rows
+        run: python Backend/scripts/pulse-db-shadow-rehearsal.py prepare
+
+      - name: Dump live disposable Tardis and restore complete history into isolated shadow
+        shell: bash
+        run: |
+          set -euo pipefail
+          MYSQL_ROOT_CI_PASSWORD=only-disposable-ci-mysql-root
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysqldump -h127.0.0.1 -P3307 -uroot \
+            --single-transaction --quick --set-gtid-purged=OFF \
+            --routines --triggers --events --default-character-set=utf8mb4 \
+            tardis > /tmp/pulse-tardis-disposable-dump.sql
+          test -s /tmp/pulse-tardis-disposable-dump.sql
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysql -h127.0.0.1 -P3307 -uroot -e "
+              CREATE DATABASE tardis_shadow_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+              CREATE DATABASE tardis_broken_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+              GRANT ALL PRIVILEGES ON tardis_shadow_ci.* TO 'tardis_ci'@'%';
+              GRANT ALL PRIVILEGES ON tardis_broken_ci.* TO 'tardis_ci'@'%';
+            "
+          for schema in tardis_shadow_ci tardis_broken_ci; do
+            docker run --rm --network host -i \
+              -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+              mysql -h127.0.0.1 -P3307 -uroot "$schema" \
+              < /tmp/pulse-tardis-disposable-dump.sql
+          done
+          # Deliberately break only the throwaway NEGATIVE-CONTROL database.
+          docker run --rm --network host \
+            -e MYSQL_PWD="$MYSQL_ROOT_CI_PASSWORD" mysql:8.4 \
+            mysql -h127.0.0.1 -P3307 -uroot tardis_broken_ci -e "
+              DELETE FROM flyway_schema_history WHERE version = '9';
+            "
+
+      - name: Verify full shadow DB restore and reject a lost Flyway V9 history
+        run: |
+          python Backend/scripts/pulse-db-shadow-rehearsal.py verify
+          python Backend/scripts/pulse-db-shadow-rehearsal.py guard
+
+      - name: Restart actual Tardis Spring backend against restored shadow MySQL
+        shell: bash
+        run: |
+          (
+            cd Backend
+            DB_URL="jdbc:mysql://127.0.0.1:3307/tardis_shadow_ci?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul" \
+            SERVER_PORT=18082 \
+            ./gradlew bootRun --no-daemon > /tmp/pulse-tardis-shadow.log 2>&1 &
+          )
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18082/actuator/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Restored shadow Spring API could not start safely."
+          tail -100 /tmp/pulse-tardis-shadow.log
+          exit 1
+
+      - name: Confirm Flyway did not replay V9 and all restored finance checksums are unchanged
+        run: python Backend/scripts/pulse-db-shadow-rehearsal.py verify
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          tail -100 /tmp/pulse-tardis-e2e.log || true
+          tail -100 /tmp/pulse-tardis-shadow.log || true

@@ -22,6 +22,10 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     boolean existsByEmailIgnoreCase(String email);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Member m where m.id = :memberId")
+    Optional<Member> findByIdForUpdate(@Param("memberId") Long memberId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Member m where m.username = :username")
     Optional<Member> findByUsernameForUpdate(@Param("username") String username);
 }

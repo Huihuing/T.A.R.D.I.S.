@@ -95,4 +95,16 @@ class JwtTokenProviderTest {
         assertThrows(IllegalArgumentException.class, () ->
                 provider.createToken(" "));
     }
+    @Test
+    void globalLogoutGenerationRejectsOldNativeJwtWhileAllowingFreshLogins() {
+        JwtTokenProvider provider = new JwtTokenProvider(SECRET, 60_000);
+        String before = provider.createToken("alice", 0L);
+        assertTrue(provider.matchesSessionGeneration(before, 0L));
+        assertFalse(provider.matchesSessionGeneration(before, 1L));
+        String after = provider.createToken("alice", 1L);
+        assertTrue(provider.matchesSessionGeneration(after, 1L));
+        assertFalse(provider.matchesSessionGeneration(after, 2L));
+        assertFalse(provider.matchesSessionGeneration(after, 0L));
+    }
+
 }
